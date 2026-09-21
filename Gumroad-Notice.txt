@@ -1,0 +1,13 @@
+Before you buy
+
+PerformanceHUD requires an Apple silicon Mac running macOS 27.0 or later.
+
+This initial $3.99 download is not Developer ID–signed or notarized. macOS may block the first launch, requiring you to approve this app in System Settings > Privacy & Security. Installation instructions are included. Screen capture permission is needed for the glass background; captured frames stay on your Mac and are not saved or uploaded.
+
+You are buying the convenience of a ready-built app and supporting development. The source is also available to build and modify for personal use. Both versions have the same features. No subscription or feature unlocks. Redistribution of compiled copies, free or paid, is not permitted.
+
+FPS compatibility varies by game. Exclusive fullscreen support is rare. See the product description for compatibility and performance limitations.
+
+Read the installation guide before purchasing: [ADD THE PUBLIC GITHUB INSTALL.md URL HERE]
+Source and license: [ADD THE PUBLIC GITHUB REPOSITORY URL HERE]
+You can leave feedback on GitHub page for the app:[ADD YOUR SUPPORT EMAIL OR CONTACT URL HERE]

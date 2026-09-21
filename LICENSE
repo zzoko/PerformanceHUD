@@ -1,0 +1,85 @@
+PerformanceHUD Personal-Use Source-Available License
+Version 1.0
+
+Copyright (c) 2026 Andrei Dina. All rights reserved except as expressly granted below.
+
+1. Scope
+
+This license applies to PerformanceHUD source code, documentation, and compiled
+versions provided by the copyright holder under this license (the "Software").
+It is a personal-use, source-available license, not an open-source license.
+Third-party components remain subject to their own applicable licenses; this
+license does not replace those licenses or grant rights the copyright holder
+does not own.
+
+2. Permission for personal use
+
+Subject to these terms, the copyright holder grants you, as an individual, a
+non-exclusive, non-transferable license to read and download the source code,
+build the Software, modify it, and run original or modified versions solely
+for your own private, personal, non-commercial use. You may keep backup copies
+and use your copies on devices you own or personally control.
+
+Personal use does not include providing the Software to other people, using it
+on behalf of a business or organization, or providing a commercial service
+based on the Software. Uses outside the permission above require the copyright
+holder's prior written permission.
+
+3. No redistribution or commercial exploitation
+
+Without the copyright holder's prior written permission, you may not:
+
+- Distribute, publish, upload, share, sublicense, rent, lease, or otherwise make
+  compiled copies available to any other person, whether free of charge or for
+  payment. This restriction includes original and modified versions, .app
+  bundles, installers, archives, and other executable packages.
+- Sell or resell the Software, modified versions, or copies of its source code.
+- Incorporate the Software or its code into a commercial product or service.
+- Distribute the source code or modified source code except as independently
+  permitted by the GitHub platform terms described below, or submit it directly
+  to the copyright holder for consideration.
+- Remove or misrepresent the copyright, license, or attribution notices.
+
+You may link other people to the copyright holder's official repository or
+sales page instead of sharing copies of the Software.
+
+4. GitHub and contributions
+
+Where the copyright holder publishes the Software in a public GitHub
+repository, this license does not limit rights independently granted under
+GitHub's Terms of Service, including the applicable rights to view and fork
+that repository on GitHub. This paragraph does not grant additional permission
+to redistribute compiled copies or commercially exploit the Software.
+
+You may send proposed changes directly to the copyright holder. You retain any
+copyright you hold in your contributions. Any additional permissions needed to
+incorporate and distribute them must be agreed separately; submitting a change
+does not transfer ownership of your contribution.
+
+5. Official paid downloads
+
+The copyright holder reserves the right to distribute and sell official
+compiled versions, including through Gumroad, and to grant separate permissions.
+Purchasing an official download gives you a copy for the personal use permitted
+by this license. It does not transfer copyright or grant resale, redistribution,
+or commercial-use rights. Original and personally modified copies are subject
+to the same restrictions unless the copyright holder agrees otherwise in writing.
+
+6. Disclaimer and mandatory rights
+
+To the fullest extent permitted by applicable law, the Software is provided
+"as is" and "as available", without warranties of merchantability, fitness for
+a particular purpose, non-infringement, accuracy, or uninterrupted operation.
+To that same extent, the copyright holder is not liable for loss or damage
+arising from the Software or its use.
+
+Nothing in this license excludes or limits rights, warranties, remedies, or
+liabilities that cannot lawfully be excluded or limited, including mandatory
+consumer rights. Nothing restricts uses permitted by applicable law that cannot
+be restricted by a license.
+
+7. Other permissions
+
+All rights not expressly granted are reserved. For redistribution, commercial
+use, or other permissions, contact the copyright holder through the official
+PerformanceHUD repository or product page. Any exception must be given in writing.
