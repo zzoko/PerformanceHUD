@@ -12,11 +12,13 @@ PerformanceHUD is a macOS menu-bar app that keeps useful performance information
 
 ## Download options
 
-Source is available to build and modify for personal use under the [personal-use license](LICENSE). Build it yourself for free, or buy the ready-built app on Gumroad for a one-time $3.99 to support me and the development time that has gone into it. Both offer the same features. No subscription or feature unlocks.
+Source is available to build and modify for personal use under the [personal-use license](LICENSE). You can build it yourself for free using the [installation instructions](INSTALL.md).
 
-If you build it yourself and still want to show support for the project, you can [sponsor the project on GitHub](https://github.com/sponsors/zzoko).
+**Gumroad download — coming soon.** A ready-built app is planned for a one-time $3.99 to support me and the development time that has gone into it. It will offer the same features as the version you build yourself. No subscription or feature unlocks.
 
-The initial downloadable app is not Developer ID–signed or notarized. macOS may block its first launch; follow the [installation instructions](INSTALL.md).
+**GitHub sponsorships — pending approval.** A link to support the project will be added once sponsorships are available.
+
+The initial Gumroad download will not be Developer ID–signed or notarized. macOS may block its first launch; follow the [installation instructions](INSTALL.md).
 
 ## Compared with Apple's Metal performance HUD
 
