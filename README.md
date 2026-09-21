@@ -4,6 +4,8 @@
 
 PerformanceHUD is a macOS menu-bar app that keeps useful performance information visible over your game or app. Values shown are customizable and can be toggled on and off, and the HUD can be repositioned and resized on screen.
 
+<img src="docs/images/HUD_desktop_transparent.png" alt="PerformanceHUD on the desktop with a transparent background, resource usage, temperatures, memory details, and battery status" width="260">
+
 - FPS for supported apps and games, and FPS history graph showing trends over the last 60 seconds.
 - Mac resources usage, such as GPU CPU and RAM, for just the app or the whole system.
 - Estimated CPU and GPU temperatures on supported hardware.
@@ -31,6 +33,8 @@ This is not aimed to be a MetalHUD replacement, Apple's built-in Metal HUD focus
 - App and system resource readings alongside FPS, plus swap, memory pressure, and battery.
 - Configurable layout with individual metric toggles, adjustable size, position and keyboard shortcuts.
 - HUD resolution stays rendered at sharp retina resolution even if the game is set to a low resolution.
+
+<img src="docs/images/HUD_menu_settings.png" alt="PerformanceHUD menu with size, position, background, and individual metric controls" width="640">
 
 ### Tradeoffs
 
