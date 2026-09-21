@@ -1,0 +1,34 @@
+# macOS Finder metadata
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+
+# Xcode build products and results
+build/
+DerivedData/
+*.app/
+*.xcarchive/
+*.dSYM/
+*.dSYM.zip
+*.xcresult/
+*.ipa
+
+# Personal Xcode state (keep shared schemes and project settings)
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# Swift Package Manager build/cache files
+.build/
+.swiftpm/
+
+# Local configuration and signing credentials
+.env
+.env.*
+!.env.example
+*.p12
+*.p8
+*.mobileprovision
+*.provisionprofile
