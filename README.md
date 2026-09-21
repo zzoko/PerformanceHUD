@@ -6,6 +6,9 @@ PerformanceHUD is a macOS menu-bar app that keeps useful performance information
 
 <img src="docs/images/HUD_desktop_transparent.png" alt="PerformanceHUD on the desktop with a transparent background, resource usage, temperatures, memory details, and battery status" width="260">
 
+**Watch PerformanceHUD in-game — video coming soon on YouTube.**
+<!-- When the video is ready, replace the line above with: [Watch PerformanceHUD in-game on YouTube](YOUTUBE_VIDEO_URL) -->
+
 - FPS for supported apps and games, and FPS history graph showing trends over the last 60 seconds.
 - Mac resources usage, such as GPU CPU and RAM, for just the app or the whole system.
 - Estimated CPU and GPU temperatures on supported hardware.
