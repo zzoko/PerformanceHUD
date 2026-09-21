@@ -32,3 +32,6 @@ xcuserdata/
 *.p8
 *.mobileprovision
 *.provisionprofile
+
+# Local notice for the Gumroad download package
+/Gumroad-Notice.txt

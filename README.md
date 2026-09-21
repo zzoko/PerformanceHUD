@@ -15,7 +15,7 @@ PerformanceHUD is a macOS menu-bar app that keeps useful performance information
 - Battery percentage.
 - Device information such as chip name and macOS version.
 
-## 📥 Download options
+## ↓ Download options
 
 Source is available to build and modify for personal use under the [personal-use license](LICENSE). You can build it yourself for free using the [installation instructions](INSTALL.md).
 
