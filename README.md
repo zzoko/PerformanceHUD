@@ -1,5 +1,14 @@
 # PerformanceHUD
 
+## ↓ Download options
+
+Source is available to build and modify for personal use under the [personal-use license](LICENSE). You can build it yourself for free using the [installation instructions](INSTALL.md).
+
+****[Download on Gumroad](https://unturneded.gumroad.com/l/PerformanceHUD)** — Get the ready-built app for a one-time $3.99 to support me and the development time that has gone into it. It offers the same features as the version you build yourself. No subscription or feature unlocks.
+
+****GitHub sponsorships — pending approval.** If you prefer to build the app yourself but would still like to support its development, optional sponsorships will offer another way to contribute. A link will be added once approved.
+
+
 ## What is this?
 
 PerformanceHUD is a macOS menu-bar app that keeps useful performance information visible over your game or app. Values shown are customizable and can be toggled on and off, and the HUD can be repositioned and resized on screen.
@@ -14,9 +23,6 @@ PerformanceHUD is a macOS menu-bar app that keeps useful performance information
 - Battery percentage.
 - Device information such as chip name and macOS version.
 
-## ↓ Download options
-
-Source is available to build and modify for personal use under the [personal-use license](LICENSE). You can build it yourself for free using the [installation instructions](INSTALL.md).
 
 ## Compared with Apple's Metal performance HUD
 
