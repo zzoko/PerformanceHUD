@@ -6,8 +6,7 @@ PerformanceHUD is a macOS menu-bar app that keeps useful performance information
 
 <img src="docs/images/HUD_desktop_transparent.png" alt="PerformanceHUD on the desktop with a transparent background, resource usage, temperatures, memory details, and battery status" width="260">
 
-**Watch PerformanceHUD in-game — video coming soon on YouTube.**
-<!-- When the video is ready, replace the line above with: [Watch PerformanceHUD in-game on YouTube](YOUTUBE_VIDEO_URL) -->
+[Watch PerformanceHUD used in a game on YouTube](YOUTUBE_VIDEO_URL)
 
 - FPS for supported apps and games, and FPS history graph showing trends over the last 60 seconds.
 - Mac resources usage, such as GPU CPU and RAM, for just the app or the whole system.
@@ -18,12 +17,6 @@ PerformanceHUD is a macOS menu-bar app that keeps useful performance information
 ## ↓ Download options
 
 Source is available to build and modify for personal use under the [personal-use license](LICENSE). You can build it yourself for free using the [installation instructions](INSTALL.md).
-
-**Gumroad download — coming soon.** A ready-built app is planned for a one-time $3.99 to support me and the development time that has gone into it. It will offer the same features as the version you build yourself. No subscription or feature unlocks.
-
-**GitHub sponsorships — pending approval.** A link to support the project will be added once sponsorships are available.
-
-The initial Gumroad download will not be Developer ID–signed or notarized. macOS may block its first launch; follow the [installation instructions](INSTALL.md).
 
 ## Compared with Apple's Metal performance HUD
 
