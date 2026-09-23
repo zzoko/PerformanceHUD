@@ -47,6 +47,14 @@ This is not aimed to be a MetalHUD replacement, Apple's built-in Metal HUD focus
 - Designed for borderless and windowed games. Exclusive fullscreen support is unlikely to work for most game although some may still work; expect the HUD not to appear in that mode as it cannot render on top.
 - Sampling, calculating and rendering data add performance overhead. In my testing, enabling PerformanceHUD in-game reduced FPS by around 4–8%. The impact varies by game, hardware, and settings.
 
+## Future ideas — under consideration
+
+These are potential additions, not planned or guaranteed features:
+
+- Battery temperature.
+- Fan speed (RPM), on Macs with fans.
+- Chip power consumption (watts).
+
 ## Technical details on what it accesses
 
 FPS comes from Apple's macOS metalperftrace tool. CPU and app memory readings use macOS process statistics; GPU readings use IOKit GPU counters. System memory, swap, memory pressure, and battery readings come from macOS system statistics and power information. PerformanceHUD reads these measurements without modifying game files or injecting code into games.
