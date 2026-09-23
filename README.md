@@ -2,22 +2,24 @@
 
 ## ↓ Download options
 
-➤ Source is available to build and modify for personal use under the [personal-use license](LICENSE). You can build it yourself for free using the [installation instructions](INSTALL.md).
+➤ Source is available to build and modify for personal use under the [personal-use license](LICENSE). You can build it yourself for free using the [**installation instructions**](INSTALL.md).
 
 ➤ **[Download on Ko-fi](https://ko-fi.com/s/01a23ddc51)** — Get the ready-built app for a one-time $3.99 to support me and the development time that has gone into it. It offers the same features as the version you build yourself. No subscription or feature unlocks.
 
 *Previously available through Gumroad; downloads have moved to Ko-fi because its payment setup better suits a small project.*
 
 **➤ GitHub sponsorships** — If you prefer to build the app yourself but would still like to support it, direct GitHub sponsorships will offer another way to contribute. A link will be added once approved.
+## Showcase
 
+Watch PerformanceHUD used:
+[Gameplay video 1](https://youtu.be/KWYLW9O11SU?si=B21dxHOzBK_H8dn9)
+[Gameplay video 2](https://youtu.be/ZI6cvaOitAE?si=BmEyrPy4rH7b7GAM)
 
 ## What is this?
 
 PerformanceHUD is a macOS menu-bar app that keeps useful performance information visible over your game or app. Values shown are customizable and can be toggled on and off, and the HUD can be repositioned and resized on screen.
 
 <img src="docs/images/HUD_desktop_transparent.png" alt="PerformanceHUD on the desktop with a transparent background, resource usage, temperatures, memory details, and battery status" width="260">
-
-[Watch PerformanceHUD used in a game on YouTube](https://youtu.be/KWYLW9O11SU?si=knZWxHzDuP24ZpmE)
 
 - FPS for supported apps and games, and FPS history graph showing trends over the last 60 seconds.
 - Mac resources usage, such as GPU CPU and RAM, for just the app or the whole system.
