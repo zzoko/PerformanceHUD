@@ -45,7 +45,7 @@ This is not aimed to be a MetalHUD replacement, Apple's built-in Metal HUD focus
 - FPS and app GPU readings depend on the game and the counters macOS exposes; unsupported readings remain blank. It should however work for any game that metalHUD also can, such as most Crossover games, Steam games, Minecraft (using Vulkan render), etc.
 - Per-app readings cover the tracked process and may exclude helper processes. Values can differ from Activity Monitor.
 - Designed for borderless and windowed games. Exclusive fullscreen support is unlikely to work for most game although some may still work; expect the HUD not to appear in that mode as it cannot render on top.
-- Sampling, calculating and rendering data add performance overhead. In my testing, enabling PerformanceHUD in-game reduced FPS by around 4–8%. The impact varies by game, hardware, and settings.
+- Sampling, calculating and rendering data add performance overhead. In my testing, enabling PerformanceHUD in-game reduced FPS by around 4%. The actual exact impact will vary by game, hardware, and settings.
 
 ## Future ideas — under consideration
 
