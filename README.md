@@ -4,9 +4,11 @@
 
 ➤ Source is available to build and modify for personal use under the [personal-use license](LICENSE). You can build it yourself for free using the [installation instructions](INSTALL.md).
 
-➤[ **Download on Gumroad**](https://andreiii22.gumroad.com/l/PerformanceHUD) — Get the ready-built app for a one-time $3.99 to support me and the development time that has gone into it. It offers the same features as the version you build yourself and is only a way to support my work. No subscription or feature unlocks.
+➤ **[Download on Ko-fi](https://ko-fi.com/s/01a23ddc51)** — Get the ready-built app for a one-time $3.99 to support me and the development time that has gone into it. It offers the same features as the version you build yourself. No subscription or feature unlocks.
 
-**➤ GitHub sponsorships** — If you prefer to build the app yourself but would still like to support it, optional sponsorships will offer another way to contribute. A link will be added once approved.
+*Previously available through Gumroad; downloads have moved to Ko-fi because its payment setup better suits a small project.*
+
+**➤ GitHub sponsorships** — If you prefer to build the app yourself but would still like to support it, direct GitHub sponsorships will offer another way to contribute. A link will be added once approved.
 
 
 ## What is this?
