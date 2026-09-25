@@ -11,7 +11,7 @@
 ## Showcase
 
 Watch PerformanceHUD used:
-[Gameplay video 1](https://youtu.be/ZI6cvaOitAE?si=BmEyrPy4rH7b7GAM)
+[Gameplay video 1](https://youtu.be/-b_t999Q9pQ)
 
 ## What is this?
 
@@ -68,7 +68,7 @@ This is not aimed to be a MetalHUD replacement, Apple's built-in Metal HUD focus
 
 ## Future ideas — under consideration
 
-These are potential additions, not planned or guaranteed features:
+These are potential additions, not guaranteed:
 
 - Fan speed (RPM), on Macs with fans.
 
