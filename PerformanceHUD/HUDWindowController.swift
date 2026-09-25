@@ -85,6 +85,16 @@ final class HUDWindowController {
         [HUDMetric: NSLayoutConstraint] = [:]
 
     private var temperatureLabels: [HUDMetric: NSTextField] = [:]
+    private var powerLabels: [HUDMetric: NSTextField] = [:]
+    private var powerTrailingConstraints: [HUDMetric: NSLayoutConstraint] = [:]
+    private var readingColumnRight: CGFloat = 0
+    private var powerMetrics: Set<HUDMetric> = []
+    private var packageTitleLabel: NSTextField?
+    private var packageValueLabel: NSTextField?
+    private var packageTopConstraint: NSLayoutConstraint?
+    private var showsPackagePower: Bool {
+        [.cpuTotal, .gpuTotal].allSatisfy { powerMetrics.contains($0) && enabledMetrics.contains($0) }
+    }
     private var temperatureTrailingConstraints: [HUDMetric: NSLayoutConstraint] = [:]
     private var temperatureMetrics: Set<HUDMetric> = []
     private var hiddenUtilizationMetrics: Set<HUDMetric> = []
@@ -406,7 +416,9 @@ final class HUDWindowController {
             if let divider = groupDividers[index] {
                 divider.isHidden = !showDivider
                 dividerHeightConstraints[index]?.constant = height
-                (divider as? HUDSampleDividerView)?.applyStyle(scale: hudScale, background: textBackground)
+                (divider as? HUDSampleDividerView)?.applyStyle(
+                    scale: hudScale, background: textBackground,
+                    connectsToHistory: lastVisibleGroup == 0 && enabledMetrics.contains(.fpsGraph))
                 if showDivider {
                     visibleDividerCount += 1
                     totalDividerHeight += height
@@ -420,7 +432,9 @@ final class HUDWindowController {
         bottomDivider?.isHidden = !showBottomDivider
         let bottomHeight = HUDStyle.dividerHeight(scale: hudScale, afterFPS: lastVisibleGroup == 0)
         bottomDividerHeightConstraint?.constant = bottomHeight
-        (bottomDivider as? HUDSampleDividerView)?.applyStyle(scale: hudScale, background: textBackground)
+        (bottomDivider as? HUDSampleDividerView)?.applyStyle(
+            scale: hudScale, background: textBackground,
+            connectsToHistory: lastVisibleGroup == 0 && enabledMetrics.contains(.fpsGraph))
         return (visibleDividerCount + (showBottomDivider ? 1 : 0),
                 totalDividerHeight + (showBottomDivider ? bottomHeight : 0))
     }
@@ -472,7 +486,7 @@ final class HUDWindowController {
             )
 
         titleLabel.textColor =
-            HUDStyle.titleColor(for: metric, background: textBackground)
+            HUDStyle.primaryTitleColor(for: metric, background: textBackground)
 
         titleLabel.wantsLayer = true
 
@@ -604,6 +618,49 @@ final class HUDWindowController {
             ])
             temperatureLabels[metric] = temperature
             temperatureTrailingConstraints[metric] = trailing
+
+            let power = NSTextField(labelWithString: "")
+            power.font = powerFont(for: metric)
+            power.textColor = HUDStyle.titleColor(for: metric, background: textBackground)
+            power.alignment = .right
+            power.isHidden = true
+            power.translatesAutoresizingMaskIntoConstraints = false
+            power.toolTip = "Estimated total \(metric == .cpuTotal ? "CPU" : "GPU") power in watts, averaged over the sampling interval."
+            row.addSubview(power)
+            let powerTrailing = power.trailingAnchor.constraint(equalTo: row.leadingAnchor,
+                constant: HUDStyle.valueColumnRight(scale: hudScale))
+            NSLayoutConstraint.activate([
+                powerTrailing,
+                power.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor,
+                    constant: HUDStyle.metricColumnSpacing(scale: hudScale)),
+                power.firstBaselineAnchor.constraint(equalTo: valueLabel.firstBaselineAnchor)
+            ])
+            powerLabels[metric] = power
+            powerTrailingConstraints[metric] = powerTrailing
+
+            if metric == .cpuTotal {
+                let title = NSTextField(labelWithString: "Package")
+                let value = NSTextField(labelWithString: "")
+                value.alignment = .right
+                for label in [title, value] {
+                    label.font = HUDStyle.ramDetailFont(scale: hudScale)
+                    label.textColor = power.textColor
+                    label.isHidden = true
+                    label.translatesAutoresizingMaskIntoConstraints = false
+                    label.toolTip = "Combined CPU, GPU and Neural Engine power estimate in watts. Excludes the display and other whole-Mac components."
+                    row.addSubview(label)
+                }
+                let top = title.topAnchor.constraint(equalTo: titleLabel.bottomAnchor,
+                    constant: HUDStyle.rowSpacing(scale: hudScale))
+                NSLayoutConstraint.activate([
+                    top, title.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+                    value.firstBaselineAnchor.constraint(equalTo: title.firstBaselineAnchor),
+                    value.trailingAnchor.constraint(equalTo: power.trailingAnchor),
+                    title.trailingAnchor.constraint(lessThanOrEqualTo: value.leadingAnchor,
+                        constant: -HUDStyle.metricColumnSpacing(scale: hudScale))
+                ])
+                packageTitleLabel = title; packageValueLabel = value; packageTopConstraint = top
+            }
         }
 
         if metric == .ram || metric == .ramTotal {
@@ -743,6 +800,10 @@ final class HUDWindowController {
             metricRows[metric]?.isHidden = !enabledMetrics.contains(metric)
         }
         if group.supportsTemperature {
+            let showPower = options.enabled && options.power
+            if showPower { powerMetrics.insert(group.totalMetric) }
+            else { powerMetrics.remove(group.totalMetric); powerLabels[group.totalMetric]?.stringValue = "" }
+            powerLabels[group.totalMetric]?.isHidden = !showPower
             let showTemperature = options.enabled && options.temperature
             if showTemperature { temperatureMetrics.insert(group.totalMetric) }
             else { temperatureMetrics.remove(group.totalMetric); temperatureLabels[group.totalMetric]?.stringValue = "" }
@@ -765,6 +826,17 @@ final class HUDWindowController {
                 temperatureLabels[metric]?.stringValue = ""
             }
         }
+    }
+
+    func updatePower(_ sample: PowerSample) {
+        func text(_ value: Double?) -> String {
+            guard let value, value.isFinite, value >= 0 else { return "" }
+            return String(format: "%.1f W", locale: Locale(identifier: "en_US_POSIX"), value)
+        }
+        for (metric, value) in [(HUDMetric.cpuTotal, sample.cpu), (.gpuTotal, sample.gpu)] {
+            powerLabels[metric]?.stringValue = powerMetrics.contains(metric) ? text(value) : ""
+        }
+        packageValueLabel?.stringValue = showsPackagePower ? text(sample.package) : ""
     }
 
     func setMetricEnabled(
@@ -1001,6 +1073,16 @@ final class HUDWindowController {
             : HUDStyle.ramDetailFont(scale: hudScale)
     }
 
+    private func powerIsPrimary(for metric: HUDMetric) -> Bool {
+        hiddenUtilizationMetrics.contains(metric) && !temperatureMetrics.contains(metric)
+    }
+
+    private func powerFont(for metric: HUDMetric) -> NSFont {
+        powerIsPrimary(for: metric)
+            ? HUDStyle.valueFont(for: metric, scale: hudScale)
+            : HUDStyle.ramDetailFont(scale: hudScale)
+    }
+
     private func updateTemperatureAppearance() {
         for (metric, label) in temperatureLabels {
             label.font = temperatureFont(for: metric)
@@ -1008,6 +1090,18 @@ final class HUDWindowController {
                 ? HUDStyle.valueColor(background: textBackground)
                 : HUDStyle.titleColor(for: metric, background: textBackground)
         }
+        for (metric, label) in powerLabels {
+            label.font = powerFont(for: metric)
+            label.textColor = powerIsPrimary(for: metric)
+                ? HUDStyle.valueColor(background: textBackground)
+                : HUDStyle.titleColor(for: metric, background: textBackground)
+        }
+        packageTitleLabel?.font = HUDStyle.ramDetailFont(scale: hudScale)
+        packageTitleLabel?.textColor = HUDStyle.titleColor(for: .cpuTotal, background: textBackground)
+        packageValueLabel?.font = powerFont(for: .cpuTotal)
+        packageValueLabel?.textColor = powerIsPrimary(for: .cpuTotal)
+            ? HUDStyle.valueColor(background: textBackground)
+            : HUDStyle.titleColor(for: .cpuTotal, background: textBackground)
     }
 
     private func updateMetricColors() {
@@ -1030,7 +1124,7 @@ final class HUDWindowController {
             // Neutral text adapts to the selected background.
             titleLabels[metric]?
                 .textColor =
-                    HUDStyle.titleColor(for: metric, background: textBackground)
+                    HUDStyle.primaryTitleColor(for: metric, background: textBackground)
 
             // Keep values neutral and readable on the selected background.
             valueLabels[metric]?
@@ -1041,7 +1135,45 @@ final class HUDWindowController {
 
     // MARK: - Layout
 
+    private func updateReadingPositions() {
+        guard readingColumnRight > 0 else { return }
+        let metrics: [HUDMetric] = [.gpuTotal, .cpuTotal]
+        for metric in metrics {
+            let hasTemperature = temperatureMetrics.contains(metric)
+            let hasUsage = !hiddenUtilizationMetrics.contains(metric)
+            // Keep a compact, stable cluster anchored at the right edge.
+            // Reference widths prevent changing readings from shifting columns.
+            let temperature = NSTextField(labelWithString: "149°C")
+            temperature.font = temperatureFont(for: metric)
+            let usage = NSTextField(labelWithString: "100%")
+            usage.font = HUDStyle.valueFont(for: metric, scale: hudScale)
+            let gap = HUDStyle.metricColumnSpacing(scale: hudScale)
+            var trailing = readingColumnRight - (valueLabels[metric]?.alignmentRectInsets.right ?? 0)
+            if hasUsage { trailing -= usage.intrinsicContentSize.width + gap }
+            temperatureTrailingConstraints[metric]?.constant = trailing
+            if hasTemperature { trailing -= temperature.intrinsicContentSize.width + gap }
+            powerTrailingConstraints[metric]?.constant = trailing
+        }
+
+        // Follow a visible secondary temperature column; keep the battery's
+        // primary temperature right-aligned when its Energy option is disabled.
+        let reference = metrics.first {
+            enabledMetrics.contains($0) && temperatureMetrics.contains($0) && !hiddenUtilizationMetrics.contains($0)
+        }
+        batteryIndicator.alignTemperature(trailingInset: reference.flatMap { metric in
+            temperatureTrailingConstraints[metric].map { readingColumnRight - $0.constant }
+        })
+    }
+
     private func updateLayout() {
+
+        packageTitleLabel?.isHidden = !showsPackagePower
+        packageValueLabel?.isHidden = !showsPackagePower
+        if !showsPackagePower { packageValueLabel?.stringValue = "" }
+        let packageHeight = showsPackagePower
+            ? HUDStyle.rowSpacing(scale: hudScale) + HUDStyle.ramDetailHeight(scale: hudScale) : 0
+        rowHeightConstraints[.cpuTotal]?.constant = HUDStyle.rowHeight(scale: hudScale) + packageHeight
+        packageTopConstraint?.constant = HUDStyle.rowSpacing(scale: hudScale)
 
         stackLeadingConstraint?.constant = HUDStyle.horizontalPadding(scale: hudScale)
         stackTrailingConstraint?.constant = -HUDStyle.horizontalPadding(scale: hudScale)
@@ -1053,6 +1185,9 @@ final class HUDWindowController {
 
         let dividers = updateDividers()
         let dividerCount = CGFloat(dividers.count)
+        // The graph includes its bottom gap so the fade ends close to the divider.
+        stackView.setCustomSpacing(0, after: fpsGraphView)
+        let graphUsesDividerGap = enabledMetrics.contains(.fpsGraph) && dividerCount > 0
 
         let visibleCount =
             CGFloat(
@@ -1061,7 +1196,7 @@ final class HUDWindowController {
 
         let rowHeight = enabledMetrics.reduce(CGFloat.zero) {
             $0 + HUDStyle.rowHeight(for: $1, scale: hudScale)
-        }
+        } + packageHeight
 
         let spacingCount =
             max(
@@ -1070,7 +1205,7 @@ final class HUDWindowController {
             )
 
         let spacingHeight =
-            spacingCount
+            (spacingCount - (graphUsesDividerGap ? 1 : 0))
             * HUDStyle.rowSpacing(
                 scale: hudScale
             )
@@ -1117,25 +1252,50 @@ final class HUDWindowController {
             valueColumnRight = max(valueColumnRight, requiredWidth)
         }
 
-        for metric in temperatureMetrics.intersection(enabledMetrics) {
+        let expandedBaseWidth = HUDStyle.expandedValueColumnRight(valueColumnRight, scale: hudScale)
+        for metric in temperatureMetrics.union(powerMetrics).intersection(enabledMetrics) {
             let temperature = NSTextField(labelWithString: "149°C")
             temperature.font = temperatureFont(for: metric)
             let usage = NSTextField(labelWithString: "100%")
             usage.font = HUDStyle.valueFont(for: metric, scale: hudScale)
             let gap = HUDStyle.metricColumnSpacing(scale: hudScale)
-            let required = (titleLabels[metric]?.intrinsicContentSize.width ?? 0)
-                + gap + temperature.intrinsicContentSize.width
+            let power = NSTextField(labelWithString: "999.9 W")
+            power.font = powerFont(for: metric)
+            let titleWidth = max(titleLabels[metric]?.intrinsicContentSize.width ?? 0,
+                metric == .cpuTotal && showsPackagePower ? packageTitleLabel?.intrinsicContentSize.width ?? 0 : 0)
+            let required = titleWidth
+                + (powerMetrics.contains(metric) ? gap + power.intrinsicContentSize.width : 0)
+                + (temperatureMetrics.contains(metric) ? gap + temperature.intrinsicContentSize.width : 0)
                 + (hiddenUtilizationMetrics.contains(metric) ? 0 : gap + usage.intrinsicContentSize.width)
             valueColumnRight = max(valueColumnRight, required)
         }
 
-        for (metric, constraint) in temperatureTrailingConstraints {
-            let usage = NSTextField(labelWithString: "100%")
-            usage.font = HUDStyle.valueFont(for: metric, scale: hudScale)
-            let inset = hiddenUtilizationMetrics.contains(metric) ? 0
-                : usage.intrinsicContentSize.width + HUDStyle.metricColumnSpacing(scale: hudScale)
-            constraint.constant = valueColumnRight - inset - (valueLabels[metric]?.alignmentRectInsets.right ?? 0)
+        // Power adds another value column, not another large block of empty space.
+        // Retain the normal expanded width, growing only enough to fit the readings.
+        if !powerMetrics.intersection(enabledMetrics).isEmpty {
+            valueColumnRight = max(valueColumnRight, expandedBaseWidth)
+        } else {
+            valueColumnRight = HUDStyle.expandedValueColumnRight(valueColumnRight, scale: hudScale)
         }
+
+        let fpsOnly = enabledMetrics == [.fps]
+        if !fpsOnly {
+            // Reduce the previously expanded gap by 10% (1.20 × 0.90 = 1.08), leaving the compact
+            // spacing within the readings and the outside padding unchanged.
+            valueColumnRight = HUDStyle.expandedValueColumnRight(valueColumnRight, scale: hudScale, gapIncrease: 0.08)
+        }
+        if fpsOnly, let title = titleLabels[.fps] {
+            // Halve the usual gap using a stable two-digit reference, so changing
+            // FPS readings never cause the window to resize.
+            let reference = NSTextField(labelWithString: "60")
+            reference.font = HUDStyle.valueFont(for: .fps, scale: hudScale)
+            let textWidth = title.intrinsicContentSize.width + reference.intrinsicContentSize.width
+            let gap = max(HUDStyle.metricColumnSpacing(scale: hudScale), (valueColumnRight - textWidth) / 2)
+            valueColumnRight = textWidth + gap
+        }
+
+        readingColumnRight = valueColumnRight
+        updateReadingPositions()
 
         for (metric, constraint) in valueColumnConstraints {
             // Match the sample's label frames, accounting for NSTextField alignment insets.
@@ -1143,7 +1303,7 @@ final class HUDWindowController {
         }
 
         let width = max(
-            HUDStyle.width(scale: hudScale),
+            fpsOnly ? 0 : HUDStyle.width(scale: hudScale),
             valueColumnRight + 2 * HUDStyle.horizontalPadding(scale: hudScale)
         )
 
@@ -1247,7 +1407,12 @@ final class HUDWindowController {
     }
 
     func updateBattery(_ sample: BatterySample?) {
-        batteryIndicator.update(percentage: sample?.percentage, source: sample?.source)
+        batteryIndicator.update(percentage: sample?.percentage, source: sample?.source, temperature: sample?.temperature)
+    }
+
+    func setBatteryOptions(_ options: HUDBatteryOptions) {
+        batteryIndicator.setOptions(options)
+        setMetricEnabled(.battery, enabled: options.enabled)
     }
 
     // MARK: - Generic Metric Updating
@@ -1333,6 +1498,7 @@ final class HUDWindowController {
 private final class HUDSampleDividerView: NSView {
     private let line = NSView()
     private var hudScale: CGFloat = 1
+    private var connectsToHistory = false
     override var isFlipped: Bool { true }
 
     init() {
@@ -1343,15 +1509,16 @@ private final class HUDSampleDividerView: NSView {
 
     required init?(coder: NSCoder) { fatalError("Use init()") }
 
-    func applyStyle(scale: HUDScale, background: HUDBackground) {
+    func applyStyle(scale: HUDScale, background: HUDBackground, connectsToHistory: Bool = false) {
         hudScale = CGFloat(scale.rawValue)
+        self.connectsToHistory = connectsToHistory
         line.layer?.backgroundColor = HUDStyle.separatorColor(background: background).cgColor
         needsLayout = true
     }
 
     override func layout() {
         super.layout()
-        line.frame = NSRect(x: 0, y: bounds.height - 5 * hudScale,
+        line.frame = NSRect(x: 0, y: connectsToHistory ? 0 : bounds.height - 5 * hudScale,
                             width: bounds.width, height: 0.5 * hudScale)
     }
 }

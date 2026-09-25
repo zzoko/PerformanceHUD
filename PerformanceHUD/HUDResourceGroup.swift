@@ -1,10 +1,17 @@
 import Foundation
 
+struct HUDBatteryOptions: Equatable {
+    var enabled: Bool
+    var temperature: Bool
+    var charge: Bool
+}
+
 enum HUDResourceGroup: String, CaseIterable {
     case gpu, cpu, ram
 
     var title: String { rawValue.uppercased() }
     var supportsTemperature: Bool { self != .ram }
+    var supportsPower: Bool { self != .ram }
     var appMetric: HUDMetric {
         switch self { case .gpu: return .gpu; case .cpu: return .cpu; case .ram: return .ram }
     }
@@ -18,12 +25,15 @@ struct HUDResourceOptions: Equatable {
     var temperature: Bool
     var totalUse: Bool
     var focusedApp: Bool
+    var power: Bool = false
 
     func visibleMetrics(for group: HUDResourceGroup) -> Set<HUDMetric> {
         guard enabled else { return [] }
         var metrics = Set<HUDMetric>()
         if focusedApp { metrics.insert(group.appMetric) }
-        if totalUse || (group.supportsTemperature && temperature) { metrics.insert(group.totalMetric) }
+        if totalUse || (group.supportsTemperature && temperature) || (group.supportsPower && power) {
+            metrics.insert(group.totalMetric)
+        }
         return metrics
     }
 }

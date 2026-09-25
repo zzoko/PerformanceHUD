@@ -69,9 +69,15 @@ enum HUDStyle {
         * CGFloat(scale.rawValue)
     }
 
+    static let fpsHistoryFadeExtension: CGFloat = 16
+
     static func rowHeight(for metric: HUDMetric, scale: HUDScale) -> CGFloat {
-        if metric == .fpsGraph { return 24 * CGFloat(scale.rawValue) }
+        // Give the fade its own depth below the stroke, including the former divider gap.
+        if metric == .fpsGraph {
+            return (24 + fpsHistoryFadeExtension) * CGFloat(scale.rawValue) + rowSpacing(scale: scale)
+        }
         if metric == .deviceInfo { return ramDetailHeight(scale: scale) }
+        if metric == .battery { return rowHeight(scale: scale) + ramDetailHeight(scale: scale) }
         let detailLines = metric == .ramTotal ? 3 : metric == .ram ? 1 : 0
         let detailGroupSpacing = detailLines > 0 ? rowSpacing(scale: scale) : 0
         return rowHeight(scale: scale) + detailGroupSpacing + CGFloat(detailLines) * ramDetailHeight(scale: scale)
@@ -100,6 +106,19 @@ enum HUDStyle {
             * CGFloat(scale.rawValue)
     }
 
+    // Widen the shared columns by 50% of a standard RAM-to-percentage gap.
+    // Keep the temperature-to-usage spacing and the outer padding unchanged.
+    static func expandedValueColumnRight(_ current: CGFloat, scale: HUDScale, gapIncrease: CGFloat = 0.5) -> CGFloat {
+        let titleWidth = ("RAM" as NSString).size(withAttributes: [
+            .font: titleFont(for: .ramTotal, scale: scale)
+        ]).width
+        let valueWidth = ("100%" as NSString).size(withAttributes: [
+            .font: valueFont(for: .ramTotal, scale: scale)
+        ]).width
+        let gap = max(metricColumnSpacing(scale: scale), current - titleWidth - valueWidth)
+        return current + gap * gapIncrease
+    }
+
     // MARK: - Fonts
 
     // Match PerformanceHUDSampleTextView's 1× typography; scale only by the HUD size.
@@ -111,7 +130,10 @@ enum HUDStyle {
     }
 
     static func titleFont(for metric: HUDMetric, scale: HUDScale) -> NSFont {
-        valueFont(for: metric, scale: scale)
+        if [.gpu, .gpuTotal, .cpu, .cpuTotal, .ram, .ramTotal, .battery].contains(metric) {
+            return NSFont.systemFont(ofSize: baseFontSize * CGFloat(scale.rawValue), weight: .medium)
+        }
+        return valueFont(for: metric, scale: scale)
     }
 
     // Together with the 6pt stack spacing, match the sample's section positions.
@@ -128,6 +150,11 @@ enum HUDStyle {
     static func titleColor(for metric: HUDMetric, background: HUDBackground) -> NSColor {
         metric == .fps ? valueColor(background: background)
             : NSColor(white: background == .light ? 0.31 : 0.76, alpha: 1)
+    }
+
+    static func primaryTitleColor(for metric: HUDMetric, background: HUDBackground) -> NSColor {
+        if metric == .fps { return valueColor(background: background) }
+        return NSColor(white: background == .light ? 0.21 : 0.86, alpha: 1)
     }
 
     static func separatorColor(background: HUDBackground) -> NSColor {

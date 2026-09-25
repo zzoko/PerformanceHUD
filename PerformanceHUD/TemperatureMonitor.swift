@@ -70,6 +70,28 @@ nonisolated final class SMCTemperatureReader: @unchecked Sendable {
         return valid.reduce(0, +) / Double(valid.count)
     }
 
+    // Battery sensor names and the controller fallback follow Stats' battery reader.
+    // These identify the battery pack, not nearby CPU/GPU or enclosure sensors.
+    func readBatteryTemperature() -> Double? {
+        if connection == 0 {
+            let now = ProcessInfo.processInfo.systemUptime
+            guard now >= nextOpenAttempt else { return nil }
+            nextOpenAttempt = now + 30
+            guard open() else { return nil }
+        }
+        let readings = ["TB1T", "TB2T"].compactMap { temperature(for: $0) }
+            .compactMap { Self.validBatteryTemperature($0) }
+        guard !readings.isEmpty else {
+            close() // Re-open after wake; the battery controller remains the fallback.
+            return nil
+        }
+        return readings.reduce(0, +) / Double(readings.count)
+    }
+
+    static func validBatteryTemperature(_ value: Double) -> Double? {
+        value.isFinite && value > 0 && value < 100 ? value : nil
+    }
+
     static func sensorGroup(for key: String, chipName: String) -> HUDResourceGroup? {
         guard key.utf8.count == 4 else { return nil }
         if CPUTemperatureSensors.keys(for: chipName).contains(key) { return .cpu }

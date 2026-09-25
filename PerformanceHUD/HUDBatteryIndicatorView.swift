@@ -5,6 +5,8 @@ import AppKit
 final class HUDBatteryIndicatorView: NSView {
     private var percentage: Double?
     private var source: BatterySample.Source?
+    private var temperature: Double?
+    private var options = HUDPreferences.batteryOptions
     private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
     private var scale: CGFloat = 1
     private var background: HUDBackground = .dark
@@ -20,7 +22,7 @@ final class HUDBatteryIndicatorView: NSView {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                update(percentage: percentage, source: source)
+                update(percentage: percentage, source: source, temperature: temperature)
             }
         }
     }
@@ -36,43 +38,100 @@ final class HUDBatteryIndicatorView: NSView {
         needsDisplay = true
     }
 
-    func update(percentage: Double?, source: BatterySample.Source?) {
+    func setOptions(_ options: HUDBatteryOptions) {
+        self.options = options
+        if !options.temperature { temperature = nil }
+        update(percentage: percentage, source: source, temperature: temperature)
+    }
+
+    func update(percentage: Double?, source: BatterySample.Source?, temperature: Double? = nil) {
         self.source = source
+        self.temperature = temperature.flatMap { SMCTemperatureReader.validBatteryTemperature($0) }
         self.percentage = percentage.flatMap { $0.isFinite ? min(100, max(0, $0)) : nil }
         lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
         let description = self.percentage.map { "Battery: \(Int($0.rounded()))%" } ?? "Battery unavailable"
         toolTip = description + (source.map { " — Source: " + $0.rawValue } ?? "") + (lowPower ? " — Low Power Mode" : "")
+        if options.temperature, let temperature = self.temperature {
+            toolTip = (toolTip ?? "") + " — Battery temperature: \(Int(temperature.rounded()))°C"
+        }
         setAccessibilityValue(toolTip)
         needsDisplay = true
     }
 
-    private var sourceFont: NSFont { NSFont.systemFont(ofSize: 14 * scale, weight: .regular) }
+    private var sourceFont: NSFont { NSFont.systemFont(ofSize: 14 * scale, weight: .medium) }
+    private var valueFont: NSFont { NSFont.systemFont(ofSize: 14 * scale, weight: .regular) }
+    private var detailFont: NSFont { NSFont.systemFont(ofSize: 12 * scale, weight: .regular) }
+    private var temperatureFont: NSFont { options.charge ? detailFont : valueFont }
+    private var sharedTemperatureTrailingInset: CGFloat?
+
+    func alignTemperature(trailingInset: CGFloat?) {
+        sharedTemperatureTrailingInset = trailingInset
+        needsDisplay = true
+    }
+
+    // Reserve the same percentage column used by the CPU/GPU temperature labels.
+    private var temperatureTrailingInset: CGFloat {
+        guard options.charge else { return 2 * scale }
+        if let sharedTemperatureTrailingInset { return sharedTemperatureTrailingInset }
+        let usage = NSTextField(labelWithString: "100%")
+        usage.font = valueFont
+        return usage.intrinsicContentSize.width + 8 * scale + usage.alignmentRectInsets.right
+    }
 
     var minimumRowWidth: CGFloat {
-        // Reserve the longest source text even while unplugged, avoiding a width
-        // jump when the power adapter connects.
-        ("Power Adapter" as NSString).size(withAttributes: [.font: sourceFont]).width
-            + (2 + 8 + 34 * 0.85 + 0.5) * scale
+        // Keep the established HUD width when the longer source label is used.
+        let titleWidth = ("Adapter" as NSString).size(withAttributes: [.font: valueFont]).width
+        let usage = NSTextField(labelWithString: "100%")
+        usage.font = valueFont
+        let sizingInset = options.charge
+            ? usage.intrinsicContentSize.width + 8 * scale + usage.alignmentRectInsets.right : 2 * scale
+        let valueWidth = options.temperature
+            ? ("99°C" as NSString).size(withAttributes: [.font: temperatureFont]).width + sizingInset
+            : options.charge ? (34 * 0.85 + 0.5) * scale : 0
+        return titleWidth + 10 * scale + valueWidth
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        let rowMidY = bounds.minY + 10.5 * scale
+        let headingAttributes: [NSAttributedString.Key: Any] = [
+            .font: detailFont, .foregroundColor: HUDStyle.titleColor(for: .battery, background: background)
+        ]
+        let heading = "Power source" as NSString
+        let headingSize = heading.size(withAttributes: headingAttributes)
+        heading.draw(at: NSPoint(x: bounds.minX + 2 * scale,
+                                 y: bounds.maxY - 9 * scale - headingSize.height / 2),
+                     withAttributes: headingAttributes)
+        let sourceHeight = (BatterySample.Source.powerAdapter.rawValue as NSString).size(withAttributes: [.font: sourceFont]).height
+        let sourceOriginY = rowMidY - sourceHeight / 2
         if let source {
             let text = source.rawValue
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: sourceFont,
-                .foregroundColor: HUDStyle.titleColor(for: .battery, background: background)
+                .foregroundColor: HUDStyle.primaryTitleColor(for: .battery, background: background)
             ]
-            let size = (text as NSString).size(withAttributes: attributes)
             (text as NSString).draw(at: NSPoint(x: bounds.minX + 2 * scale,
-                                               y: bounds.midY - size.height / 2), withAttributes: attributes)
+                                               y: sourceOriginY), withAttributes: attributes)
         }
-        guard let percentage else { return }
+        if options.temperature, let temperature {
+            let text = "\(Int(temperature.rounded()))°C" as NSString
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: temperatureFont,
+                .foregroundColor: options.charge
+                    ? HUDStyle.titleColor(for: .battery, background: background)
+                    : HUDStyle.valueColor(background: background)
+            ]
+            let size = text.size(withAttributes: attributes)
+            text.draw(at: NSPoint(x: bounds.maxX - temperatureTrailingInset - size.width,
+                                 y: sourceOriginY + temperatureFont.descender - sourceFont.descender),
+                      withAttributes: attributes)
+        }
+        guard options.charge, let percentage else { return }
         let iconScale = scale * 0.85
         let foreground = HUDStyle.valueColor(background: background)
         let fillColor: NSColor = lowPower ? .systemYellow : foreground
         let filledTextColor = lowPower || background != .light
             ? NSColor(white: 0.12, alpha: 1) : NSColor(white: 0.98, alpha: 1)
-        let body = NSRect(x: bounds.maxX - 34 * iconScale - 0.5 * scale, y: bounds.midY - 8.5 * iconScale,
+        let body = NSRect(x: bounds.maxX - 34 * iconScale - 0.5 * scale, y: rowMidY - 8.5 * iconScale,
                           width: 31 * iconScale, height: 17 * iconScale)
         let shape = NSBezierPath(roundedRect: body, xRadius: 6 * iconScale, yRadius: 6 * iconScale)
         foreground.withAlphaComponent(0.18).setFill()

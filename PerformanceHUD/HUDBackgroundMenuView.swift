@@ -37,10 +37,12 @@ final class HUDBackgroundMenuView: NSView {
             button.setAccessibilityLabel("\(background.menuTitle) HUD background")
             buttons[background] = button
             stack.addArrangedSubview(button)
+            button.widthAnchor.constraint(equalToConstant: HUDMenuLayout.backgroundButtonWidth(background)).isActive = true
         }
 
         addSubview(stack)
         NSLayoutConstraint.activate([
+            label.widthAnchor.constraint(equalToConstant: HUDMenuLayout.labelWidth),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 30),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12)

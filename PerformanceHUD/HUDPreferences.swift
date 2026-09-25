@@ -73,7 +73,7 @@ enum HUDPreferences {
 
             return HUDScale(
                 rawValue: value
-            ) ?? .normal
+            )
         }
 
         set {
@@ -164,19 +164,35 @@ enum HUDPreferences {
 
     // MARK: - Metric Keys
 
+    static var batteryOptions: HUDBatteryOptions {
+        HUDBatteryOptions(
+            enabled: isMetricEnabled(.battery),
+            temperature: defaults.object(forKey: "hud.battery.temperature") as? Bool ?? true,
+            charge: defaults.object(forKey: "hud.battery.charge") as? Bool ?? true)
+    }
+
+    static func setBatteryOptions(_ options: HUDBatteryOptions) {
+        setMetricEnabled(.battery, enabled: options.enabled)
+        defaults.set(options.temperature, forKey: "hud.battery.temperature")
+        defaults.set(options.charge, forKey: "hud.battery.charge")
+    }
+
     static func resourceOptions(for group: HUDResourceGroup) -> HUDResourceOptions {
         let total = isMetricEnabled(group.totalMetric)
         let app = isMetricEnabled(group.appMetric)
         let temperature = group.supportsTemperature
             && (defaults.object(forKey: "hud.group.\(group.rawValue).temperature") as? Bool ?? true)
+        let power = group.supportsPower
+            && (defaults.object(forKey: "hud.group.\(group.rawValue).power") as? Bool ?? true)
         let enabled = defaults.object(forKey: "hud.group.\(group.rawValue).enabled") as? Bool
             ?? (total || app || temperature)
-        return HUDResourceOptions(enabled: enabled, temperature: temperature, totalUse: total, focusedApp: app)
+        return HUDResourceOptions(enabled: enabled, temperature: temperature, totalUse: total, focusedApp: app, power: power)
     }
 
     static func setResourceOptions(_ options: HUDResourceOptions, for group: HUDResourceGroup) {
         defaults.set(options.enabled, forKey: "hud.group.\(group.rawValue).enabled")
         defaults.set(options.temperature && group.supportsTemperature, forKey: "hud.group.\(group.rawValue).temperature")
+        defaults.set(options.power && group.supportsPower, forKey: "hud.group.\(group.rawValue).power")
         setMetricEnabled(group.totalMetric, enabled: options.totalUse)
         setMetricEnabled(group.appMetric, enabled: options.focusedApp)
     }

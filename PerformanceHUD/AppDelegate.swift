@@ -1,9 +1,10 @@
 import AppKit
+import ServiceManagement
 
 @MainActor
 final class AppDelegate:
     NSObject,
-    NSApplicationDelegate {
+    NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - HUD
 
@@ -86,6 +87,12 @@ final class AppDelegate:
 
     private var enabledMetrics = HUDPreferences.visibleMetrics
     private let temperatureMonitor = TemperatureMonitor()
+    private let powerMonitor = PowerMonitor()
+    private var resourceMenuViews: [HUDResourceGroup: HUDResourceMenuView] = [:]
+    private var powerHelperStatusItem: NSMenuItem?
+    private var powerHelperSetupItem: NSMenuItem?
+    private var powerHelperApprovalItem: NSMenuItem?
+    private var powerHelperRemoveItem: NSMenuItem?
 
     // MARK: - Launch
 
@@ -113,6 +120,9 @@ final class AppDelegate:
         temperatureMonitor.onUpdate = { [weak self] sample in
             self?.hudWindow?.updateTemperatures(sample)
         }
+        powerMonitor.onUpdate = { [weak self] sample in
+            self?.hudWindow?.updatePower(sample)
+        }
 
         // RAM
         setupRAMUsageMonitor()
@@ -129,8 +139,16 @@ final class AppDelegate:
         // Active app detection
         setupApplicationMonitoring()
 
+        powerMonitor.helper.onStateChange = { [weak self] in self?.powerHelperStateChanged() }
+        powerMonitor.helper.onPowerSelectionChange = { [weak self] enabled in self?.setPowerSelections(enabled) }
         monitorFrontmostApplication()
         reconcileMonitoring()
+        powerHelperStateChanged()
+        // Let initial window/capture setup finish before offering power setup.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            self?.powerMonitor.helper.offerSetupOnFirstLaunch()
+        }
     }
 
     // MARK: - HUD Setup
@@ -142,6 +160,7 @@ final class AppDelegate:
         for group in HUDResourceGroup.allCases {
             hud.setResourceOptions(HUDPreferences.resourceOptions(for: group), for: group)
         }
+        hud.setBatteryOptions(HUDPreferences.batteryOptions)
 
         // Restore metric visibility.
         for metric in HUDMetric.allCases {
@@ -501,7 +520,7 @@ final class AppDelegate:
         }
         let positionItem = NSMenuItem()
         positionItem.view = positionView
-        menu.addItem(positionItem)
+        menu.insertItem(positionItem, at: menu.index(of: sizeItem))
 
         // MARK: HUD Background
 
@@ -571,11 +590,26 @@ final class AppDelegate:
                 hudWindow?.setResourceOptions(options, for: group)
                 reconcileMonitoring()
             }
+            view.onPowerSetup = { [weak self] in
+                self?.statusItem?.menu?.cancelTracking()
+                Task { @MainActor [weak self] in self?.powerMonitor.helper.requestPowerAccess() }
+            }
+            resourceMenuViews[group] = view
             let item = NSMenuItem()
             item.view = view
             menu.addItem(item)
         }
-        addMetric(.battery)
+        let batteryView = HUDResourceMenuView(batteryOptions: HUDPreferences.batteryOptions)
+        batteryView.onBatteryChange = { [weak self] options in
+            guard let self else { return }
+            HUDPreferences.setBatteryOptions(options)
+            enabledMetrics = HUDPreferences.visibleMetrics
+            hudWindow?.setBatteryOptions(options)
+            reconcileMonitoring()
+        }
+        let batteryItem = NSMenuItem()
+        batteryItem.view = batteryView
+        menu.addItem(batteryItem)
         addMetric(.deviceInfo)
 
         // Separator before Close App.
@@ -583,6 +617,27 @@ final class AppDelegate:
         menu.addItem(
             .separator()
         )
+
+        let helperMenu = NSMenu()
+        helperMenu.autoenablesItems = false
+        let helperItem = NSMenuItem(title: "Power Helper", action: nil, keyEquivalent: "")
+        helperItem.submenu = helperMenu
+        let helperStatus = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        let helperSetup = NSMenuItem(title: "Set Up Power Readings…", action: #selector(setUpPowerHelper), keyEquivalent: "")
+        let helperApproval = NSMenuItem(title: "Open Approval Settings…", action: #selector(openPowerHelperSettings), keyEquivalent: "")
+        let helperRemove = NSMenuItem(title: "Remove Power Helper", action: #selector(removePowerHelper), keyEquivalent: "")
+        for item in [helperStatus, helperSetup, helperApproval, helperRemove] {
+            item.target = self
+            helperMenu.addItem(item)
+        }
+        powerHelperStatusItem = helperStatus
+        powerHelperSetupItem = helperSetup
+        powerHelperApprovalItem = helperApproval
+        powerHelperRemoveItem = helperRemove
+        menu.addItem(helperItem)
+        menu.addItem(.separator())
+        menu.delegate = self
+        helperMenu.delegate = self
 
         // MARK: Close App
 
@@ -607,7 +662,7 @@ final class AppDelegate:
 
         menu.addItem(.separator())
 
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1"
         let versionItem = NSMenuItem(title: "App version \(version)", action: nil, keyEquivalent: "")
         versionItem.isEnabled = false
         menu.addItem(versionItem)
@@ -618,6 +673,62 @@ final class AppDelegate:
         self.statusItem =
             statusItem
     }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        powerMonitor.helper.refreshStatus()
+        updatePowerHelperMenu()
+    }
+
+    private func setPowerSelections(_ enabled: Bool) {
+        var changed = false
+        for group in [HUDResourceGroup.cpu, .gpu] {
+            var options = HUDPreferences.resourceOptions(for: group)
+            if options.power != enabled {
+                options.power = enabled
+                HUDPreferences.setResourceOptions(options, for: group)
+                hudWindow?.setResourceOptions(options, for: group)
+                changed = true
+            }
+        }
+        if changed {
+            enabledMetrics = HUDPreferences.visibleMetrics
+            reconcileMonitoring()
+        }
+        updatePowerHelperMenu()
+    }
+
+    private func powerHelperStateChanged() {
+        if powerMonitor.helper.shouldTurnPowerOff { setPowerSelections(false) }
+        updatePowerHelperMenu()
+    }
+
+    private func updatePowerHelperMenu() {
+        let helper = powerMonitor.helper
+        let text: String
+        switch helper.availability {
+        case .idle: text = "Power helper idle"
+        case .ready: text = "Ready for power readings"
+        case .starting: text = "Starting power readings…"
+        case .approvalRequired: text = "Waiting for macOS approval"
+        case .setupRequired: text = helper.needsUpdate ? "Helper update needed" : "Power readings need setup"
+        case .updating: text = "Updating power helper…"
+        case .failed: text = "Power readings unavailable — repair helper"
+        }
+        for group in [HUDResourceGroup.cpu, .gpu] {
+            resourceMenuViews[group]?.setPowerState(helper.availability,
+                selected: HUDPreferences.resourceOptions(for: group).power)
+        }
+        powerHelperStatusItem?.title = text
+        powerHelperStatusItem?.toolTip = helper.lastError
+        powerHelperSetupItem?.title = helper.needsUpdate ? "Update Power Helper…" : (helper.status == .enabled ? "Repair Power Helper…" : "Set Up Power Readings…")
+        powerHelperSetupItem?.isEnabled = !helper.busy
+        powerHelperApprovalItem?.isHidden = helper.status != .requiresApproval
+        powerHelperRemoveItem?.isEnabled = !helper.busy && (helper.status == .enabled || helper.status == .requiresApproval)
+    }
+
+    @objc private func setUpPowerHelper() { powerMonitor.helper.requestSetup() }
+    @objc private func openPowerHelperSettings() { powerMonitor.helper.openApprovalSettings() }
+    @objc private func removePowerHelper() { powerMonitor.helper.remove() }
 
     private func updateCaptureStatus(_ state: HUDGlassCaptureState) {
         backgroundStatusItem?.isHidden = !state.needsAttention
@@ -844,17 +955,6 @@ final class AppDelegate:
         currentPID =
             pid
 
-        let appName =
-            app.localizedName
-            ?? "Unknown"
-
-        print(
-            "Active application:",
-            appName,
-            "PID:",
-            pid
-        )
-
         // MARK: Clear Previous Selected-App Data
 
         hudWindow?
@@ -887,6 +987,9 @@ final class AppDelegate:
         }
         let cpu = HUDPreferences.resourceOptions(for: .cpu)
         let gpu = HUDPreferences.resourceOptions(for: .gpu)
+        let powerEnabled = hudEnabled && ((cpu.enabled && cpu.power) || (gpu.enabled && gpu.power))
+        powerMonitor.configure(enabled: powerEnabled)
+        if !powerEnabled { hudWindow?.updatePower(.unavailable) }
         temperatureMonitor.configure(cpu: hudEnabled && cpu.enabled && cpu.temperature,
                                      gpu: hudEnabled && gpu.enabled && gpu.temperature)
         if metrics.contains(.gpuTotal) { totalGPUUsageMonitor?.start() }
@@ -897,7 +1000,7 @@ final class AppDelegate:
         else { totalRAMUsageMonitor?.stop(); hudWindow?.updateRAM(.ramTotal, usage: nil) }
         if metrics.contains(.ramTotal) { memoryPressureMonitor?.start() }
         else { memoryPressureMonitor?.stop(); hudWindow?.updateMemoryPressure("") }
-        if metrics.contains(.battery) { batteryMonitor?.start() }
+        if metrics.contains(.battery) { batteryMonitor?.start(temperature: HUDPreferences.batteryOptions.temperature) }
         else { batteryMonitor?.stop(); hudWindow?.updateMetric(.battery, value: "") }
 
         if metrics.contains(.gpu), let pid = currentPID { gpuUsageMonitor?.start(pid: pid) }
@@ -922,6 +1025,7 @@ final class AppDelegate:
     ) {
 
         temperatureMonitor.stop()
+        powerMonitor.stop()
         hudWindow?.shutdown()
         toggleShortcut.stop()
 

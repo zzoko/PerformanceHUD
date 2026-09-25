@@ -30,6 +30,7 @@ final class HUDPositionMenuView: NSView {
         addSubview(stack)
         addSubview(hint)
         NSLayoutConstraint.activate([
+            label.widthAnchor.constraint(equalToConstant: HUDMenuLayout.labelWidth),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 30),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: hint.leadingAnchor, constant: -16),

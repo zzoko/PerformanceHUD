@@ -6,8 +6,46 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		ABC01100000000000000000F /* andrei.PerformanceHUD.PowerHelper in Embed Power Helper */ = {isa = PBXBuildFile; fileRef = ABC011000000000000000001 /* andrei.PerformanceHUD.PowerHelper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		ABC011000000000000000010 /* PowerHelper/andrei.PerformanceHUD.PowerHelper.plist in Embed Helper Registration */ = {isa = PBXBuildFile; fileRef = ABC01100000000000000000E /* PowerHelper/andrei.PerformanceHUD.PowerHelper.plist */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		ABC01100000000000000000A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7578F8B9305B60D300CA190B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ABC011000000000000000002;
+			remoteInfo = PowerHelper;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		ABC01100000000000000000C /* Embed Power Helper */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = Executables;
+			files = (
+				ABC01100000000000000000F /* andrei.PerformanceHUD.PowerHelper in Embed Power Helper */,
+			);
+			name = "Embed Power Helper";
+		};
+		ABC01100000000000000000D /* Embed Helper Registration */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = Contents/Library/LaunchDaemons;
+			dstSubfolder = Wrapper;
+			files = (
+				ABC011000000000000000010 /* PowerHelper/andrei.PerformanceHUD.PowerHelper.plist in Embed Helper Registration */,
+			);
+			name = "Embed Helper Registration";
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		7578F8C1305B60D300CA190B /* PerformanceHUD.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PerformanceHUD.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ABC011000000000000000001 /* andrei.PerformanceHUD.PowerHelper */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = andrei.PerformanceHUD.PowerHelper; sourceTree = BUILT_PRODUCTS_DIR; };
+		ABC01100000000000000000E /* PowerHelper/andrei.PerformanceHUD.PowerHelper.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PowerHelper/andrei.PerformanceHUD.PowerHelper.plist; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +54,25 @@
 			path = PerformanceHUD;
 			sourceTree = "<group>";
 		};
+		ABC011000000000000000008 /* PowerHelperShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PowerHelperShared;
+			sourceTree = "<group>";
+		};
+		ABC011000000000000000009 /* PowerHelper */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PowerHelper;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		7578F8BE305B60D300CA190B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+		ABC011000000000000000004 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
 			);
@@ -31,6 +84,9 @@
 			isa = PBXGroup;
 			children = (
 				7578F8C3305B60D300CA190B /* PerformanceHUD */,
+				ABC011000000000000000008 /* PowerHelperShared */,
+				ABC011000000000000000009 /* PowerHelper */,
+				ABC01100000000000000000E /* PowerHelper/andrei.PerformanceHUD.PowerHelper.plist */,
 				7578F8C2305B60D300CA190B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -39,6 +95,7 @@
 			isa = PBXGroup;
 			children = (
 				7578F8C1305B60D300CA190B /* PerformanceHUD.app */,
+				ABC011000000000000000001 /* andrei.PerformanceHUD.PowerHelper */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -53,16 +110,40 @@
 				7578F8BD305B60D300CA190B /* Sources */,
 				7578F8BE305B60D300CA190B /* Frameworks */,
 				7578F8BF305B60D300CA190B /* Resources */,
+				ABC01100000000000000000C /* Embed Power Helper */,
+				ABC01100000000000000000D /* Embed Helper Registration */,
 			);
 			buildRules = (
 			);
+			dependencies = (
+				ABC01100000000000000000B /* PBXTargetDependency */,
+			);
 			fileSystemSynchronizedGroups = (
 				7578F8C3305B60D300CA190B /* PerformanceHUD */,
+				ABC011000000000000000008 /* PowerHelperShared */,
 			);
 			name = PerformanceHUD;
 			productName = PerformanceHUD;
 			productReference = 7578F8C1305B60D300CA190B /* PerformanceHUD.app */;
 			productType = "com.apple.product-type.application";
+		};
+		ABC011000000000000000002 /* PowerHelper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ABC011000000000000000005 /* Build configuration list for PBXNativeTarget "PowerHelper" */;
+			buildPhases = (
+				ABC011000000000000000003 /* Sources */,
+				ABC011000000000000000004 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				ABC011000000000000000008 /* PowerHelperShared */,
+				ABC011000000000000000009 /* PowerHelper */,
+			);
+			name = PowerHelper;
+			productName = andrei.PerformanceHUD.PowerHelper;
+			productReference = ABC011000000000000000001 /* andrei.PerformanceHUD.PowerHelper */;
+			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
 
@@ -93,6 +174,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				ABC011000000000000000002 /* PowerHelper */,
 				7578F8C0305B60D300CA190B /* PerformanceHUD */,
 			);
 		};
@@ -112,7 +194,20 @@
 			files = (
 			);
 		};
+		ABC011000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		ABC01100000000000000000B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ABC011000000000000000002 /* PowerHelper */;
+			targetProxy = ABC01100000000000000000A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		7578F8CA305B60D400CA190B /* Debug configuration for PBXProject "PerformanceHUD" */ = {
@@ -246,13 +341,14 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "PerformanceHUD uses the area behind the HUD to draw its custom glass background. Frames stay in memory and are not recorded or saved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = andrei.PerformanceHUD;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -278,13 +374,14 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "PerformanceHUD uses the area behind the HUD to draw its custom glass background. Frames stay in memory and are not recorded or saved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = andrei.PerformanceHUD;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -293,6 +390,40 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		ABC011000000000000000006 /* Debug configuration for PBXNativeTarget "PowerHelper" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = K2XC57573H;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				OTHER_CODE_SIGN_FLAGS = "--identifier andrei.PerformanceHUD.PowerHelper";
+				PRODUCT_BUNDLE_IDENTIFIER = andrei.PerformanceHUD.PowerHelper;
+				PRODUCT_NAME = andrei.PerformanceHUD.PowerHelper;
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		ABC011000000000000000007 /* Release configuration for PBXNativeTarget "PowerHelper" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = K2XC57573H;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				OTHER_CODE_SIGN_FLAGS = "--identifier andrei.PerformanceHUD.PowerHelper";
+				PRODUCT_BUNDLE_IDENTIFIER = andrei.PerformanceHUD.PowerHelper;
+				PRODUCT_NAME = andrei.PerformanceHUD.PowerHelper;
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
@@ -313,6 +444,14 @@
 			buildConfigurations = (
 				7578F8CD305B60D400CA190B /* Debug configuration for PBXNativeTarget "PerformanceHUD" */,
 				7578F8CE305B60D400CA190B /* Release configuration for PBXNativeTarget "PerformanceHUD" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		ABC011000000000000000005 /* Build configuration list for PBXNativeTarget "PowerHelper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ABC011000000000000000006 /* Debug configuration for PBXNativeTarget "PowerHelper" */,
+				ABC011000000000000000007 /* Release configuration for PBXNativeTarget "PowerHelper" */,
 			);
 			defaultConfigurationName = Release;
 		};

@@ -26,9 +26,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-CPU temperature sensor mappings are adapted from Stats:
+CPU temperature sensor mappings and battery temperature sensor references are adapted from Stats:
 https://github.com/exelban/stats
 Source: Modules/CPU/readers.swift, TemperatureReader.setup (accessed 2026-09-21).
+Battery reference: Modules/Battery/readers.swift, getTemperature (accessed 2026-09-24).
 The following license applies to those mappings, not to PerformanceHUD as a whole.
 
 MIT License
