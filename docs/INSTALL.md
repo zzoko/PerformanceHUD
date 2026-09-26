@@ -1,5 +1,7 @@
 # Installing PerformanceHUD
 
+[← Back to README](../README.md)
+
 Requires an Apple silicon Mac running macOS 27.0 or later. Choose the downloaded app instructions below, or skip to **Build from source** if you are compiling it yourself.
 
 ## Downloaded app
@@ -47,7 +49,7 @@ Before deleting the app, choose **Power Helper → Remove Power Helper**, wait f
 
 ## Build from source
 
-1. Download or clone the official repository and read [LICENSE](LICENSE). Personal builds and modifications are permitted; compiled redistribution is not.
+1. Download or clone the official repository and read [LICENSE](../LICENSE). Personal builds and modifications are permitted; compiled redistribution is not.
 2. Open **PerformanceHUD.xcodeproj** in an Xcode version that includes the macOS 27 SDK or newer.
 3. Select each target, **PerformanceHUD** and **PowerHelper**, then **Signing & Capabilities**. Replace the author's saved development team with your own team and use matching Apple signing certificates for both. You do not need the author's signing credentials. Ad-hoc (unsigned/local-only) builds can use other metrics but cannot enable the power helper.
 4. Select the **PerformanceHUD** scheme and **My Mac**, then choose **Product → Run**.
