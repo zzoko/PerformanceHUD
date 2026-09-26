@@ -21,6 +21,17 @@ To find your current resolution, open **System Settings → Displays** and hover
 
 </details>
 
+## Requirements
+
+<details>
+<summary>View system and permission requirements</summary>
+
+- Apple silicon Mac (M-series), running macOS 27.0 or later.
+- Screen Capture permission for the glass background.
+- Administrator approval for the optional power-reading helper.
+
+</details>
+
 ## What is this?
 
 PerformanceHUD is a small, customizable performance overlay for macOS that keeps useful stats visible while you play. Use it as a minimal FPS display, or add resource usage, temperatures, and power readings for a fuller picture of how your Mac is handling a game.
@@ -64,10 +75,6 @@ Everything is controlled from the menu bar. Toggle individual metrics, adjust th
 ## Privacy & access
 
 - [Read about data sources, permissions, and the power helper](docs/PRIVACY_AND_ACCESS.md)
-
-## Requirements
-
-- [Check system and permission requirements](docs/REQUIREMENTS.md)
 
 ## License
 
