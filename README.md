@@ -2,7 +2,7 @@
 
 ## ↓ Download options
 
-➤ Source is available to build and modify for personal use under the [personal-use license](LICENSE). You can build it yourself for free using the [installation instructions](docs/INSTALL.md).
+➤ Source is available to build and modify for **personal use only** under the [personal-use license](LICENSE). You can build it yourself for free using the [installation instructions](docs/INSTALL.md).
 
 ➤ <img src="https://cdn3.emoji.gg/emojis/24562-kofi.png" width="20" height="20" alt="Ko-fi"> **[Download on Ko-fi](https://ko-fi.com/s/01a23ddc51)** — Get the ready-built app for a one-time $3.99 to support me and the development time that has gone into it. It offers the same features as the version you build yourself. No subscription or feature unlocks.
 
