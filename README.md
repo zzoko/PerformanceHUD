@@ -44,14 +44,32 @@ Everything is controlled from the menu bar. Toggle individual metrics, adjust th
 
 <table>
   <tr>
-    <td width="30%" valign="top">
-      <img src="docs/images/HUD_desktop_transparent.png" alt="PerformanceHUD on the desktop with resource usage, temperatures, memory details, and battery status" width="100%">
+    <th width="33%">Vertical HUD</th>
+    <th width="67%">Menu controls</th>
+  </tr>
+  <tr>
+    <td valign="top" align="center">
+      <a href="docs/images/HUD_vertical_dark.png"><img src="docs/images/HUD_vertical_dark.png" alt="PerformanceHUD v1.2 vertical layout with a dark background" width="100%"></a>
     </td>
-    <td width="70%" valign="top">
-      <img src="docs/images/HUD_menu_settings.png" alt="PerformanceHUD menu with size, position, background, and individual metric controls" width="100%">
+    <td valign="top" align="center">
+      <a href="docs/images/HUD_menu_dark.png"><img src="docs/images/HUD_menu_dark.png" alt="PerformanceHUD v1.2 menu controls in dark mode" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top" align="center">
+      <a href="docs/images/HUD_vertical_light.png"><img src="docs/images/HUD_vertical_light.png" alt="PerformanceHUD v1.2 vertical layout with a light background" width="100%"></a>
+    </td>
+    <td valign="top" align="center">
+      <a href="docs/images/HUD_menu_light.png"><img src="docs/images/HUD_menu_light.png" alt="PerformanceHUD v1.2 menu controls in light mode" width="100%"></a>
     </td>
   </tr>
 </table>
+
+**Horizontal HUD**
+
+<a href="docs/images/HUD_horizontal_dark.png"><img src="docs/images/HUD_horizontal_dark.png" alt="PerformanceHUD v1.2 horizontal layout with a dark background" width="100%"></a>
+
+<a href="docs/images/HUD_horizontal_light.png"><img src="docs/images/HUD_horizontal_light.png" alt="PerformanceHUD v1.2 horizontal layout with a light background" width="100%"></a>
 
 <details>
 <summary>Watch PerformanceHUD in-game</summary>

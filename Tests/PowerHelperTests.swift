@@ -25,6 +25,85 @@ import Foundation
             }
             return
         }
+        check(HUDMetric.battery.rawValue == 8 && HUDMetric.deviceInfo.rawValue == 9 && HUDMetric.fpsGraph.rawValue == 10,
+              "adding ANE preserves existing saved metric identifiers")
+        check(HUDMetric.allCases.allSatisfy { HUDAlignment.vertical.allows($0) }, "vertical permits all metric choices")
+        check(!HUDAlignment.horizontal.allows(.fpsGraph) && !HUDAlignment.horizontal.allows(.deviceInfo),
+              "horizontal excludes history and device info")
+        check(HUDAlignment.horizontal.allows(.fps) && HUDAlignment.horizontal.allows(.aneTotal)
+              && HUDAlignment.horizontal.allows(.battery), "horizontal retains main readings")
+        for mode in HUDUsageMode.allCases {
+            var options = HUDResourceOptions(enabled: true, temperature: false, totalUse: mode != .app,
+                                             focusedApp: mode != .total)
+            check(options.selectedUsageMode == mode, "existing usage choices migrate to the corresponding mode")
+            options.setUsagePresentation(visible: true, highlighted: true)
+            options.selectUsageMode(.both)
+            check(options.visibleMetrics(for: .ram) == [.ram, .ramTotal] && options.usageHighlighted,
+                  "Both includes both readings and preserves emphasis")
+            options.setUsagePresentation(visible: false, highlighted: false)
+            options.selectUsageMode(mode)
+            check(options.visibleMetrics(for: .ram).isEmpty && options.selectedUsageMode == mode,
+                  "changing mode while Usage is off remembers mode without showing readings")
+            options.setUsagePresentation(visible: true, highlighted: false)
+            let expected: Set<HUDMetric> = mode == .total ? [.ramTotal] : mode == .app ? [.ram] : [.ram, .ramTotal]
+            check(options.visibleMetrics(for: .ram) == expected && !options.usageHighlighted,
+                  "enabling Usage restores the chosen mode with faint text")
+            options.enabled = false
+            check(options.visibleMetrics(for: .ram).isEmpty, "master switch still hides all usage modes")
+        }
+        for mode in HUDUsageMode.allCases {
+            for rememberedDetails in [false, true] {
+                var options = HUDResourceOptions(enabled: true, temperature: false, totalUse: true,
+                                                 focusedApp: false, details: rememberedDetails)
+                options.selectUsageMode(mode)
+                check(options.detailsAvailable && options.showsDetails == rememberedDetails,
+                      "Details supports Total, App and Both")
+                options.setUsagePresentation(visible: false, highlighted: false)
+                check(!options.detailsAvailable && !options.showsDetails && options.details == rememberedDetails,
+                      "Usage off hides Details without losing its selection")
+                options.setUsagePresentation(visible: true, highlighted: false)
+                check(options.showsDetails == rememberedDetails,
+                      "Usage on restores the saved Details selection")
+            }
+        }
+        var emphasizedDetails = HUDResourceOptions(enabled: true, temperature: false, totalUse: true,
+                                                    focusedApp: false, highlighted: [.details])
+        emphasizedDetails.setUsagePresentation(visible: false, highlighted: false)
+        check(!emphasizedDetails.showsDetails && emphasizedDetails.highlighted.contains(.details),
+              "Usage off remembers Details emphasis")
+        emphasizedDetails.selectUsageMode(.app)
+        emphasizedDetails.setUsagePresentation(visible: true, highlighted: true)
+        check(emphasizedDetails.showsDetails && emphasizedDetails.highlighted.contains(.details),
+              "Details emphasis survives usage and mode changes")
+        for mask in 0..<64 {
+            var resources: [HUDResourceGroup: HUDResourceOptions] = [:]
+            for (index, group) in [HUDResourceGroup.cpu, .gpu, .ane].enumerated() {
+                resources[group] = HUDResourceOptions(enabled: mask & (1 << (index * 2)) != 0,
+                    temperature: false, totalUse: false, focusedApp: false,
+                    power: mask & (1 << (index * 2 + 1)) != 0)
+            }
+            let individualDemand = resources.values.contains { $0.enabled && $0.power }
+            for enabled in [false, true] {
+                for packageEnabled in [false, true] {
+                    let package = HUDPackagePowerOptions(enabled: packageEnabled)
+                    check(HUDPowerDemand.isNeeded(hudEnabled: enabled,
+                        resources: resources, package: package)
+                        == (enabled && (individualDemand || packageEnabled)),
+                        "helper demand covers Package-only, hidden groups and disabled HUD")
+                }
+            }
+        }
+        check(HUDResourceGroup.ane.appMetric == nil && !HUDResourceGroup.ane.supportsTemperature,
+              "ANE has no invented per-app or temperature metric")
+        for power in [false, true] {
+            for usage in [false, true] {
+                for enabled in [false, true] {
+                    let options = HUDResourceOptions(enabled: enabled, temperature: true, totalUse: usage, focusedApp: true, power: power)
+                    let expected: Set<HUDMetric> = enabled && power ? [.aneTotal] : []
+                    check(options.visibleMetrics(for: .ane) == expected, "ANE visibility follows supported options and its master switch")
+                }
+            }
+        }
         check(!PowerHelperAvailability.setupRequired.shouldTurnPowerOff(setupOffered: false), "first launch offers setup before clearing default choices")
         check(PowerHelperAvailability.setupRequired.shouldTurnPowerOff(setupOffered: true), "declined or removed helper clears Power choices")
         check(PowerHelperAvailability.approvalRequired.shouldTurnPowerOff(setupOffered: false), "pending or denied approval clears Power choices")
@@ -83,8 +162,44 @@ import Foundation
         check(HelperPowerReading.parse(fixture(delta: false)) == nil, "cumulative reading rejected")
         check(HelperPowerReading.parse(Data("not a plist".utf8)) == nil, "malformed rejected")
         check(HelperPowerReading(reply: reading.reply)?.package == 6, "IPC roundtrip")
+        check(reading.ane == 0.25, "ANE milliwatts converted independently")
+        check(HelperPowerReading.parse(fixture(ane: 0))?.ane == 0, "idle ANE power is a valid zero")
+        check(HelperPowerReading.parse(fixture(ane: true))?.ane == nil, "boolean ANE power rejected")
+        let aneOnly = HelperPowerReading.parse(fixture(cpu: -1, gpu: -1, ane: 750))
+        check(aneOnly?.ane == 0.75 && aneOnly?.package == nil, "ANE survives unavailable CPU/GPU readings")
+        check(HelperPowerReading(reply: aneOnly!.reply)?.ane == 0.75, "ANE-only sample survives IPC")
+        check(HelperPowerReading.parse(fixture(ane: -10))?.package == nil, "invalid ANE leaves Package unavailable")
+        let aneReading = HelperPowerReading(cpu: 4, gpu: 2, package: 7, timestamp: Date(), ane: 1)
+        let roundtrip = HelperPowerReading(reply: aneReading.reply)
+        check(roundtrip?.ane == 1 && roundtrip?.package == 7,
+              "ANE values survive IPC without adding ANE twice to Package")
         let old = HelperPowerReading(cpu: 5, gpu: 2, package: 7, timestamp: Date().addingTimeInterval(-20))
         check(HelperPowerReading(reply: old.reply) == nil, "stale IPC result rejected")
+
+        let base = Date(timeIntervalSince1970: 1_000)
+        let full = HelperPowerReading(cpu: 4, gpu: 2, package: 7, timestamp: base, ane: 1)
+        var continuity = PowerReadingContinuity()
+        check(continuity.update(nil, now: base) == nil, "no invented startup reading")
+        check(continuity.update(full, now: base)?.package == 7, "fresh sample appears immediately")
+        check(continuity.update(nil, now: base.addingTimeInterval(3.5))?.cpu == 4,
+              "brief delayed or empty reply does not blank watts")
+        let partial = HelperPowerReading(cpu: nil, gpu: 0, package: nil,
+                                         timestamp: base.addingTimeInterval(4), ane: 0)
+        let bridged = continuity.update(partial, now: base.addingTimeInterval(4))
+        check(bridged?.cpu == 4 && bridged?.gpu == 0 && bridged?.ane == 0 && bridged?.package == 7,
+              "partial dropout retains CPU and coherent Package while fresh zero GPU/ANE values update")
+        let repeated = continuity.update(full, now: base.addingTimeInterval(5.1))
+        check(repeated?.cpu == nil && repeated?.package == nil && repeated?.gpu == 0,
+              "old or repeated samples cannot extend component expiry or replace newer values")
+        check(continuity.update(nil, now: base.addingTimeInterval(9.1)) == nil,
+              "sustained loss eventually clears every cached value")
+        _ = continuity.update(full, now: base)
+        continuity.reset()
+        check(continuity.update(nil, now: base.addingTimeInterval(1)) == nil,
+              "explicit stop, sleep or disconnect clears continuity immediately")
+        let resumed = HelperPowerReading(cpu: 6, gpu: 4, package: 10, timestamp: base.addingTimeInterval(10), ane: 0)
+        check(continuity.update(resumed, now: base.addingTimeInterval(10))?.package == 10,
+              "new readings replace retained values immediately")
 
         // Real subprocess lifecycle with a deterministic, unprivileged producer.
         let lock = NSLock()
@@ -125,6 +240,6 @@ import Foundation
         check(sample()?.gpu == 1.5, "sampling resumes after toggle")
         Thread.sleep(forTimeInterval: 6.3)
         check(live() == 0, "lost heartbeat expires lease")
-        print("PASS: helper health/availability, power parser, stale/malformed data, streaming, bounded restarts, stop/resume, and lease expiry")
+        print("PASS: ANE options/power/IPC, helper health/availability, power parser, stale/malformed data, streaming, bounded restarts, stop/resume, and lease expiry")
     }
 }

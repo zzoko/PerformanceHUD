@@ -88,6 +88,7 @@ final class AppDelegate:
     private var enabledMetrics = HUDPreferences.visibleMetrics
     private let temperatureMonitor = TemperatureMonitor()
     private let powerMonitor = PowerMonitor()
+    private var packagePowerMenuView: HUDPackagePowerMenuView?
     private var resourceMenuViews: [HUDResourceGroup: HUDResourceMenuView] = [:]
     private var powerHelperStatusItem: NSMenuItem?
     private var powerHelperSetupItem: NSMenuItem?
@@ -436,7 +437,7 @@ final class AppDelegate:
 
     private func setupMenuBar() {
 
-        let statusItem =
+        let statusItem = self.statusItem ??
             NSStatusBar.system.statusItem(
                 withLength:
                     NSStatusItem.squareLength
@@ -456,6 +457,7 @@ final class AppDelegate:
 
         let menu =
             NSMenu()
+        menu.autoenablesItems = false
 
         // MARK: Enable / Disable
 
@@ -512,15 +514,22 @@ final class AppDelegate:
         self.sizeMenuView =
             sizeView
 
-        // MARK: HUD Position
+        // MARK: Reset
 
         let positionView = HUDPositionMenuView()
         positionView.onReset = { [weak self] in
             self?.hudWindow?.resetPosition()
         }
+        positionView.onResetOptions = { [weak self] in self?.confirmResetOptions() }
         let positionItem = NSMenuItem()
         positionItem.view = positionView
         menu.insertItem(positionItem, at: menu.index(of: sizeItem))
+
+        let alignmentView = HUDAlignmentMenuView(selected: HUDPreferences.alignment)
+        alignmentView.onAlignmentSelected = { [weak self] alignment in self?.setHUDAlignment(alignment) }
+        let alignmentItem = NSMenuItem()
+        alignmentItem.view = alignmentView
+        menu.insertItem(alignmentItem, at: menu.index(of: sizeItem))
 
         // MARK: HUD Background
 
@@ -572,7 +581,10 @@ final class AppDelegate:
             item.target = self
             item.tag = metric.rawValue
             item.state = enabledMetrics.contains(metric) ? .on : .off
-            if metric == .fpsGraph {
+            item.isEnabled = HUDPreferences.alignment.allows(metric)
+            if !HUDPreferences.alignment.allows(metric) {
+                item.toolTip = "Available in Vertical alignment. Your selection is restored when switching back."
+            } else if metric == .fpsGraph {
                 item.toolTip = "Shows FPS trends over the last 60 seconds, using approximately one reading per second."
             }
             menu.addItem(item)
@@ -581,6 +593,7 @@ final class AppDelegate:
         }
         addMetric(.fps)
         addMetric(.fpsGraph)
+        var powerRows: [HUDResourceMenuView] = []
         for group in HUDResourceGroup.allCases {
             let view = HUDResourceMenuView(group: group, options: HUDPreferences.resourceOptions(for: group))
             view.onChange = { [weak self] options in
@@ -588,6 +601,7 @@ final class AppDelegate:
                 HUDPreferences.setResourceOptions(options, for: group)
                 enabledMetrics = HUDPreferences.visibleMetrics
                 hudWindow?.setResourceOptions(options, for: group)
+                updatePackagePowerMenu()
                 reconcileMonitoring()
             }
             view.onPowerSetup = { [weak self] in
@@ -595,9 +609,31 @@ final class AppDelegate:
                 Task { @MainActor [weak self] in self?.powerMonitor.helper.requestPowerAccess() }
             }
             resourceMenuViews[group] = view
-            let item = NSMenuItem()
-            item.view = view
-            menu.addItem(item)
+            if group.supportsPower {
+                powerRows.append(view)
+                if group == .ane {
+                    let package = HUDPackagePowerMenuView(options: HUDPreferences.packagePowerOptions)
+                    package.onChange = { [weak self] options in
+                        HUDPreferences.packagePowerOptions = options
+                        self?.hudWindow?.setPackagePowerOptions(options)
+                        self?.reconcileMonitoring()
+                        self?.updatePackagePowerMenu()
+                    }
+                    package.onPowerSetup = { [weak self] in
+                        self?.statusItem?.menu?.cancelTracking()
+                        Task { @MainActor [weak self] in self?.powerMonitor.helper.requestPowerAccess() }
+                    }
+                    packagePowerMenuView = package
+                    let item = NSMenuItem()
+                    item.view = HUDPowerGroupMenuView(rows: powerRows, package: package)
+                    menu.addItem(item)
+                    updatePackagePowerMenu()
+                }
+            } else {
+                let item = NSMenuItem()
+                item.view = view
+                menu.addItem(item)
+            }
         }
         let batteryView = HUDResourceMenuView(batteryOptions: HUDPreferences.batteryOptions)
         batteryView.onBatteryChange = { [weak self] options in
@@ -662,7 +698,7 @@ final class AppDelegate:
 
         menu.addItem(.separator())
 
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.2"
         let versionItem = NSMenuItem(title: "App version \(version)", action: nil, keyEquivalent: "")
         versionItem.isEnabled = false
         menu.addItem(versionItem)
@@ -681,7 +717,7 @@ final class AppDelegate:
 
     private func setPowerSelections(_ enabled: Bool) {
         var changed = false
-        for group in [HUDResourceGroup.cpu, .gpu] {
+        for group in HUDResourceGroup.allCases where group.supportsPower {
             var options = HUDPreferences.resourceOptions(for: group)
             if options.power != enabled {
                 options.power = enabled
@@ -689,6 +725,13 @@ final class AppDelegate:
                 hudWindow?.setResourceOptions(options, for: group)
                 changed = true
             }
+        }
+        var package = HUDPreferences.packagePowerOptions
+        if package.enabled != enabled {
+            package.enabled = enabled
+            HUDPreferences.packagePowerOptions = package
+            hudWindow?.setPackagePowerOptions(package)
+            changed = true
         }
         if changed {
             enabledMetrics = HUDPreferences.visibleMetrics
@@ -702,7 +745,13 @@ final class AppDelegate:
         updatePowerHelperMenu()
     }
 
+    private func updatePackagePowerMenu() {
+        packagePowerMenuView?.setState(options: HUDPreferences.packagePowerOptions,
+            helper: powerMonitor.helper.availability)
+    }
+
     private func updatePowerHelperMenu() {
+        updatePackagePowerMenu()
         let helper = powerMonitor.helper
         let text: String
         switch helper.availability {
@@ -714,7 +763,7 @@ final class AppDelegate:
         case .updating: text = "Updating power helper…"
         case .failed: text = "Power readings unavailable — repair helper"
         }
-        for group in [HUDResourceGroup.cpu, .gpu] {
+        for group in HUDResourceGroup.allCases where group.supportsPower {
             resourceMenuViews[group]?.setPowerState(helper.availability,
                 selected: HUDPreferences.resourceOptions(for: group).power)
         }
@@ -737,7 +786,7 @@ final class AppDelegate:
         switch state {
         case .permissionRequired:
             backgroundStatusItem?.title = "Screen Recording permission needed"
-            backgroundStatusItem?.toolTip = "Allow PerformanceHUD in System Settings, then choose Retry Background. Metrics still work with a plain background."
+            backgroundStatusItem?.toolTip = "Allow PerformanceHUD in System Settings, then choose Retry Background. Metrics still work while a checkerboard marks the unavailable glass background."
         case .failed(let message):
             backgroundStatusItem?.title = "Glass background unavailable"
             backgroundStatusItem?.toolTip = message
@@ -796,7 +845,81 @@ final class AppDelegate:
             : "Enable"
     }
 
+    private func confirmResetOptions() {
+        statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let alert = NSAlert()
+            alert.messageText = "Reset all HUD options to defaults?"
+            alert.informativeText = "This restores the default categories, readings, highlighting, usage modes, alignment, size, and background, and enables the HUD. Your position and permissions are kept."
+            alert.addButton(withTitle: "Reset Options")
+            alert.addButton(withTitle: "Cancel")
+            NSApp.activate(ignoringOtherApps: true)
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            self.resetHUDOptions()
+        }
+    }
+
+    private func resetHUDOptions() {
+        HUDPreferences.resetOptions()
+        // Restore display defaults without bypassing a denied or failed helper.
+        if powerMonitor.helper.shouldTurnPowerOff {
+            for group in HUDResourceGroup.allCases where group.supportsPower {
+                var options = HUDPreferences.resourceOptions(for: group)
+                options.power = false
+                HUDPreferences.setResourceOptions(options, for: group)
+            }
+            var package = HUDPreferences.packagePowerOptions
+            package.enabled = false
+            HUDPreferences.packagePowerOptions = package
+        }
+        hudEnabled = HUDPreferences.hudEnabled
+        hudScale = HUDPreferences.hudScale
+        hudBackground = HUDPreferences.background
+        enabledMetrics = HUDPreferences.visibleMetrics
+
+        // Pause capture while applying the layout, then resume once at its final size.
+        hudWindow?.setHUDEnabled(false)
+        for group in HUDResourceGroup.allCases {
+            hudWindow?.setResourceOptions(HUDPreferences.resourceOptions(for: group), for: group)
+        }
+        hudWindow?.setBatteryOptions(HUDPreferences.batteryOptions)
+        hudWindow?.setPackagePowerOptions(HUDPreferences.packagePowerOptions)
+        hudWindow?.setAlignment(HUDPreferences.alignment)
+        hudWindow?.setHUDScale(hudScale)
+        hudWindow?.setBackground(hudBackground)
+        hudWindow?.setHUDEnabled(hudEnabled)
+        reconcileMonitoring()
+
+        // Rebuild choices from the restored preferences, reusing the status item
+        // and preserving the existing keyboard-shortcut registration.
+        let shortcut = hudVisibilityMenuItem?.keyEquivalent ?? ""
+        let modifiers = hudVisibilityMenuItem?.keyEquivalentModifierMask ?? []
+        let shortcutHelp = hudVisibilityMenuItem?.toolTip
+        setupMenuBar()
+        hudVisibilityMenuItem?.keyEquivalent = shortcut
+        hudVisibilityMenuItem?.keyEquivalentModifierMask = modifiers
+        hudVisibilityMenuItem?.toolTip = shortcutHelp
+        updatePowerHelperMenu()
+    }
+
     // MARK: - HUD Scale
+
+    private func setHUDAlignment(_ alignment: HUDAlignment) {
+        HUDPreferences.alignment = alignment
+        enabledMetrics = HUDPreferences.visibleMetrics
+        hudWindow?.setAlignment(alignment)
+        updatePackagePowerMenu()
+        for metric in [HUDMetric.fpsGraph, .deviceInfo] {
+            guard let item = metricMenuItems[metric] else { continue }
+            item.isEnabled = alignment.allows(metric)
+            item.state = enabledMetrics.contains(metric) ? .on : .off
+            item.toolTip = !alignment.allows(metric)
+                ? "Available in Vertical alignment. Your selection is restored when switching back."
+                : metric == .fpsGraph ? "Shows FPS trends over the last 60 seconds, using approximately one reading per second." : nil
+        }
+        reconcileMonitoring()
+    }
 
     private func setHUDScale(
         _ newScale: HUDScale
@@ -832,6 +955,8 @@ final class AppDelegate:
         else {
             return
         }
+
+        guard HUDPreferences.alignment.allows(metric) else { return }
 
         let isEnabled =
             enabledMetrics
@@ -987,7 +1112,11 @@ final class AppDelegate:
         }
         let cpu = HUDPreferences.resourceOptions(for: .cpu)
         let gpu = HUDPreferences.resourceOptions(for: .gpu)
-        let powerEnabled = hudEnabled && ((cpu.enabled && cpu.power) || (gpu.enabled && gpu.power))
+        let resources = Dictionary(uniqueKeysWithValues: HUDResourceGroup.allCases.map {
+            ($0, HUDPreferences.resourceOptions(for: $0))
+        })
+        let powerEnabled = HUDPowerDemand.isNeeded(hudEnabled: hudEnabled,
+            resources: resources, package: HUDPreferences.packagePowerOptions)
         powerMonitor.configure(enabled: powerEnabled)
         if !powerEnabled { hudWindow?.updatePower(.unavailable) }
         temperatureMonitor.configure(cpu: hudEnabled && cpu.enabled && cpu.temperature,

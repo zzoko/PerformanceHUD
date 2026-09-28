@@ -68,12 +68,12 @@ nonisolated struct PerformanceHUDGlassAppearance {
     var tint: SIMD4<Float> {
         // Transparent favours scene colour and lens depth over text contrast.
         if theme == .transparent { return SIMD4(0.045, 0.065, 0.085, 0.16) }
-        return isDark ? SIMD4(0.065, 0.073, 0.082, 0.48) : SIMD4(0.92, 0.935, 0.94, 0.68)
+        return isDark ? SIMD4(0.065, 0.073, 0.082, 0.48) : SIMD4(1.0, 1.0, 1.0, 0.60)
     }
-    // Corner radius, blur sigma, saturation, style (0 dark, 1 light, 2 transparent). Units: points.
+    // Corner radius, blur sigma, saturation, shader style (0 dark, 2 transparent, 3 Light v2). Units: points.
     var optics: SIMD4<Float> {
         if theme == .transparent { return SIMD4(10, 3.5, 1.04, 2) }
-        return SIMD4(10, 7, isDark ? 0.88 : 0.78, isDark ? 0 : 1)
+        return isDark ? SIMD4(10, 7, 0.88, 0) : SIMD4(10, 7, 1.0, 3)
     }
     var cornerRadius: CGFloat { CGFloat(optics.x) }
     var textColor: NSColor { NSColor(white: isDark ? 0.96 : 0.10, alpha: 1) }
@@ -88,7 +88,7 @@ nonisolated struct PerformanceHUDGlassAppearance {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         layer.masksToBounds = false
         layer.shadowColor = NSColor.black.cgColor
-        layer.shadowOpacity = enabled ? (isDark ? 0.32 : 0.24) : 0
+        layer.shadowOpacity = enabled ? (isDark ? 0.32 : 0.17) : 0
         layer.shadowRadius = 6
         layer.shadowOffset = CGSize(width: 0, height: -2)
         layer.shadowPath = CGPath(roundedRect: view.bounds, cornerWidth: cornerRadius,
@@ -711,13 +711,29 @@ private final class HUDGlassRenderer {
         float depth=max(0.0,-d);
         float2 n=normalize(float2(sdf(local+float2(0.1,0),halfSize,radius)-sdf(local-float2(0.1,0),halfSize,radius),
                                  sdf(local+float2(0,0.1),halfSize,radius)-sdf(local-float2(0,0.1),halfSize,radius))+0.00001);
-        bool transparentStyle=p.optics.w>1.5;
-        float edge=exp(-depth/(transparentStyle ? 6.0 : 4.5));
+        bool transparentStyle=p.optics.w>1.5 && p.optics.w<2.5;
+        bool lightV2=p.optics.w>2.5;
+        float edge=exp(-depth/(lightV2 ? 5.0 : transparentStyle ? 6.0 : 4.5));
         float2 warped=pixel;
         if(p.glass>0) warped=p.outputSize*0.5+(pixel-p.outputSize*0.5)*(transparentStyle ? 0.975 : 0.985)
-            +n*edge*(transparentStyle ? 6.0 : 4.0)*p.scale;
+            +n*edge*(lightV2 ? 3.0 : transparentStyle ? 6.0 : 4.0)*p.scale;
         float3 color=input.sample(linearSample,(p.offset+warped)/p.sourceSize).rgb;
-        if(p.glass>0) {
+        if(p.glass>0 && lightV2) {
+            // Neutral-white Light v2: lift dark scenery without revealing sharp
+            // live pixels underneath, then apply its own restrained edge finish.
+            float3 remaining=1.0-clamp(color,0.0,1.0);
+            color=1.0-0.55*remaining*sqrt(remaining);
+            color=mix(color,float3(1.0),0.60);
+            float lighting=dot(n,normalize(float2(-0.6,-0.8)));
+            float rim=exp(-pow((depth-0.7)/0.55,2.0));
+            color=mix(color,float3(1.0),rim*(0.08+0.16*max(lighting,0.0)+0.09));
+            float boundary=exp(-pow(depth/0.35,2.0));
+            color*=1.0-boundary*0.055;
+            color-=edge*0.005;
+            float reflection=exp(-depth/2.8)*pow(max(lighting,0.0),2.0);
+            color=mix(color,float3(1.0),reflection*0.10+rim*0.025);
+            color-=edge*max(-lighting,0.0)*0.008;
+        } else if(p.glass>0) {
             float luminance=dot(color,float3(0.2126,0.7152,0.0722));
             // Retain scene color while compressing contrast for stable text legibility.
             // This tint applies to already captured/blurred pixels; it is not transparency

@@ -14,7 +14,7 @@ enum HUDBackground: String, CaseIterable {
 
     var menuTitle: String {
         switch self {
-        case .transparent: return "Transparent"
+        case .transparent: return "Clear"
         case .light: return "Light"
         case .dark: return "Dark"
         case .off: return "Off"

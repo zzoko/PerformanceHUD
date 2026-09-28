@@ -15,6 +15,22 @@ enum HUDPreferences {
     private static let hudScaleKey =
         "hud.scale"
 
+    // Remove only display choices so the existing first-launch defaults stay
+    // authoritative. Position, helper registration/setup, and other app data stay.
+    static func resetOptions(in store: UserDefaults = .standard) {
+        var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background",
+                    "hud.package.power", "hud.package.highlighted",
+                    "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
+                    "hud.group.ram.details"]
+        keys += HUDMetric.allCases.map { metricKey($0) }
+        for group in HUDResourceGroup.allCases {
+            keys += ["enabled", "temperature", "power", "highlighted", "usageMode"].map {
+                "hud.group.\(group.rawValue).\($0)"
+            }
+        }
+        for key in keys { store.removeObject(forKey: key) }
+    }
+
     // MARK: - HUD Visibility
 
     static var hudEnabled: Bool {
@@ -45,6 +61,11 @@ enum HUDPreferences {
                 forKey: hudEnabledKey
             )
         }
+    }
+
+    static var alignment: HUDAlignment {
+        get { HUDAlignment(rawValue: defaults.string(forKey: "hud.alignment") ?? "") ?? .vertical }
+        set { defaults.set(newValue.rawValue, forKey: "hud.alignment") }
     }
 
     // MARK: - HUD Scale
@@ -164,47 +185,73 @@ enum HUDPreferences {
 
     // MARK: - Metric Keys
 
+    static var packagePowerOptions: HUDPackagePowerOptions {
+        get {
+            HUDPackagePowerOptions(enabled: defaults.object(forKey: "hud.package.power") as? Bool ?? true,
+                                   highlighted: defaults.object(forKey: "hud.package.highlighted") as? Bool ?? true)
+        }
+        set {
+            defaults.set(newValue.enabled, forKey: "hud.package.power")
+            defaults.set(newValue.highlighted, forKey: "hud.package.highlighted")
+        }
+    }
+
     static var batteryOptions: HUDBatteryOptions {
         HUDBatteryOptions(
             enabled: isMetricEnabled(.battery),
             temperature: defaults.object(forKey: "hud.battery.temperature") as? Bool ?? true,
-            charge: defaults.object(forKey: "hud.battery.charge") as? Bool ?? true)
+            charge: defaults.object(forKey: "hud.battery.charge") as? Bool ?? true,
+            temperatureHighlighted: defaults.bool(forKey: "hud.battery.temperatureHighlighted"))
     }
 
     static func setBatteryOptions(_ options: HUDBatteryOptions) {
         setMetricEnabled(.battery, enabled: options.enabled)
         defaults.set(options.temperature, forKey: "hud.battery.temperature")
         defaults.set(options.charge, forKey: "hud.battery.charge")
+        defaults.set(options.temperatureHighlighted, forKey: "hud.battery.temperatureHighlighted")
     }
 
     static func resourceOptions(for group: HUDResourceGroup) -> HUDResourceOptions {
-        let total = isMetricEnabled(group.totalMetric)
-        let app = isMetricEnabled(group.appMetric)
+        let total = group.supportsTotalUse && isMetricEnabled(group.totalMetric)
+        let app = group.appMetric.map { isMetricEnabled($0) } ?? false
         let temperature = group.supportsTemperature
             && (defaults.object(forKey: "hud.group.\(group.rawValue).temperature") as? Bool ?? true)
         let power = group.supportsPower
             && (defaults.object(forKey: "hud.group.\(group.rawValue).power") as? Bool ?? true)
         let enabled = defaults.object(forKey: "hud.group.\(group.rawValue).enabled") as? Bool
-            ?? (total || app || temperature)
-        return HUDResourceOptions(enabled: enabled, temperature: temperature, totalUse: total, focusedApp: app, power: power)
+            ?? (total || app || temperature || (group == .ane && power))
+        // Fresh installs emphasize usage only. An explicitly saved empty array
+        // still means the user chose faint readings.
+        let defaultHighlights: [HUDReadingKind] = group.supportsTotalUse ? [.totalUse, .focusedApp] : []
+        let highlights = defaults.stringArray(forKey: "hud.group.\(group.rawValue).highlighted")
+            .map { $0.compactMap(HUDReadingKind.init(rawValue:)) } ?? defaultHighlights
+        var options = HUDResourceOptions(enabled: enabled, temperature: temperature, totalUse: total, focusedApp: app, power: power,
+            details: defaults.object(forKey: "hud.group.ram.details") as? Bool ?? true,
+            highlighted: Set(highlights),
+            usageMode: defaults.string(forKey: "hud.group.\(group.rawValue).usageMode").flatMap(HUDUsageMode.init(rawValue:)))
+        options.setUsagePresentation(visible: options.usageVisible, highlighted: options.usageHighlighted)
+        return options
     }
 
     static func setResourceOptions(_ options: HUDResourceOptions, for group: HUDResourceGroup) {
         defaults.set(options.enabled, forKey: "hud.group.\(group.rawValue).enabled")
+        defaults.set(options.selectedUsageMode.rawValue, forKey: "hud.group.\(group.rawValue).usageMode")
+        defaults.set(options.highlighted.map(\.rawValue).sorted(), forKey: "hud.group.\(group.rawValue).highlighted")
         defaults.set(options.temperature && group.supportsTemperature, forKey: "hud.group.\(group.rawValue).temperature")
         defaults.set(options.power && group.supportsPower, forKey: "hud.group.\(group.rawValue).power")
-        setMetricEnabled(group.totalMetric, enabled: options.totalUse)
-        setMetricEnabled(group.appMetric, enabled: options.focusedApp)
+        if group == .ram { defaults.set(options.details, forKey: "hud.group.ram.details") }
+        setMetricEnabled(group.totalMetric, enabled: group.supportsTotalUse && options.totalUse)
+        if let appMetric = group.appMetric { setMetricEnabled(appMetric, enabled: options.focusedApp) }
     }
 
     static var visibleMetrics: Set<HUDMetric> {
         var metrics = Set(HUDMetric.allCases.filter { isMetricEnabled($0) })
         for group in HUDResourceGroup.allCases {
-            metrics.remove(group.appMetric)
+            if let appMetric = group.appMetric { metrics.remove(appMetric) }
             metrics.remove(group.totalMetric)
             metrics.formUnion(resourceOptions(for: group).visibleMetrics(for: group))
         }
-        return metrics
+        return Set(metrics.filter { alignment.allows($0) })
     }
 
     private static func metricKey(
@@ -230,6 +277,9 @@ enum HUDPreferences {
 
         case .cpuTotal:
             return "hud.metric.cpuTotal"
+
+        case .aneTotal:
+            return "hud.metric.aneTotal"
 
         case .ram:
             return "hud.metric.ram"

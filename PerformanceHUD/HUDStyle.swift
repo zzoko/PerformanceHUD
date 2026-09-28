@@ -30,6 +30,7 @@ enum HUDStyle {
     private static let baseRowSpacing: CGFloat = 6
 
     private static let baseMetricColumnSpacing: CGFloat = 8
+    static let horizontalLabelGapMultiplier: CGFloat = 1.21
 
     // Anchor the HUD inside a centered 16:9 viewport, including letterboxing.
     static func gameContentFrame(in screenFrame: NSRect) -> NSRect {
@@ -91,6 +92,10 @@ enum HUDStyle {
         NSFont.systemFont(ofSize: 12 * CGFloat(scale.rawValue), weight: .regular)
     }
 
+    static func readingFont(scale: HUDScale, highlighted: Bool) -> NSFont {
+        NSFont.systemFont(ofSize: 12 * CGFloat(scale.rawValue), weight: highlighted ? .semibold : .regular)
+    }
+
     static func rowSpacing(
         scale: HUDScale
     ) -> CGFloat {
@@ -119,6 +124,17 @@ enum HUDStyle {
         return current + gap * gapIncrease
     }
 
+    // Share the compact FPS-only column with the FPS section of the horizontal HUD.
+    static func compactFPSValueColumnRight(scale: HUDScale) -> CGFloat {
+        let title = NSTextField(labelWithString: "FPS")
+        title.font = titleFont(for: .fps, scale: scale)
+        let value = NSTextField(labelWithString: "60")
+        value.font = valueFont(for: .fps, scale: scale)
+        let textWidth = title.intrinsicContentSize.width + value.intrinsicContentSize.width
+        let expanded = expandedValueColumnRight(valueColumnRight(scale: scale), scale: scale)
+        return textWidth + max(metricColumnSpacing(scale: scale), (expanded - textWidth) / 2)
+    }
+
     // MARK: - Fonts
 
     // Match PerformanceHUDSampleTextView's 1× typography; scale only by the HUD size.
@@ -129,8 +145,15 @@ enum HUDStyle {
                           weight: metric == .fps ? .semibold : .regular)
     }
 
+    static func primaryLabelHeight(for metric: HUDMetric, scale: HUDScale) -> CGFloat {
+        guard metric == .fps else { return rowHeight(scale: scale) }
+        let label = NSTextField(labelWithString: "FPS")
+        label.font = valueFont(for: .fps, scale: scale)
+        return ceil(label.intrinsicContentSize.height)
+    }
+
     static func titleFont(for metric: HUDMetric, scale: HUDScale) -> NSFont {
-        if [.gpu, .gpuTotal, .cpu, .cpuTotal, .ram, .ramTotal, .battery].contains(metric) {
+        if [.gpu, .gpuTotal, .cpu, .cpuTotal, .aneTotal, .ram, .ramTotal, .battery].contains(metric) {
             return NSFont.systemFont(ofSize: baseFontSize * CGFloat(scale.rawValue), weight: .medium)
         }
         return valueFont(for: metric, scale: scale)

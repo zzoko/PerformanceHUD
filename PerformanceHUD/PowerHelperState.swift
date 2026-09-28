@@ -24,10 +24,10 @@ nonisolated enum PowerHelperAvailability {
         switch self {
         case .idle, .ready: return nil
         case .starting: return "Starting power readings. Waiting for the helper’s first valid sample."
-        case .setupRequired: return "Power readings need helper setup. Click Power to set up or update the helper."
-        case .approvalRequired: return "Power readings need macOS approval. Click Power to open approval settings."
+        case .setupRequired: return "Power readings need helper setup. Click a Power checkbox or Package Power to set up or update the helper."
+        case .approvalRequired: return "Power readings need macOS approval. Click a Power checkbox or Package Power to open approval settings."
         case .updating: return "Power helper setup is in progress."
-        case .failed: return "The power helper could not provide readings. Click Power to repair its setup."
+        case .failed: return "The power helper could not provide readings. Click a Power checkbox or Package Power to repair its setup."
         }
     }
 }
@@ -63,5 +63,48 @@ nonisolated struct PowerHelperRecovery {
         guard approved, !attempted else { return false }
         attempted = true
         return true
+    }
+}
+
+// Presentation-only continuity for brief sampler handoffs or scheduling delays.
+// Health checks still inspect raw replies, and cached values never renew their age.
+nonisolated struct PowerReadingContinuity {
+    static let maximumAge: TimeInterval = 5
+
+    private struct Value {
+        let watts: Double
+        let timestamp: Date
+    }
+    private var cpu: Value?
+    private var gpu: Value?
+    private var ane: Value?
+    private var package: Value?
+
+    mutating func reset() { self = Self() }
+
+    mutating func update(_ sample: HelperPowerReading?, now: Date = Date()) -> HelperPowerReading? {
+        func refreshed(_ previous: Value?, with watts: Double?) -> Value? {
+            var value = previous
+            if let sample, let watts, watts.isFinite, watts >= 0,
+               value == nil || sample.timestamp > value!.timestamp {
+                let age = now.timeIntervalSince(sample.timestamp)
+                if age >= 0 && age <= Self.maximumAge {
+                    value = Value(watts: watts, timestamp: sample.timestamp)
+                }
+            }
+            guard let value else { return nil }
+            let age = now.timeIntervalSince(value.timestamp)
+            return age >= 0 && age <= Self.maximumAge ? value : nil
+        }
+        cpu = refreshed(cpu, with: sample?.cpu)
+        gpu = refreshed(gpu, with: sample?.gpu)
+        ane = refreshed(ane, with: sample?.ane)
+        // Retain the helper's coherent package total; never sum readings from
+        // different intervals when just one component is temporarily missing.
+        package = refreshed(package, with: sample?.package)
+        let timestamps = [cpu, gpu, ane, package].compactMap { $0?.timestamp }
+        guard let oldest = timestamps.min() else { return nil }
+        return HelperPowerReading(cpu: cpu?.watts, gpu: gpu?.watts, package: package?.watts,
+                                  timestamp: oldest, ane: ane?.watts)
     }
 }

@@ -9,6 +9,13 @@ final class HUDPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        // The controller bounds the visible HUD to the full display after dragging.
+        // AppKit's usual menu-bar constraint would also keep its transparent shadow
+        // margin onscreen, blocking placement at the top edge.
+        frameRect
+    }
+
     static func dragModifiersHeld(_ flags: NSEvent.ModifierFlags) -> Bool {
         flags.intersection([.control, .option, .command, .shift]) == [.control, .option, .command]
     }

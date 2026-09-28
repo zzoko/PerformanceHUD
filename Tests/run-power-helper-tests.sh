@@ -7,5 +7,8 @@ xcrun swiftc -swift-version 5 -parse-as-library \
   "$ROOT/PowerHelperShared/PowerHelperProtocol.swift" \
   "$ROOT/PowerHelper/PowerSampler.swift" \
   "$ROOT/PerformanceHUD/PowerHelperState.swift" \
+  "$ROOT/PerformanceHUD/HUDMetric.swift" \
+  "$ROOT/PerformanceHUD/HUDAlignment.swift" \
+  "$ROOT/PerformanceHUD/HUDResourceGroup.swift" \
   "$ROOT/Tests/PowerHelperTests.swift" -o "$OUT/tests"
 "$OUT/tests"

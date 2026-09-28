@@ -11,11 +11,13 @@ final class PowerHelperClient {
     private var receivedLiveReading = false
     private var recovery = PowerHelperRecovery()
     private var health = PowerHelperHealth()
+    private var displayedReadings = PowerReadingContinuity()
     private let service = SMAppService.daemon(plistName: PowerHelperIdentity.plist)
     private var connection: NSXPCConnection?
     private var generation = UUID()
     private var pendingRequest: UUID?
     private var timer: Timer?
+    private var samplingActivity: NSObjectProtocol?
     private var desired = false {
         didSet {
             if desired != oldValue { onStateChange?() }
@@ -92,7 +94,7 @@ final class PowerHelperClient {
         if current != lastStatus {
             let previous = lastStatus
             lastStatus = current
-            // A later approval should restore both Power options, even though
+            // A later approval should restore helper-backed options, even though
             // they were unticked while waiting in System Settings.
             if previous != nil, previous != .enabled, current == .enabled, !busy, !needsUpdate {
                 startupFailed = false; lastError = nil; health.reset()
@@ -115,7 +117,7 @@ final class PowerHelperClient {
         UserDefaults.standard.set(true, forKey: promptKey)
         let alert = NSAlert()
         alert.messageText = needsUpdate ? "Update power readings helper?" : "Enable power readings?"
-        alert.informativeText = "CPU, GPU, and Package watts use a small background helper to read macOS power measurements. macOS may ask for administrator approval. It only samples while a Power option and the HUD are enabled. You can remove it from the Power Helper menu."
+        alert.informativeText = "CPU, GPU, ANE, and Package watts use a small background helper to read macOS hardware measurements. macOS may ask for administrator approval. It only samples while the HUD is visible and a category’s Power option or Package Power is enabled. You can remove it from the Power Helper menu."
         alert.addButton(withTitle: needsUpdate ? "Update Helper" : "Enable Power Readings")
         alert.addButton(withTitle: "Not Now")
         NSApp.activate(ignoringOtherApps: true)
@@ -263,6 +265,12 @@ final class PowerHelperClient {
             }
             c.invalidationHandler = failed
             c.interruptionHandler = failed
+            // The overlay remains in use when a game is frontmost. Keep its
+            // heartbeat eligible to run so App Nap cannot let the helper lease
+            // expire. This activity deliberately allows idle system sleep.
+            samplingActivity = ProcessInfo.processInfo.beginActivity(
+                options: .userInitiatedAllowingIdleSystemSleep,
+                reason: "Update visible HUD power readings")
             connection = c
             c.resume()
         }
@@ -295,7 +303,7 @@ final class PowerHelperClient {
                         self.onStateChange?()
                     }
                 }
-                self.onUpdate?(sample)
+                self.onUpdate?(self.displayedReadings.update(sample))
             }
         }
         Task { @MainActor [weak self] in
@@ -306,6 +314,11 @@ final class PowerHelperClient {
     }
 
     private func disconnect() {
+        if let samplingActivity {
+            ProcessInfo.processInfo.endActivity(samplingActivity)
+            self.samplingActivity = nil
+        }
+        displayedReadings.reset()
         generation = UUID(); pendingRequest = nil
         if let c = connection {
             connection = nil
@@ -322,6 +335,7 @@ final class PowerHelperClient {
     }
 
     deinit {
+        if let samplingActivity { ProcessInfo.processInfo.endActivity(samplingActivity) }
         timer?.invalidate()
         connection?.invalidate()
         for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }

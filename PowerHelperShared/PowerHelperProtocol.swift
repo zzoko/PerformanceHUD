@@ -31,6 +31,7 @@ nonisolated struct HelperPowerReading: Sendable {
     let cpu: Double?
     let gpu: Double?
     let package: Double?
+    let ane: Double?
     let timestamp: Date
 
     static func parse(_ data: Data) -> Self? {
@@ -49,9 +50,9 @@ nonisolated struct HelperPowerReading: Sendable {
         let cpu = watts("cpu_power").flatMap { $0 > 0 ? $0 : nil }
         let gpu = watts("gpu_power")
         let ane = watts("ane_power")
-        guard cpu != nil || gpu != nil else { return nil }
+        guard cpu != nil || gpu != nil || ane != nil else { return nil }
         let package = cpu.flatMap { c in gpu.flatMap { g in ane.map { c + g + $0 } } }
-        return Self(cpu: cpu, gpu: gpu, package: package, timestamp: stamp)
+        return Self(cpu: cpu, gpu: gpu, package: package, timestamp: stamp, ane: ane)
     }
 
     var reply: NSDictionary {
@@ -59,11 +60,13 @@ nonisolated struct HelperPowerReading: Sendable {
         if let cpu { values["cpu"] = cpu }
         if let gpu { values["gpu"] = gpu }
         if let package { values["package"] = package }
+        if let ane { values["ane"] = ane }
         return values as NSDictionary
     }
 
-    init(cpu: Double?, gpu: Double?, package: Double?, timestamp: Date) {
+    init(cpu: Double?, gpu: Double?, package: Double?, timestamp: Date, ane: Double? = nil) {
         self.cpu = cpu; self.gpu = gpu; self.package = package; self.timestamp = timestamp
+        self.ane = ane
     }
 
     init?(reply: NSDictionary) {
@@ -71,11 +74,13 @@ nonisolated struct HelperPowerReading: Sendable {
               let time = reply["timestamp"] as? Double,
               time.isFinite, abs(Date().timeIntervalSince1970 - time) < 3 else { return nil }
         func value(_ key: String) -> Double? {
-            guard let n = reply[key] as? Double, n.isFinite, (0...6_000).contains(n) else { return nil }
-            return n
+            guard let number = reply[key] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+                  number.doubleValue.isFinite, (0...6_000).contains(number.doubleValue) else { return nil }
+            return number.doubleValue
         }
         let cpu = value("cpu").flatMap { $0 > 0 ? $0 : nil }
-        guard cpu != nil || value("gpu") != nil else { return nil }
-        self.init(cpu: cpu, gpu: value("gpu"), package: value("package"), timestamp: Date(timeIntervalSince1970: time))
+        guard cpu != nil || value("gpu") != nil || value("ane") != nil else { return nil }
+        self.init(cpu: cpu, gpu: value("gpu"), package: value("package"), timestamp: Date(timeIntervalSince1970: time),
+                  ane: value("ane"))
     }
 }

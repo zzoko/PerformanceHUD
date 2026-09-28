@@ -3,6 +3,7 @@ import AppKit
 /// A custom battery drawing with a continuous fill, rather than a system menu control.
 @MainActor
 final class HUDBatteryIndicatorView: NSView {
+    private var horizontal = false
     private var percentage: Double?
     private var source: BatterySample.Source?
     private var temperature: Double?
@@ -38,6 +39,12 @@ final class HUDBatteryIndicatorView: NSView {
         needsDisplay = true
     }
 
+    func setHorizontal(_ horizontal: Bool) {
+        self.horizontal = horizontal
+        sharedTemperatureTrailingInset = nil
+        needsDisplay = true
+    }
+
     func setOptions(_ options: HUDBatteryOptions) {
         self.options = options
         if !options.temperature { temperature = nil }
@@ -61,7 +68,9 @@ final class HUDBatteryIndicatorView: NSView {
     private var sourceFont: NSFont { NSFont.systemFont(ofSize: 14 * scale, weight: .medium) }
     private var valueFont: NSFont { NSFont.systemFont(ofSize: 14 * scale, weight: .regular) }
     private var detailFont: NSFont { NSFont.systemFont(ofSize: 12 * scale, weight: .regular) }
-    private var temperatureFont: NSFont { options.charge ? detailFont : valueFont }
+    private var temperatureFont: NSFont {
+        HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: options.temperatureHighlighted)
+    }
     private var sharedTemperatureTrailingInset: CGFloat?
 
     func alignTemperature(trailingInset: CGFloat?) {
@@ -79,6 +88,20 @@ final class HUDBatteryIndicatorView: NSView {
     }
 
     var minimumRowWidth: CGFloat {
+        if horizontal {
+            let titleWidth = ("ADP" as NSString).size(withAttributes: [.font: sourceFont]).width
+            let temperatureWidth = ("149°C" as NSString).size(withAttributes: [.font: temperatureFont]).width
+            let iconWidth = (34 * 0.85 + 0.5) * scale
+            let extraLabelGap = options.temperature || options.charge
+                ? 8 * scale * (HUDStyle.horizontalLabelGapMultiplier - 1) : 0
+            let sharedColumnAdjustment = options.temperature && options.charge
+                ? temperatureTrailingInset - (iconWidth + 8 * scale) : 0
+            return 4 * scale + titleWidth
+                + extraLabelGap
+                + sharedColumnAdjustment
+                + (options.temperature ? 8 * scale + temperatureWidth : 0)
+                + (options.charge ? 8 * scale + iconWidth : 0)
+        }
         // Keep the established HUD width when the longer source label is used.
         let titleWidth = ("Adapter" as NSString).size(withAttributes: [.font: valueFont]).width
         let usage = NSTextField(labelWithString: "100%")
@@ -92,19 +115,19 @@ final class HUDBatteryIndicatorView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let rowMidY = bounds.minY + 10.5 * scale
+        let rowMidY = horizontal ? bounds.midY : bounds.minY + 10.5 * scale
         let headingAttributes: [NSAttributedString.Key: Any] = [
             .font: detailFont, .foregroundColor: HUDStyle.titleColor(for: .battery, background: background)
         ]
         let heading = "Power source" as NSString
         let headingSize = heading.size(withAttributes: headingAttributes)
-        heading.draw(at: NSPoint(x: bounds.minX + 2 * scale,
+        if !horizontal { heading.draw(at: NSPoint(x: bounds.minX + 2 * scale,
                                  y: bounds.maxY - 9 * scale - headingSize.height / 2),
-                     withAttributes: headingAttributes)
+                     withAttributes: headingAttributes) }
         let sourceHeight = (BatterySample.Source.powerAdapter.rawValue as NSString).size(withAttributes: [.font: sourceFont]).height
         let sourceOriginY = rowMidY - sourceHeight / 2
         if let source {
-            let text = source.rawValue
+            let text = horizontal ? (source == .powerAdapter ? "ADP" : "BAT") : source.rawValue
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: sourceFont,
                 .foregroundColor: HUDStyle.primaryTitleColor(for: .battery, background: background)
@@ -116,9 +139,7 @@ final class HUDBatteryIndicatorView: NSView {
             let text = "\(Int(temperature.rounded()))°C" as NSString
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: temperatureFont,
-                .foregroundColor: options.charge
-                    ? HUDStyle.titleColor(for: .battery, background: background)
-                    : HUDStyle.valueColor(background: background)
+                .foregroundColor: HUDStyle.titleColor(for: .battery, background: background)
             ]
             let size = text.size(withAttributes: attributes)
             text.draw(at: NSPoint(x: bounds.maxX - temperatureTrailingInset - size.width,

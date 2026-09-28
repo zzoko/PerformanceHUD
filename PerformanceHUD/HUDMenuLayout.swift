@@ -11,16 +11,14 @@ enum HUDMenuLayout {
         return ceil(label.intrinsicContentSize.width)
     }
 
-    static func backgroundButtonWidth(_ background: HUDBackground) -> CGFloat {
-        let button = NSButton(title: background.menuTitle, target: nil, action: nil)
-        button.isBordered = false
-        button.bezelStyle = .inline
-        button.font = .systemFont(ofSize: NSFont.menuFont(ofSize: 0).pointSize, weight: .semibold)
-        return ceil(button.intrinsicContentSize.width)
-    }
-
+    // A shared width keeps Background, Alignment, and the Size track aligned.
+    // Measure the actual segmented controls so every title fits at menu font size.
     static var backgroundOptionsWidth: CGFloat {
-        HUDBackground.menuOptions.reduce(0) { $0 + backgroundButtonWidth($1) }
-            + CGFloat(max(0, HUDBackground.menuOptions.count - 1)) * spacing
+        [HUDBackground.menuOptions.map(\.menuTitle), ["Vertical", "Horizontal"]].map { titles in
+            let control = NSSegmentedControl(labels: titles, trackingMode: .selectOne, target: nil, action: nil)
+            control.segmentStyle = .rounded
+            control.font = .menuFont(ofSize: 0)
+            return ceil(control.intrinsicContentSize.width)
+        }.max() ?? 0
     }
 }

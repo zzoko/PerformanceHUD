@@ -4,6 +4,7 @@ nonisolated struct PowerSample: Sendable {
     let cpu: Double?
     let gpu: Double?
     let package: Double?
+    var ane: Double? = nil
     static let unavailable = PowerSample(cpu: nil, gpu: nil, package: nil)
 }
 
@@ -15,7 +16,7 @@ final class PowerMonitor {
     init() {
         helper.onUpdate = { [weak self] reading in
             guard let reading else { self?.onUpdate?(.unavailable); return }
-            self?.onUpdate?(PowerSample(cpu: reading.cpu, gpu: reading.gpu, package: reading.package))
+            self?.onUpdate?(PowerSample(cpu: reading.cpu, gpu: reading.gpu, package: reading.package, ane: reading.ane))
         }
     }
 

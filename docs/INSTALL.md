@@ -31,11 +31,11 @@ The glass effect uses ScreenCaptureKit to process pixels behind the HUD. It need
 
 ## Enable power readings
 
-CPU Power and GPU Power are enabled by default. On first launch, choose **Enable Power Readings** to set up the bundled helper. If macOS requests approval, allow PerformanceHUD in **System Settings → General → Login Items** (the wording may vary). An administrator password may be required.
+CPU, GPU, and ANE Power are enabled by default. On first launch, choose **Enable Power Readings** to set up the bundled helper. If macOS requests approval, allow PerformanceHUD in **System Settings → General → Login Items** (the wording may vary). An administrator password may be required.
 
-You can choose **Not Now** and continue using the other metrics. If setup is declined, approval is missing, the helper is removed, or it repeatedly fails to respond, both Power checkboxes turn off and appear muted. They remain clickable while their category is enabled: click **Power** to open setup, repair, or approval settings. Successful setup or later approval enables both Power options again. Brief startup delays or missing samples do not change your selections. Use **Power Helper → Set Up Power Readings…** in the menu to enable watts later, or **Remove Power Helper** to unregister it. Sampling stops when neither visible CPU/GPU category has Power enabled, or when the HUD is disabled or the app is closed. The installed helper is otherwise idle.
+You can choose **Not Now** and continue using the other metrics. If setup is declined, approval is missing, the helper is removed, or it repeatedly fails to respond, Power checkboxes turn off and appear muted. They remain clickable while their category is enabled: click **Power** to open setup, repair, or approval settings. Successful setup or later approval enables these options again. Brief startup delays or missing samples do not change your selections. Use **Power Helper → Set Up Power Readings…** in the menu to enable watts later, or **Remove Power Helper** to unregister it. Sampling stops when no visible category needs Power, or when the HUD is disabled or the app is closed. The installed helper is otherwise idle.
 
-CPU, GPU, and Package watts all use this helper. Package is the combined CPU, GPU, and Neural Engine estimate, not whole-Mac power consumption. Missing or unsupported readings stay blank.
+CPU, GPU, ANE, and Package watts all use this helper. ANE shows power only; utilization percentage, temperature, and focused-app usage are not offered. Package is the combined CPU, GPU, and Neural Engine estimate, not whole-Mac power consumption. Its checkbox works independently of the individual Power options and is available in both Vertical and Horizontal alignment. Missing or unsupported readings stay blank.
 
 An approved helper shows **Power helper idle** with normal-looking Power checkboxes when sampling is off. When sampling is requested, it shows **Starting power readings…** until its first valid sample arrives. If macOS remembers approval but cannot launch the helper, the app attempts to refresh that existing registration once. It does not bypass macOS approval.
 
@@ -71,7 +71,10 @@ These checks cover sample parsing, stale or invalid readings, process restarts, 
 
 - **Control + Option + Command + H:** show or hide the HUD.
 - **Control + Option + Command + drag:** move it. Release all three keys when finished to prevent automatic snapping to the grid.
-- **Position → Reset:** return to the default position.
+- The HUD can be positioned across the full display, including the Dock and menu-bar areas; its visible panel stays within the screen edges.
+- Reading checkboxes show or hide values. Where a narrow strip is attached to the checkbox, click that strip to toggle bold emphasis independently. A bright strip means highlighted; it dims while the reading is off and remembers your choice.
+- **Reset → Position:** return to the default position.
+- **Reset → Options:** restore the default HUD categories, readings, highlighting, usage modes, alignment, size, and background after confirmation. The HUD is enabled; position and permissions are kept.
 - **Close App:** quit PerformanceHUD.
 - The faint **App version** line identifies the installed version.
 

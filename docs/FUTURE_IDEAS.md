@@ -5,4 +5,3 @@
 These are potential additions, not guaranteed:
 
 - Fan speed (RPM), on Macs with fans.
-- Apple Neural Engine (ANE) usage and power consumption, on supported hardware.
