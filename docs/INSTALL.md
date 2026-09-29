@@ -35,7 +35,7 @@ CPU, GPU, and ANE Power are enabled by default. On first launch, choose **Enable
 
 You can choose **Not Now** and continue using the other metrics. If setup is declined, approval is missing, the helper is removed, or it repeatedly fails to respond, Power checkboxes turn off and appear muted. They remain clickable while their category is enabled: click **Power** to open setup, repair, or approval settings. Successful setup or later approval enables these options again. Brief startup delays or missing samples do not change your selections. Use **Power Helper → Set Up Power Readings…** in the menu to enable watts later, or **Remove Power Helper** to unregister it. Sampling stops when no visible category needs Power, or when the HUD is disabled or the app is closed. The installed helper is otherwise idle.
 
-CPU, GPU, ANE, and Package watts all use this helper. ANE shows power only; utilization percentage, temperature, and focused-app usage are not offered. Package is the combined CPU, GPU, and Neural Engine estimate, not whole-Mac power consumption. Its checkbox works independently of the individual Power options and is available in both Vertical and Horizontal alignment. Missing or unsupported readings stay blank.
+CPU, GPU, ANE, and SoC watts all use this helper. ANE shows power only; utilization percentage, temperature, and focused-app usage are not offered. SoC Power is the combined CPU, GPU, and Neural Engine estimate, not whole-Mac power consumption. Its checkbox works independently of the individual Power options and is available in both Vertical and Horizontal alignment. Missing or unsupported readings stay blank.
 
 An approved helper shows **Power helper idle** with normal-looking Power checkboxes when sampling is off. When sampling is requested, it shows **Starting power readings…** until its first valid sample arrives. If macOS remembers approval but cannot launch the helper, the app attempts to refresh that existing registration once. It does not bypass macOS approval.
 
@@ -75,7 +75,7 @@ These checks cover sample parsing, stale or invalid readings, process restarts, 
 - Reading checkboxes show or hide values. Where a narrow strip is attached to the checkbox, click that strip to toggle bold emphasis independently. A bright strip means highlighted; it dims while the reading is off and remembers your choice.
 - **Reset → Position:** return to the default position.
 - **Reset → Options:** restore the default HUD categories, readings, highlighting, usage modes, alignment, size, and background after confirmation. The HUD is enabled; position and permissions are kept.
-- **Close App:** quit PerformanceHUD.
+- **Quit:** quit PerformanceHUD.
 - The faint **App version** line identifies the installed version.
 
 FPS depends on the active game's rendering backend and available counters. An empty FPS value alone does not mean installation failed. Borderless or windowed mode is the recommended starting point for testing.

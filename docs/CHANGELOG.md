@@ -2,6 +2,15 @@
 
 [← Back to README](../README.md)
 
+### v1.3
+
+- Moved **Size** above **Alignment** in the menu.
+- Refined the **FPS** label’s left alignment in Vertical and Horizontal so its position matches when switching layouts.
+- Renamed menu categories and controls: **Apple Neural Engine → ANE**, **Package Power → SoC Power**, **RAM → Unified Memory**, **Device Info → Chip & OS**, **Background → Appearance**, and **Close App → Quit**.
+- Updated HUD labels: **RAM → MEM** (including **MEM (app)**), **PKG → SOC**, and **Power source → Power Source**. SoC Power still shows the combined CPU, GPU, and ANE power estimate, not whole-Mac consumption.
+- Matched the **Energy** checkbox’s box and checkmark to the other reading controls, without adding a boldness strip.
+- Updated tooltips and helper setup text to match the new names. ANE’s tooltip spells out **Apple Neural Engine**, and Chip & OS describes the **chip name and macOS version**.
+
 ### v1.2
 
 #### Layout and appearance

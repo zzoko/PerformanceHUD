@@ -10,7 +10,7 @@ final class HUDBackgroundMenuView: NSView {
                                      trackingMode: .selectOne, target: nil, action: nil)
         super.init(frame: NSRect(x: 0, y: 0, width: 290, height: 28))
         autoresizingMask = [.width]
-        let label = NSTextField(labelWithString: "Background")
+        let label = NSTextField(labelWithString: "Appearance")
         label.font = .menuFont(ofSize: 0)
         control.segmentStyle = .rounded
         control.font = .menuFont(ofSize: 0)

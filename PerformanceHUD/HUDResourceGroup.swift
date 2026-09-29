@@ -33,7 +33,7 @@ struct HUDBatteryOptions: Equatable {
 enum HUDResourceGroup: String, CaseIterable {
     case gpu, cpu, ane, ram
 
-    var title: String { self == .ane ? "Apple Neural Engine" : rawValue.uppercased() }
+    var title: String { self == .ram ? "Unified Memory" : rawValue.uppercased() }
     var supportsTemperature: Bool { self == .cpu || self == .gpu }
     var supportsTotalUse: Bool { self != .ane }
     var supportsPower: Bool { self != .ram }

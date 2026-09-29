@@ -143,7 +143,9 @@ final class HUDHorizontalView: NSView {
                 }
                 // Intrinsic size describes the alignment rectangle. NSTextField
                 // also needs its side insets in the frame, or it clips glyphs.
-                let alignmentRect = NSRect(x: x, y: baseline - labelHeight + label.firstBaselineOffsetFromTop,
+                // Match the vertical FPS title's standard label inset.
+                let titleInset = reading.metric == .fps && reading.startsMetric ? label.alignmentRectInsets.left : 0
+                let alignmentRect = NSRect(x: x + titleInset, y: baseline - labelHeight + label.firstBaselineOffsetFromTop,
                                            width: width, height: labelHeight)
                 label.frame = label.frame(forAlignmentRect: alignmentRect)
                 x += width

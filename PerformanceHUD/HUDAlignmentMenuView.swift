@@ -17,7 +17,7 @@ final class HUDAlignmentMenuView: NSView {
         control.target = self
         control.action = #selector(changed)
         control.setAccessibilityLabel("HUD alignment")
-        let help = "Vertical stacks the categories; Horizontal places them in one row. FPS History and Device Info are hidden in Horizontal and restored when you return to Vertical."
+        let help = "Vertical stacks the categories; Horizontal places them in one row. FPS History and Chip & OS are hidden in Horizontal and restored when you return to Vertical."
         control.toolTip = help
         control.setAccessibilityHelp(help)
         for segment in 0..<2 { control.setToolTip(help, forSegment: segment) }

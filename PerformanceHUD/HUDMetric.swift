@@ -40,19 +40,19 @@ enum HUDMetric: Int, CaseIterable, Hashable {
             return "CPU Total"
 
         case .aneTotal:
-            return "Apple Neural Engine"
+            return "ANE"
 
         case .ram:
-            return "RAM (only selected app)"
+            return "Unified Memory (only selected app)"
 
         case .ramTotal:
-            return "RAM Total"
+            return "Unified Memory Total"
 
         case .battery:
             return "Battery"
 
         case .deviceInfo:
-            return "Device Info"
+            return "Chip & OS"
         }
     }
 
@@ -84,16 +84,16 @@ enum HUDMetric: Int, CaseIterable, Hashable {
             return "ANE"
 
         case .ram:
-            return "RAM (app)"
+            return "MEM (app)"
 
         case .ramTotal:
-            return "RAM"
+            return "MEM"
 
         case .battery:
             return "Battery"
 
         case .deviceInfo:
-            return "Device Info"
+            return "Chip & OS"
         }
     }
 

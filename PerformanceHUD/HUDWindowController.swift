@@ -609,7 +609,7 @@ final class HUDWindowController {
 
             titleLabel.leadingAnchor.constraint(
                 equalTo: row.leadingAnchor,
-                constant: metric == .fps ? 0 : titleLabel.alignmentRectInsets.left
+                constant: titleLabel.alignmentRectInsets.left
             ),
 
             // Match the horizontal FPS baseline without changing the row's height.
@@ -754,7 +754,7 @@ final class HUDWindowController {
         let row = NSView()
         row.translatesAutoresizingMaskIntoConstraints = false
         row.isHidden = true
-        let title = NSTextField(labelWithString: "PKG")
+        let title = NSTextField(labelWithString: "SOC")
         let value = NSTextField(labelWithString: "")
         value.alignment = .right
         for label in [title, value] {
@@ -1258,7 +1258,7 @@ final class HUDWindowController {
                 // Insert Package at ANE's position even when ANE itself is hidden.
                 defer {
                     if metric == .aneTotal && showsPackagePower {
-                        for (role, field, reference) in [("title", packageTitleLabel, "PKG"), ("power", packageValueLabel, "999.9 W")] {
+                        for (role, field, reference) in [("title", packageTitleLabel, "SOC"), ("power", packageValueLabel, "999.9 W")] {
                             if let field, let font = field.font, let color = field.textColor {
                                 readings.append(.init(id: "package.\(role)", text: field.stringValue, reference: reference,
                                     font: font, color: color, help: field.toolTip, startsMetric: role == "title"))

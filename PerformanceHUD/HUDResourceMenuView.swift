@@ -3,7 +3,9 @@ import AppKit
 @MainActor
 final class HUDResourceMenuView: NSView {
     static var masterWidth: CGFloat {
-        ceil(("Apple Neural Engine" as NSString).size(withAttributes: [.font: NSFont.menuFont(ofSize: 0)]).width) + 24
+        ceil((HUDResourceGroup.allCases.map(\.title) + ["Battery"]).map {
+            ($0 as NSString).size(withAttributes: [.font: NSFont.menuFont(ofSize: 0)]).width
+        }.max() ?? 0) + 24
     }
     static var powerColumnLeading: CGFloat { 8 + masterWidth + 8 + 8 }
     static let choicesWidth: CGFloat = 16 + 90 + 126 + 106 + 145 + 36
@@ -40,7 +42,9 @@ final class HUDResourceMenuView: NSView {
         // container makes its subordinate choices read as one related group.
         let master = HUDResourceMasterButton(title: groupTitle, target: self, action: #selector(changed(_:)))
         master.tag = 0
-        master.toolTip = "Show or hide this group while keeping its individual choices."
+        master.toolTip = group == .ane
+            ? "Apple Neural Engine. Show or hide its power reading while keeping your choices."
+            : "Show or hide this group while keeping its individual choices."
         master.setAccessibilityLabel("Show \(groupTitle)")
         master.translatesAutoresizingMaskIntoConstraints = false
         addSubview(master)
@@ -99,7 +103,7 @@ final class HUDResourceMenuView: NSView {
                     ? "Average of available battery temperature sensors, in °C, with the battery controller reading as a fallback. MacBooks only; unavailable readings stay blank."
                     : "Shows battery charge with a dynamic icon. A bolt indicates external power; yellow indicates Low Power Mode."
             } else if tag == 4 {
-                button.toolTip = "Estimated total \(groupTitle) power in watts, averaged over the sampling interval. Requires approval for the Power Helper. Package independently shows combined CPU, GPU and Neural Engine power, not whole-Mac power. Unavailable readings stay blank."
+                button.toolTip = "Estimated total \(group == .ane ? "Apple Neural Engine" : groupTitle) power in watts, averaged over the sampling interval. Requires approval for the Power Helper. SoC Power independently shows combined CPU, GPU and Neural Engine power, not whole-Mac power. Unavailable readings stay blank."
             } else if tag == 1 {
                 button.toolTip = group == .cpu
                     ? "Average of identified CPU temperature sensors for this chip, in °C. Sensor coverage varies by model; unavailable readings stay blank. Not a per-app reading."
@@ -253,7 +257,7 @@ final class HUDResourceMenuView: NSView {
             }
             controls[5]?.toolTip = options.detailsAvailable
                 ? Self.detailsHelp
-                : "Enable RAM and Usage to show Details. Your Details selection is remembered."
+                : "Enable Unified Memory and Usage to show Details. Your Details selection is remembered."
         }
         if let usage = controls[7] as? HUDReadingCheckbox {
             usage.emphasized = options.usageHighlighted
@@ -332,7 +336,7 @@ final class HUDResourceChoicesView: NSView {
 }
 
 /// Two independent targets: the checkbox controls visibility, the attached strip
-/// controls emphasis. Plain options retain the native single checkbox.
+/// controls emphasis. Plain options use the same checkbox without the strip.
 @MainActor
 final class HUDReadingCheckbox: NSButton {
     private let visibility = HUDVisibilityButton(checkboxWithTitle: "", target: nil, action: nil)
@@ -413,10 +417,9 @@ private final class HUDVisibilityButton: NSButton {
     override var isFlipped: Bool { false }
     var split = false
     override func draw(_ dirtyRect: NSRect) {
-        guard split else { super.draw(dirtyRect); return }
         let y = (bounds.height - 18) / 2
         NSGraphicsContext.saveGraphicsState()
-        NSBezierPath(roundedRect: NSRect(x: 0, y: y, width: 30, height: 18), xRadius: 4, yRadius: 4).addClip()
+        NSBezierPath(roundedRect: NSRect(x: 0, y: y, width: split ? 30 : 18, height: 18), xRadius: 4, yRadius: 4).addClip()
         NSColor.labelColor.withAlphaComponent(isEnabled ? (state == .on ? 0.30 : 0.10) : 0.06).setFill()
         NSRect(x: 0, y: y, width: 18, height: 18).fill()
         NSGraphicsContext.restoreGraphicsState()
@@ -436,7 +439,7 @@ private final class HUDVisibilityButton: NSButton {
             .foregroundColor: isEnabled ? NSColor.labelColor : NSColor.disabledControlTextColor
         ]
         let size = (title as NSString).size(withAttributes: attributes)
-        (title as NSString).draw(at: NSPoint(x: 36, y: (bounds.height - size.height) / 2), withAttributes: attributes)
+        (title as NSString).draw(at: NSPoint(x: split ? 36 : 24, y: (bounds.height - size.height) / 2), withAttributes: attributes)
         if window?.firstResponder === self {
             NSFocusRingPlacement.only.set()
             NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 4, yRadius: 4).fill()

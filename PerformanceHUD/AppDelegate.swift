@@ -529,7 +529,7 @@ final class AppDelegate:
         alignmentView.onAlignmentSelected = { [weak self] alignment in self?.setHUDAlignment(alignment) }
         let alignmentItem = NSMenuItem()
         alignmentItem.view = alignmentView
-        menu.insertItem(alignmentItem, at: menu.index(of: sizeItem))
+        menu.insertItem(alignmentItem, at: menu.index(of: sizeItem) + 1)
 
         // MARK: HUD Background
 
@@ -586,6 +586,9 @@ final class AppDelegate:
                 item.toolTip = "Available in Vertical alignment. Your selection is restored when switching back."
             } else if metric == .fpsGraph {
                 item.toolTip = "Shows FPS trends over the last 60 seconds, using approximately one reading per second."
+            }
+            if metric == .deviceInfo {
+                item.toolTip = "Chip name and macOS version." + (HUDPreferences.alignment.allows(metric) ? "" : " Available in Vertical alignment; your selection is remembered.")
             }
             menu.addItem(item)
             metricMenuItems[metric] = item
@@ -680,7 +683,7 @@ final class AppDelegate:
         let closeItem =
             NSMenuItem(
                 title:
-                    "Close App",
+                    "Quit",
                 action:
                     #selector(
                         closeApplication(_:)
@@ -698,7 +701,7 @@ final class AppDelegate:
 
         menu.addItem(.separator())
 
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.2"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3"
         let versionItem = NSMenuItem(title: "App version \(version)", action: nil, keyEquivalent: "")
         versionItem.isEnabled = false
         menu.addItem(versionItem)
@@ -915,8 +918,8 @@ final class AppDelegate:
             item.isEnabled = alignment.allows(metric)
             item.state = enabledMetrics.contains(metric) ? .on : .off
             item.toolTip = !alignment.allows(metric)
-                ? "Available in Vertical alignment. Your selection is restored when switching back."
-                : metric == .fpsGraph ? "Shows FPS trends over the last 60 seconds, using approximately one reading per second." : nil
+                ? (metric == .deviceInfo ? "Chip name and macOS version. " : "") + "Available in Vertical alignment. Your selection is restored when switching back."
+                : metric == .fpsGraph ? "Shows FPS trends over the last 60 seconds, using approximately one reading per second." : "Chip name and macOS version."
         }
         reconcileMonitoring()
     }

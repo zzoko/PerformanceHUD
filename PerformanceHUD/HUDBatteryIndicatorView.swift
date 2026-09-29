@@ -119,7 +119,7 @@ final class HUDBatteryIndicatorView: NSView {
         let headingAttributes: [NSAttributedString.Key: Any] = [
             .font: detailFont, .foregroundColor: HUDStyle.titleColor(for: .battery, background: background)
         ]
-        let heading = "Power source" as NSString
+        let heading = "Power Source" as NSString
         let headingSize = heading.size(withAttributes: headingAttributes)
         if !horizontal { heading.draw(at: NSPoint(x: bounds.minX + 2 * scale,
                                  y: bounds.maxY - 9 * scale - headingSize.height / 2),

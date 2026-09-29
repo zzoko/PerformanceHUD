@@ -6,7 +6,7 @@ enum HUDMenuLayout {
     static let spacing: CGFloat = 10
 
     static var labelWidth: CGFloat {
-        let label = NSTextField(labelWithString: "Background")
+        let label = NSTextField(labelWithString: "Appearance")
         label.font = .menuFont(ofSize: 0)
         return ceil(label.intrinsicContentSize.width)
     }
