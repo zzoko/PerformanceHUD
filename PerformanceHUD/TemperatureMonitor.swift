@@ -37,6 +37,7 @@ final class TemperatureMonitor {
 nonisolated final class SMCTemperatureReader: @unchecked Sendable {
     private var connection: io_connect_t = 0
     private var metadata: [UInt32: (size: UInt32, type: UInt32)] = [:]
+    private var fanIDs: [Int]?
     private(set) var cpuKeys: [String] = []
     private(set) var gpuKeys: [String] = []
     private var nextOpenAttempt: TimeInterval = 0
@@ -92,6 +93,53 @@ nonisolated final class SMCTemperatureReader: @unchecked Sendable {
         value.isFinite && value > 0 && value < 100 ? value : nil
     }
 
+    // Read-only fan discovery and tachometer values, using the same SMC transport
+    // as temperatures. FNum/F*Ac/F*Mx are also used by Stats' sensor reader.
+    // Zero RPM is a valid stopped fan; a missing key must never become zero RPM.
+    func readFans() -> FanSample {
+        if connection == 0 {
+            let now = ProcessInfo.processInfo.systemUptime
+            guard now >= nextOpenAttempt else { return .unavailable }
+            nextOpenAttempt = now + 30
+            guard open() else { return .unavailable }
+        }
+        func number(_ key: String) -> Double? {
+            guard let reading = value(for: key),
+                  let type = ["ui8 ", "ui16", "ui32", "fpe2", "flt "].first(where: {
+                      Self.fourCC($0) == reading.type
+                  }) else { return nil }
+            return FanDecoder.number(type: type, bytes: reading.bytes)
+        }
+        if fanIDs == nil {
+            if let countValue = number("FNum") {
+                guard let count = FanDecoder.count(countValue) else { close(); return .unavailable }
+                fanIDs = Array(0..<count)
+            } else {
+                // Fanless Airs can omit FNum entirely. Only conclude "no fans"
+                // after successfully enumerating the service's complete key list.
+                guard let count = number("#KEY"), count > 0, count <= 16_384,
+                      count.rounded(.towardZero) == count else { close(); return .unavailable }
+                var keys: [String] = []
+                for index in 0..<UInt32(count) {
+                    guard let response = request(command: 8, index: index) else { close(); return .unavailable }
+                    let id = Self.uint32(response, at: 0)
+                    let bytes = [24, 16, 8, 0].map { UInt8(truncatingIfNeeded: id >> $0) }
+                    if let key = String(bytes: bytes, encoding: .ascii) { keys.append(key) }
+                }
+                fanIDs = FanDecoder.identifiers(in: keys)
+            }
+        }
+        guard let fanIDs, !fanIDs.isEmpty else { return .noFans }
+        let fans = fanIDs.map { id in
+            let prefix = "F" + String(id, radix: 16, uppercase: true)
+            return FanReading(id: id, rpm: FanDecoder.rpm(number(prefix + "Ac")),
+                              maximumRPM: FanDecoder.rpm(number(prefix + "Mx")))
+        }
+        let hasReading = fans.contains { $0.rpm != nil }
+        if !hasReading { close() }
+        return FanSample(status: hasReading ? .ready : .unavailable, fans: fans)
+    }
+
     static func sensorGroup(for key: String, chipName: String) -> HUDResourceGroup? {
         guard key.utf8.count == 4 else { return nil }
         if CPUTemperatureSensors.keys(for: chipName).contains(key) { return .cpu }
@@ -119,6 +167,7 @@ nonisolated final class SMCTemperatureReader: @unchecked Sendable {
     private func close() {
         if connection != 0 { IOServiceClose(connection); connection = 0 }
         metadata.removeAll()
+        fanIDs = nil
         cpuKeys.removeAll()
         gpuKeys.removeAll()
     }

@@ -34,7 +34,7 @@ import Foundation
               && HUDAlignment.horizontal.allows(.battery), "horizontal retains main readings")
         for mode in HUDUsageMode.allCases {
             var options = HUDResourceOptions(enabled: true, temperature: false, totalUse: mode != .app,
-                                             focusedApp: mode != .total)
+                                             focusedApp: mode != .total, details: false)
             check(options.selectedUsageMode == mode, "existing usage choices migrate to the corresponding mode")
             options.setUsagePresentation(visible: true, highlighted: true)
             options.selectUsageMode(.both)
@@ -59,8 +59,8 @@ import Foundation
                 check(options.detailsAvailable && options.showsDetails == rememberedDetails,
                       "Details supports Total, App and Both")
                 options.setUsagePresentation(visible: false, highlighted: false)
-                check(!options.detailsAvailable && !options.showsDetails && options.details == rememberedDetails,
-                      "Usage off hides Details without losing its selection")
+                check(options.detailsAvailable && options.showsDetails == rememberedDetails,
+                      "Usage off keeps Details independently available")
                 options.setUsagePresentation(visible: true, highlighted: false)
                 check(options.showsDetails == rememberedDetails,
                       "Usage on restores the saved Details selection")
@@ -69,12 +69,28 @@ import Foundation
         var emphasizedDetails = HUDResourceOptions(enabled: true, temperature: false, totalUse: true,
                                                     focusedApp: false, highlighted: [.details])
         emphasizedDetails.setUsagePresentation(visible: false, highlighted: false)
-        check(!emphasizedDetails.showsDetails && emphasizedDetails.highlighted.contains(.details),
+        check(emphasizedDetails.showsDetails && emphasizedDetails.highlighted.contains(.details),
               "Usage off remembers Details emphasis")
         emphasizedDetails.selectUsageMode(.app)
         emphasizedDetails.setUsagePresentation(visible: true, highlighted: true)
         check(emphasizedDetails.showsDetails && emphasizedDetails.highlighted.contains(.details),
               "Details emphasis survives usage and mode changes")
+        for mode in HUDUsageMode.allCases {
+            for details in [false, true] {
+                for usage in [false, true] {
+                    for enabled in [false, true] {
+                        var options = HUDResourceOptions(enabled: enabled, temperature: false,
+                            totalUse: usage, focusedApp: false, details: details, usageMode: mode)
+                        options.setUsagePresentation(visible: usage, highlighted: false)
+                        let expected: Set<HUDMetric> = !enabled || (!details && !usage) ? []
+                            : mode == .total ? [.ramTotal] : mode == .app ? [.ram] : [.ram, .ramTotal]
+                        check(options.visibleMetrics(for: .ram) == expected,
+                              "independent Details/Usage keep the correct memory sources in every mode")
+                        check(options.showsDetails == (enabled && details), "Details follows only its own and the master checkbox")
+                    }
+                }
+            }
+        }
         for mask in 0..<64 {
             var resources: [HUDResourceGroup: HUDResourceOptions] = [:]
             for (index, group) in [HUDResourceGroup.cpu, .gpu, .ane].enumerated() {

@@ -7,9 +7,9 @@ This isn't aimed at replacing MetalHUD — Apple's built-in tool is for deep gra
 ### Advantages
 
 - Toggles on anytime, mid-session — MetalHUD requires setting `MTL_HUD_ENABLED=1` before the game launches and can't be enabled for a session already in progress.
-- Shows system context MetalHUD doesn't report at all: CPU, GPU, and RAM usage, temperatures, swap, memory pressure, and battery — MetalHUD is scoped to GPU rendering stats only.
+- Shows system context MetalHUD doesn't report at all: CPU, GPU, and RAM usage, temperatures, swap, memory pressure, fan speeds, and battery — MetalHUD is scoped to GPU rendering stats only.
 - Fully yours to lay out — per-metric visibility, size, position, and keyboard shortcuts — versus MetalHUD's fixed overlay.
-- A tiny, single-purpose app (~2 MB) rather than a debugging surface built into the graphics stack.
+- A tiny, single-purpose app (<4 MB) rather than a debugging surface built into the graphics stack.
 
 ### Tradeoffs
 

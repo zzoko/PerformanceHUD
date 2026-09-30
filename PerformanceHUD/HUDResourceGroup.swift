@@ -33,7 +33,7 @@ struct HUDBatteryOptions: Equatable {
 enum HUDResourceGroup: String, CaseIterable {
     case gpu, cpu, ane, ram
 
-    var title: String { self == .ram ? "Unified Memory" : rawValue.uppercased() }
+    var title: String { self == .ram ? "MEM" : rawValue.uppercased() }
     var supportsTemperature: Bool { self == .cpu || self == .gpu }
     var supportsTotalUse: Bool { self != .ane }
     var supportsPower: Bool { self != .ram }
@@ -56,7 +56,7 @@ struct HUDResourceOptions: Equatable {
     var usageMode: HUDUsageMode?
 
     var usageVisible: Bool { totalUse || focusedApp }
-    var detailsAvailable: Bool { enabled && usageVisible }
+    var detailsAvailable: Bool { enabled }
     var showsDetails: Bool { detailsAvailable && details }
     var usageHighlighted: Bool { !highlighted.isDisjoint(with: [.totalUse, .focusedApp]) }
     var selectedUsageMode: HUDUsageMode {
@@ -82,6 +82,12 @@ struct HUDResourceOptions: Equatable {
     func visibleMetrics(for group: HUDResourceGroup) -> Set<HUDMetric> {
         guard enabled else { return [] }
         var metrics = Set<HUDMetric>()
+        if group == .ram {
+            guard usageVisible || showsDetails else { return [] }
+            if selectedUsageMode != .app { metrics.insert(.ramTotal) }
+            if selectedUsageMode != .total { metrics.insert(.ram) }
+            return metrics
+        }
         if focusedApp, let appMetric = group.appMetric { metrics.insert(appMetric) }
         if (group.supportsTotalUse && totalUse) || (group.supportsTemperature && temperature) || (group.supportsPower && power) {
             metrics.insert(group.totalMetric)

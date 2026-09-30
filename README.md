@@ -34,11 +34,11 @@ To find your current resolution, open **System Settings → Displays** and hover
 
 ## What is this?
 
-PerformanceHUD is a small, customizable performance overlay for macOS that keeps useful stats visible while you play. Use it as a minimal FPS display, or add resource usage, temperatures, and power readings for a fuller picture of how your Mac is handling a game.
+PerformanceHUD is a tiny (<4 MB) app that displays a performance overlay over games and apps. Use it as just an FPS display, or also show CPU, GPU, and memory usage, temperatures, power readings, fan speeds, and battery information for a fuller picture of how your Mac is handling the workload. Some readings depend on your Mac and the app you’re using.
 
-Show only what matters to you: FPS and its 60-second history, system or focused-app CPU/GPU/RAM usage, chip temperatures and power consumption, memory details, and battery information. Available readings depend on your hardware and the app being tracked.
+The controls live in the menu bar. Choose which readings to display and highlight, with vertical and horizontal layouts to fit your setup. Adjust the size, choose an appearance or let it follow macOS, and move the overlay where you want it. You can turn it on even if the game is already running, and the built-in Controls Guide explains each option.
 
-Everything is controlled from the menu bar. Toggle individual metrics, adjust the size and background, and position the HUD wherever it fits your screen. You can turn it on while a game is already running.
+I’ve put a lot of thought into keeping the overlay easy to read and the controls organized, even as more features have been added. That care extends to the smaller details, from the battery icon changing with your Mac’s power state to the custom glass background that adapts to what’s behind the overlay.
 
 ## Showcase
 
@@ -49,27 +49,27 @@ Everything is controlled from the menu bar. Toggle individual metrics, adjust th
   </tr>
   <tr>
     <td valign="top" align="center">
-      <a href="docs/images/HUD_vertical_dark.png"><img src="docs/images/HUD_vertical_dark.png" alt="PerformanceHUD v1.2 vertical layout with a dark background" width="100%"></a>
+      <a href="docs/images/HUD_vertical_dark.png"><img src="docs/images/HUD_vertical_dark.png" alt="PerformanceHUD v1.4 vertical layout with a dark background" width="100%"></a>
     </td>
     <td valign="top" align="center">
-      <a href="docs/images/HUD_menu_dark.png"><img src="docs/images/HUD_menu_dark.png" alt="PerformanceHUD v1.2 menu controls in dark mode" width="100%"></a>
+      <a href="docs/images/HUD_menu_dark.png"><img src="docs/images/HUD_menu_dark.png" alt="PerformanceHUD v1.4 menu controls in dark mode" width="100%"></a>
     </td>
   </tr>
   <tr>
     <td valign="top" align="center">
-      <a href="docs/images/HUD_vertical_light.png"><img src="docs/images/HUD_vertical_light.png" alt="PerformanceHUD v1.2 vertical layout with a light background" width="100%"></a>
+      <a href="docs/images/HUD_vertical_light.png"><img src="docs/images/HUD_vertical_light.png" alt="PerformanceHUD v1.4 vertical layout with a light background" width="100%"></a>
     </td>
     <td valign="top" align="center">
-      <a href="docs/images/HUD_menu_light.png"><img src="docs/images/HUD_menu_light.png" alt="PerformanceHUD v1.2 menu controls in light mode" width="100%"></a>
+      <a href="docs/images/HUD_menu_light.png"><img src="docs/images/HUD_menu_light.png" alt="PerformanceHUD v1.4 menu controls in light mode" width="100%"></a>
     </td>
   </tr>
 </table>
 
 **Horizontal HUD**
 
-<a href="docs/images/HUD_horizontal_dark.png"><img src="docs/images/HUD_horizontal_dark.png" alt="PerformanceHUD v1.2 horizontal layout with a dark background" width="100%"></a>
+<a href="docs/images/HUD_horizontal_dark.png"><img src="docs/images/HUD_horizontal_dark.png" alt="PerformanceHUD v1.4 horizontal layout with a dark background" width="100%"></a>
 
-<a href="docs/images/HUD_horizontal_light.png"><img src="docs/images/HUD_horizontal_light.png" alt="PerformanceHUD v1.2 horizontal layout with a light background" width="100%"></a>
+<a href="docs/images/HUD_horizontal_light.png"><img src="docs/images/HUD_horizontal_light.png" alt="PerformanceHUD v1.4 horizontal layout with a light background" width="100%"></a>
 
 <details>
 <summary>Watch PerformanceHUD in-game</summary>

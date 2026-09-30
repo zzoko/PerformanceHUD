@@ -30,6 +30,8 @@ CPU temperature sensor mappings and battery temperature sensor references are ad
 https://github.com/exelban/stats
 Source: Modules/CPU/readers.swift, TemperatureReader.setup (accessed 2026-09-21).
 Battery reference: Modules/Battery/readers.swift, getTemperature (accessed 2026-09-24).
+Fan sensor keys and value formats reference: Modules/Sensors/readers.swift, loadFans,
+and SMC/smc.swift, getValue (accessed 2026-09-30).
 The following license applies to those mappings, not to PerformanceHUD as a whole.
 
 MIT License

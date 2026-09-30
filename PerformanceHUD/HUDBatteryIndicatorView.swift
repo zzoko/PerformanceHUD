@@ -57,11 +57,11 @@ final class HUDBatteryIndicatorView: NSView {
         self.percentage = percentage.flatMap { $0.isFinite ? min(100, max(0, $0)) : nil }
         lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
         let description = self.percentage.map { "Battery: \(Int($0.rounded()))%" } ?? "Battery unavailable"
-        toolTip = description + (source.map { " — Source: " + $0.rawValue } ?? "") + (lowPower ? " — Low Power Mode" : "")
+        var accessibleValue = description + (source.map { " — Source: " + $0.rawValue } ?? "") + (lowPower ? " — Low Power Mode" : "")
         if options.temperature, let temperature = self.temperature {
-            toolTip = (toolTip ?? "") + " — Battery temperature: \(Int(temperature.rounded()))°C"
+            accessibleValue += " — Battery temperature: \(Int(temperature.rounded()))°C"
         }
-        setAccessibilityValue(toolTip)
+        setAccessibilityValue(accessibleValue)
         needsDisplay = true
     }
 

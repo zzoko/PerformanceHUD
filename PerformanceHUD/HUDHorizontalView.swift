@@ -18,12 +18,16 @@ final class HUDHorizontalView: NSView {
         var leftAligned = false
         var symbolName: String? = nil
         var symbolVisible = true
+        var barWidth: CGFloat? = nil
+        var barFraction: Double? = nil
+        var sizingFont: NSFont? = nil
     }
 
     let battery = HUDBatteryIndicatorView(frame: .zero)
     private var labels: [String: NSTextField] = [:]
     private var dividers: [NSView] = []
     private var symbols: [String: NSImageView] = [:]
+    private var bars: [String: HUDFanBarView] = [:]
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -43,6 +47,7 @@ final class HUDHorizontalView: NSView {
         let baseline = (height - referenceHeight) / 2 + referenceHeight - reference.firstBaselineOffsetFromTop
         labels.values.forEach { $0.isHidden = true }
         symbols.values.forEach { $0.isHidden = true }
+        bars.values.forEach { $0.isHidden = true }
         dividers.forEach { $0.isHidden = true }
         battery.isHidden = !showsBattery
         battery.applyStyle(scale: scale, background: background)
@@ -77,7 +82,9 @@ final class HUDHorizontalView: NSView {
             for (index, reading) in section.enumerated() {
                 if index > 0 {
                     if reading.startsMetric {
-                        addDivider(compact: true, faint: reading.resourceGroup == previousResource)
+                        let sameFanCategory = reading.metric == .fans && section[index - 1].metric == .fans
+                        addDivider(compact: true, faint: sameFanCategory
+                            || (reading.resourceGroup != nil && reading.resourceGroup == previousResource))
                     } else {
                         let followsLabel = section[index - 1].startsMetric && reading.metric != .fps
                         let labelGap = followsLabel && reading.resourceGroup == .ram && reading.text == "PHY"
@@ -89,6 +96,23 @@ final class HUDHorizontalView: NSView {
                     }
                 }
                 previousResource = reading.resourceGroup
+                if let barWidth = reading.barWidth {
+                    let bar = bars[reading.id] ?? HUDFanBarView()
+                    if bars[reading.id] == nil { bars[reading.id] = bar; addSubview(bar) }
+                    bar.isHidden = false
+                    bar.color = reading.color
+                    bar.fraction = reading.barFraction
+                    bar.setAccessibilityElement(true)
+                    bar.setAccessibilityRole(.levelIndicator)
+                    bar.setAccessibilityLabel(reading.help ?? "Fan speed")
+                    bar.setAccessibilityValue(reading.barFraction.map { NSNumber(value: $0) })
+                    let barHeight = HUDFanBarView.horizontalSize.height * factor
+                    bar.frame = NSRect(x: x, y: baseline + (reading.font.capHeight - barHeight) / 2,
+                                       width: barWidth * factor, height: barHeight)
+                    bar.needsDisplay = true
+                    x += bar.frame.width
+                    continue
+                }
                 if let symbolName = reading.symbolName {
                     let symbol = symbols[reading.id] ?? NSImageView()
                     if symbols[reading.id] == nil { symbols[reading.id] = symbol; addSubview(symbol) }
@@ -96,7 +120,7 @@ final class HUDHorizontalView: NSView {
                     symbol.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: reading.help)?
                         .withSymbolConfiguration(.init(pointSize: reading.font.pointSize, weight: .regular))
                     symbol.contentTintColor = reading.color
-                    symbol.toolTip = reading.help
+                    symbol.setAccessibilityHelp(reading.help)
                     let side = ceil(reading.font.pointSize + 2 * factor)
                     symbol.imageScaling = .scaleProportionallyUpOrDown
                     // SF Symbols include baseline padding. Center their alignment
@@ -123,10 +147,10 @@ final class HUDHorizontalView: NSView {
                 label.stringValue = reading.text
                 label.font = reading.font
                 label.textColor = reading.color
-                label.toolTip = reading.help
+                label.setAccessibilityHelp(reading.help)
                 label.alignment = reading.startsMetric || reading.leftAligned ? .left : .right
                 let sizing = NSTextField(labelWithString: reading.reference)
-                sizing.font = reading.font
+                sizing.font = reading.sizingFont ?? reading.font
                 let width = ceil(max(sizing.intrinsicContentSize.width, label.intrinsicContentSize.width))
                 let labelHeight = ceil(label.intrinsicContentSize.height)
                 if reading.tightLeading && reading.leftAligned, index > 0,

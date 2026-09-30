@@ -21,7 +21,8 @@ enum HUDPreferences {
         var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background",
                     "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
-                    "hud.group.ram.details"]
+                    "hud.group.ram.details", "hud.fan.usage", "hud.fan.mode",
+                    "hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted"]
         keys += HUDMetric.allCases.map { metricKey($0) }
         for group in HUDResourceGroup.allCases {
             keys += ["enabled", "temperature", "power", "highlighted", "usageMode"].map {
@@ -113,8 +114,8 @@ enum HUDPreferences {
             // Uncomment to force a background-free HUD without adding Off to the menu.
             // return .off
             let saved = HUDBackground(rawValue: defaults.string(forKey: "hud.background") ?? "")
-            // Migrate a previously saved Off choice while that option is hidden.
-            guard let saved, HUDBackground.menuOptions.contains(saved) else { return .transparent }
+            // Follow macOS for fresh/reset settings and migrate the hidden Off choice.
+            guard let saved, saved == .system || HUDBackground.menuOptions.contains(saved) else { return .system }
             return saved
         }
         set {
@@ -193,6 +194,34 @@ enum HUDPreferences {
         set {
             defaults.set(newValue.enabled, forKey: "hud.package.power")
             defaults.set(newValue.highlighted, forKey: "hud.package.highlighted")
+        }
+    }
+
+    // Only confirmed fanless hardware changes the initial category default.
+    // Persist it to avoid showing the empty category again at the next launch,
+    // but never overwrite a user's saved choice (including manually enabling it).
+    @discardableResult
+    static func applyFanDetectionDefault(_ sample: FanSample, in store: UserDefaults = .standard) -> Bool {
+        let key = metricKey(.fans)
+        guard sample.status == .noFans, store.object(forKey: key) == nil else { return false }
+        store.set(false, forKey: key)
+        return true
+    }
+
+    static var fanOptions: HUDFanOptions {
+        get { HUDFanOptions(enabled: isMetricEnabled(.fans),
+            usage: defaults.object(forKey: "hud.fan.usage") as? Bool ?? true,
+            mode: defaults.string(forKey: "hud.fan.mode").flatMap(HUDFanMode.init(rawValue:)) ?? .both,
+            average: defaults.object(forKey: "hud.fan.average") as? Bool ?? true,
+            averageMode: defaults.string(forKey: "hud.fan.averageMode").flatMap(HUDFanAverageMode.init(rawValue:)) ?? .horizontal,
+            rpmHighlighted: defaults.bool(forKey: "hud.fan.rpmHighlighted")) }
+        set {
+            setMetricEnabled(.fans, enabled: newValue.enabled)
+            defaults.set(newValue.usage, forKey: "hud.fan.usage")
+            defaults.set(newValue.mode.rawValue, forKey: "hud.fan.mode")
+            defaults.set(newValue.average, forKey: "hud.fan.average")
+            defaults.set(newValue.averageMode.rawValue, forKey: "hud.fan.averageMode")
+            defaults.set(newValue.rpmHighlighted, forKey: "hud.fan.rpmHighlighted")
         }
     }
 
@@ -286,6 +315,9 @@ enum HUDPreferences {
 
         case .ramTotal:
             return "hud.metric.ramTotal"
+
+        case .fans:
+            return "hud.metric.fans"
 
         case .battery:
             return "hud.metric.battery"

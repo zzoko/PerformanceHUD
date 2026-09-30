@@ -153,7 +153,7 @@ enum HUDStyle {
     }
 
     static func titleFont(for metric: HUDMetric, scale: HUDScale) -> NSFont {
-        if [.gpu, .gpuTotal, .cpu, .cpuTotal, .aneTotal, .ram, .ramTotal, .battery].contains(metric) {
+        if [.gpu, .gpuTotal, .cpu, .cpuTotal, .aneTotal, .ram, .ramTotal, .fans, .battery].contains(metric) {
             return NSFont.systemFont(ofSize: baseFontSize * CGFloat(scale.rawValue), weight: .medium)
         }
         return valueFont(for: metric, scale: scale)

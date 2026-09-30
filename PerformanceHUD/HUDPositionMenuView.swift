@@ -15,12 +15,10 @@ final class HUDPositionMenuView: NSView {
         button.bezelStyle = .rounded
         button.font = .menuFont(ofSize: 0)
         button.setAccessibilityLabel("Reset HUD position")
-        button.toolTip = "Hold Control + Option + Command and drag the HUD to move it. Release all three keys after dragging to prevent automatic snapping to the grid. Reset restores its default position."
         let options = NSButton(title: "Options", target: self, action: #selector(optionsClicked(_:)))
         options.bezelStyle = .rounded
         options.font = .menuFont(ofSize: 0)
         options.setAccessibilityLabel("Reset HUD options")
-        options.toolTip = "Restore the default HUD options and appearance. Keeps your position and permissions. Asks for confirmation."
         let actions = NSStackView(views: [button, options])
         actions.orientation = .horizontal
         actions.spacing = 6

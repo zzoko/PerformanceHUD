@@ -2,6 +2,22 @@
 
 [← Back to README](../README.md)
 
+### v1.4
+
+- Added **Follow system** beneath the Appearance choices, enabled by default for fresh settings and Options reset. It automatically uses the existing Light or Dark HUD background to match macOS, including changes while the app is running. Existing manual choices are preserved; Clear remains a manual choice.
+- Added a **FAN** category after MEM in both layouts, with **Total / RPM / Both** choices and Both selected by default. Total shows a speed bar relative to each fan’s reported maximum, without percentage text; RPM shows numeric speed.
+- Added **Average** with **Vertical / Horizontal / Both** choices, enabled for Horizontal by default. With two or more fans, **FAN AVG** shows the mean RPM and the average of each fan’s speed relative to its own maximum. With one fan, Average is unchecked and unavailable, and the HUD shows **FAN 1**.
+- Added optional **RPM highlighting** through the thin line beneath RPM and Both. It starts off, applies to individual and averaged readings, and remembers the choice while RPM is hidden.
+- Adapted fan rows to both layouts. Vertical uses a longer, right-aligned bar for Total alone and a shorter bar alongside RPM; Horizontal uses compact bars and faint dividers between fans. FAN labels match other category labels. Fan rows fit the existing vertical width, and live values and status changes keep stable dimensions to avoid unnecessary background-capture restarts.
+- Added read-only fan detection through AppleSMC, without requiring the power helper or changing cooling settings. On fanless Macs, **FAN defaults to off** for fresh settings and Options reset; it can still be enabled manually to show **No fans detected**, with Usage and Average unchecked and disabled. Manual category choices are preserved, and read failures do not turn FAN off. Missing readings remain distinct from a valid 0 RPM; averages require valid readings from all fans. Live RPM validation on a Mac with fans is still pending.
+- Added a scrollable, resizable **Controls Guide**, ordered to match the menu, covering reading controls, highlighting, layouts, memory-pressure symbols, fan controls and availability, Follow system, shortcuts, and the Power Helper. Includes a checkbox illustration showing normal and highlighted states.
+- Moved the app version into the guide header and removed the version row from the menu. Updated the app version to **1.4**.
+- Removed repeated explanatory tooltips now covered by the guide, while keeping current error and troubleshooting messages.
+- Shortened **Unified Memory** to **MEM** in the menu and guide headings; the guide still explains the full name.
+- Widened the menu’s shared label column so checkbox groups and the power connector stay clear of category names, even when labels are shortened.
+- Made Unified Memory **Details** and **Usage** independent in both layouts. **Total / App / Both** selects the source for either, so details remain available with usage hidden. Horizontal pressure indicators keep their position beside SWP without resizing the HUD when pressure changes.
+- Fixed the **Details** checkbox appearance when Unified Memory is disabled: its saved checkmark and emphasis remain visible but dimmed, matching the other controls.
+
 ### v1.3
 
 - Moved **Size** above **Alignment** in the menu.

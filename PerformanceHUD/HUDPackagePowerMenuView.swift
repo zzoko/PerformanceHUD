@@ -38,8 +38,7 @@ final class HUDPackagePowerMenuView: NSView {
     func setState(options: HUDPackagePowerOptions, helper: PowerHelperAvailability) {
         self.options = options
         helperAvailability = helper
-        let help = "Combined CPU, GPU and Neural Engine watts, independent of their Power checkboxes; not whole-Mac power. Use the checkbox to show or hide; the attached strip toggles bold values independently."
-        checkbox.toolTip = (helper.explanation.map { $0 + " " } ?? "") + help
+        checkbox.toolTip = helper.explanation
         checkbox.setAccessibilityHelp(checkbox.toolTip)
         refresh()
     }

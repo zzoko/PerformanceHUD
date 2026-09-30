@@ -33,7 +33,13 @@ final class HUDWindowController {
         }
     }()
     private let backgroundContentView = NSView()
-    private var hudBackground = HUDPreferences.background
+    private var backgroundSelection = HUDPreferences.background
+    private var hudBackground = HUDPreferences.background.resolved(isDark: HUDWindowController.systemIsDark)
+    private var appearanceObservation: NSKeyValueObservation?
+
+    private static var systemIsDark: Bool {
+        NSApplication.shared.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    }
 
     // MARK: - Metric Views
 
@@ -49,6 +55,7 @@ final class HUDWindowController {
     private let metricGroups: [[HUDMetric]] = [
         [.fps, .fpsGraph],
         [.gpu, .gpuTotal, .cpu, .cpuTotal, .aneTotal, .ram, .ramTotal],
+        [.fans],
         [.battery],
         [.deviceInfo]
     ]
@@ -57,6 +64,7 @@ final class HUDWindowController {
         [.fps, .fpsGraph],
         [.gpu, .gpuTotal, .cpu, .cpuTotal, .aneTotal],
         [.ram, .ramTotal],
+        [.fans],
         [.battery],
         [.deviceInfo]
     ]
@@ -74,6 +82,9 @@ final class HUDWindowController {
     private var ramDetailGroupSpacingConstraints: [HUDMetric: NSLayoutConstraint] = [:]
     private let fpsGraphView = HUDFPSGraphView()
     private let horizontalView = HUDHorizontalView(frame: .zero)
+    private let fanView = HUDFanView(frame: .zero)
+    private var fanOptions = HUDPreferences.fanOptions
+    private var fanSample = FanSample.checking
     private var alignment = HUDPreferences.alignment
     private var ramDetailTitleLabels: [HUDMetric: NSTextField] = [:]
     private var ramSwapTitleLabel: NSTextField?
@@ -216,6 +227,14 @@ final class HUDWindowController {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.restorePosition() }
+        }
+        // Observe the app, not the HUD container whose appearance we override.
+        appearanceObservation = NSApplication.shared.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor [weak self] in
+                guard let self, backgroundSelection == .system,
+                      hudBackground != HUDBackground.system.resolved(isDark: Self.systemIsDark) else { return }
+                setBackground(.system)
+            }
         }
     }
 
@@ -395,7 +414,7 @@ final class HUDWindowController {
                 metricRows[metric] = row
                 stackView.addArrangedSubview(row)
                 if metric == .aneTotal { createPackageRow() }
-                if metric == .fpsGraph || metric == .battery {
+                if metric == .fpsGraph || metric == .battery || metric == .fans {
                     NSLayoutConstraint.activate([
                         row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor),
                         row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor)
@@ -435,7 +454,7 @@ final class HUDWindowController {
             let groupIsVisible = metrics.contains { enabledMetrics.contains($0) }
                 || (metrics.contains(.aneTotal) && showsPackagePower)
             let showDivider = groupIsVisible
-                && (lastVisibleGroup != nil || metrics == [.deviceInfo] || metrics == [.ram, .ramTotal])
+                && (lastVisibleGroup != nil || metrics == [.deviceInfo] || metrics == [.ram, .ramTotal] || metrics == [.fans])
             let height = HUDStyle.dividerHeight(scale: hudScale, afterFPS: lastVisibleGroup == 0)
             if let divider = groupDividers[index] {
                 divider.isHidden = !showDivider
@@ -451,8 +470,9 @@ final class HUDWindowController {
             if groupIsVisible { lastVisibleGroup = index }
         }
 
-        let showBottomDivider = hudBackground == .off
-            && hasVisibleContent && visibleDividerCount == 0
+        let fansAreLast = lastVisibleGroup.map { verticalMetricGroups[$0] == [.fans] } ?? false
+        let showBottomDivider = fansAreLast || (hudBackground == .off
+            && hasVisibleContent && visibleDividerCount == 0)
         bottomDivider?.isHidden = !showBottomDivider
         let bottomHeight = HUDStyle.dividerHeight(scale: hudScale, afterFPS: lastVisibleGroup == 0)
         bottomDividerHeightConstraint?.constant = bottomHeight
@@ -475,6 +495,13 @@ final class HUDWindowController {
             rowHeightConstraints[.fpsGraph] = height
             height.isActive = true
             return fpsGraphView
+        }
+        if metric == .fans {
+            fanView.translatesAutoresizingMaskIntoConstraints = false
+            let height = fanView.heightAnchor.constraint(equalToConstant: fanView.height(scale: hudScale))
+            rowHeightConstraints[.fans] = height
+            height.isActive = true
+            return fanView
         }
         if metric == .deviceInfo { return createDeviceInfoRow() }
         if metric == .battery {
@@ -631,9 +658,6 @@ final class HUDWindowController {
             temperature.alignment = .right
             temperature.isHidden = true
             temperature.translatesAutoresizingMaskIntoConstraints = false
-            temperature.toolTip = metric == .cpuTotal
-                ? "Average of identified CPU temperature sensors, in °C. Sensor coverage varies by model."
-                : "Average of available GPU temperature sensors, in °C."
             row.addSubview(temperature)
             let trailing = temperature.trailingAnchor.constraint(equalTo: row.leadingAnchor,
                                                                  constant: HUDStyle.valueColumnRight(scale: hudScale))
@@ -654,7 +678,6 @@ final class HUDWindowController {
             power.alignment = .right
             power.isHidden = true
             power.translatesAutoresizingMaskIntoConstraints = false
-            power.toolTip = "Estimated total \(metric.hudTitle) power in watts, averaged over the sampling interval."
             row.addSubview(power)
             let powerTrailing = power.trailingAnchor.constraint(equalTo: row.leadingAnchor,
                 constant: HUDStyle.valueColumnRight(scale: hudScale))
@@ -701,8 +724,6 @@ final class HUDWindowController {
                     label.translatesAutoresizingMaskIntoConstraints = false
                     row.addSubview(label)
                 }
-                physicalLabel.toolTip = "Physical RAM in use: app, wired and compressed memory."
-                swapTitle.toolTip = "Disk space currently used for swap."
                 let bottom = pressureValue.bottomAnchor.constraint(equalTo: row.bottomAnchor)
                 ramDetailBottomConstraints[metric] = bottom
                 NSLayoutConstraint.activate([
@@ -761,7 +782,6 @@ final class HUDWindowController {
             label.font = HUDStyle.ramDetailFont(scale: hudScale)
             label.textColor = HUDStyle.titleColor(for: .cpuTotal, background: textBackground)
             label.translatesAutoresizingMaskIntoConstraints = false
-            label.toolTip = "Combined CPU, GPU and Neural Engine power estimate in watts. Excludes the display and other whole-Mac components."
             row.addSubview(label)
         }
         stackView.addArrangedSubview(row)
@@ -848,6 +868,20 @@ final class HUDWindowController {
 
     // MARK: - Metric Visibility
 
+    func setFanOptions(_ options: HUDFanOptions) {
+        fanOptions = options
+        setMetricEnabled(.fans, enabled: options.enabled && alignment.allows(.fans))
+    }
+
+    func updateFans(_ sample: FanSample) {
+        let previousRows = fanView.rowCount
+        fanSample = sample
+        fanView.update(sample: sample, options: fanOptions, scale: hudScale, background: textBackground)
+        // RPM changes only redraw the existing view; do not restart capture.
+        if alignment == .horizontal { refreshHorizontalReadings() }
+        else if fanView.rowCount != previousRows { updateLayout() }
+    }
+
     func setPackagePowerOptions(_ options: HUDPackagePowerOptions) {
         packageOptions = options
         updateLayout()
@@ -859,7 +893,14 @@ final class HUDWindowController {
         if let appMetric = group.appMetric {
             highlightedReadings[appMetric] = options.highlighted.contains(.focusedApp) ? [.totalUse] : []
         }
-        if group == .ram { showsRAMDetails = options.showsDetails }
+        if group == .ram {
+            showsRAMDetails = options.showsDetails
+            for metric in [HUDMetric.ram, .ramTotal] {
+                if options.usageVisible { hiddenUtilizationMetrics.remove(metric) }
+                else { hiddenUtilizationMetrics.insert(metric) }
+                valueLabels[metric]?.isHidden = !options.usageVisible
+            }
+        }
         if let appMetric = group.appMetric { enabledMetrics.remove(appMetric) }
         enabledMetrics.remove(group.totalMetric)
         enabledMetrics.formUnion(options.visibleMetrics(for: group))
@@ -1048,7 +1089,8 @@ final class HUDWindowController {
     // MARK: - Background
 
     func setBackground(_ background: HUDBackground) {
-        hudBackground = background
+        backgroundSelection = background
+        hudBackground = background.resolved(isDark: Self.systemIsDark)
         applyBackgroundAppearance()
         updateMetricColors()
         updateLayout()
@@ -1061,20 +1103,20 @@ final class HUDWindowController {
         backgroundView.isHidden = hudBackground == .off
         switch hudBackground {
         case .light: container.appearance = NSAppearance(named: .aqua)
-        case .transparent, .dark, .off: container.appearance = NSAppearance(named: .darkAqua)
+        case .transparent, .dark, .off, .system: container.appearance = NSAppearance(named: .darkAqua)
         }
         if let customGlass {
             switch hudBackground {
             case .transparent: customGlass.style = .transparent
             case .light: customGlass.style = .light
-            case .dark, .off: customGlass.style = .dark
+            case .dark, .off, .system: customGlass.style = .dark
             }
         } else {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             switch hudBackground {
             case .light: backgroundView.layer?.borderColor = NSColor.black.withAlphaComponent(0.12).cgColor
-            case .transparent, .dark: backgroundView.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
+            case .transparent, .dark, .system: backgroundView.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
             case .off: backgroundView.layer?.borderColor = NSColor.clear.cgColor
             }
             backgroundView.layer?.borderWidth = 0.5
@@ -1126,6 +1168,8 @@ final class HUDWindowController {
     }
 
     func shutdown() {
+        appearanceObservation?.invalidate()
+        appearanceObservation = nil
         fpsGraphView.reset()
         panel.stopModifierTracking()
         stopCapture()
@@ -1184,6 +1228,7 @@ final class HUDWindowController {
     }
 
     private func updateMetricColors() {
+        fanView.update(sample: fanSample, options: fanOptions, scale: hudScale, background: textBackground)
         defer { updateReadingAppearance(); refreshHorizontalReadings() }
         fpsGraphView.applyStyle(scale: hudScale, background: textBackground)
         batteryIndicator.applyStyle(scale: hudScale, background: textBackground)
@@ -1255,6 +1300,10 @@ final class HUDWindowController {
         for metrics in metricGroups {
             var readings: [HUDHorizontalView.Reading] = []
             for metric in metrics {
+                if metric == .fans, enabledMetrics.contains(.fans) {
+                    readings.append(contentsOf: horizontalFanReadings())
+                    continue
+                }
                 // Insert Package at ANE's position even when ANE itself is hidden.
                 defer {
                     if metric == .aneTotal && showsPackagePower {
@@ -1328,7 +1377,44 @@ final class HUDWindowController {
         if container.frame.size != total { resizeHUD(width: total.width, height: total.height) }
     }
 
+    private func horizontalFanReadings() -> [HUDHorizontalView.Reading] {
+        let font = HUDStyle.readingFont(scale: hudScale, highlighted: false)
+        let color = HUDStyle.titleColor(for: .fans, background: textBackground)
+        let fans = fanSample.displayReadings(averaged: fanOptions.averages(in: .horizontal))
+        guard !fans.isEmpty else {
+            let message = fanSample.message ?? "Fan readings unavailable"
+            // Reserve the longest status so detection/retry messages cannot
+            // resize the HUD and restart its background capture.
+            return [.init(id: "fan.status", text: message,
+                          reference: "Fan readings unavailable", font: font, color: color,
+                          help: nil, startsMetric: true, metric: .fans)]
+        }
+        return fans.flatMap { fan -> [HUDHorizontalView.Reading] in
+            var values: [HUDHorizontalView.Reading] = [
+                .init(id: "fan.\(fan.id).title", text: fan.title, reference: fan.title,
+                      font: HUDStyle.titleFont(for: .fans, scale: hudScale),
+                      color: HUDStyle.primaryTitleColor(for: .fans, background: textBackground),
+                      help: nil, startsMetric: true, metric: .fans)
+            ]
+            if fanOptions.usage {
+                if fanOptions.mode.showsBar {
+                    values.append(.init(id: "fan.\(fan.id).bar", text: "", reference: "",
+                        font: font, color: color, help: "\(fan.title) speed relative to maximum",
+                        startsMetric: false, metric: .fans, barWidth: HUDFanBarView.horizontalSize.width, barFraction: fan.fraction))
+                }
+                if fanOptions.mode.showsRPM {
+                    values.append(.init(id: "fan.\(fan.id).rpm", text: fan.rpmText, reference: "99999 RPM",
+                        font: HUDStyle.readingFont(scale: hudScale, highlighted: fanOptions.rpmHighlighted),
+                        color: color, help: nil, startsMetric: false, metric: .fans,
+                        sizingFont: HUDStyle.readingFont(scale: hudScale, highlighted: true)))
+                }
+            }
+            return values
+        }
+    }
+
     private func metricRowHeight(_ metric: HUDMetric, scale: HUDScale) -> CGFloat {
+        if metric == .fans { return fanView.height(scale: scale) }
         if !showsRAMDetails && (metric == .ram || metric == .ramTotal) {
             return HUDStyle.rowHeight(scale: scale)
         }
@@ -1348,6 +1434,8 @@ final class HUDWindowController {
     private func updateLayout() {
         updateReadingAppearance()
         updateRAMDetailsVisibility()
+        fanView.update(sample: fanSample, options: fanOptions, scale: hudScale, background: textBackground)
+        rowHeightConstraints[.fans]?.constant = fanView.height(scale: hudScale)
         stackView.isHidden = alignment == .horizontal
         horizontalView.isHidden = alignment != .horizontal
         if alignment == .horizontal {

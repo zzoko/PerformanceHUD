@@ -11,6 +11,8 @@ final class AppDelegate:
     private var hudWindow:
         HUDWindowController?
 
+    private var controlsGuide: HUDControlsGuide?
+
     // MARK: - FPS
 
     private var fpsMonitor:
@@ -87,6 +89,8 @@ final class AppDelegate:
 
     private var enabledMetrics = HUDPreferences.visibleMetrics
     private let temperatureMonitor = TemperatureMonitor()
+    private let fanMonitor = FanMonitor()
+    private var fanMenuView: HUDFanMenuView?
     private let powerMonitor = PowerMonitor()
     private var packagePowerMenuView: HUDPackagePowerMenuView?
     private var resourceMenuViews: [HUDResourceGroup: HUDResourceMenuView] = [:]
@@ -130,6 +134,20 @@ final class AppDelegate:
         setupTotalRAMUsageMonitor()
         setupMemoryPressureMonitor()
 
+        // Fans (read-only; independent of the power helper).
+        fanMonitor.onUpdate = { [weak self] sample in
+            guard let self else { return }
+            let defaultChanged = HUDPreferences.applyFanDetectionDefault(sample)
+            let options = HUDPreferences.fanOptions
+            if defaultChanged {
+                enabledMetrics = HUDPreferences.visibleMetrics
+                hudWindow?.setFanOptions(options)
+            }
+            hudWindow?.updateFans(sample)
+            fanMenuView?.update(sample: sample, options: options)
+            if defaultChanged { reconcileMonitoring() }
+        }
+
         // Battery
         setupBatteryMonitor()
 
@@ -162,6 +180,7 @@ final class AppDelegate:
             hud.setResourceOptions(HUDPreferences.resourceOptions(for: group), for: group)
         }
         hud.setBatteryOptions(HUDPreferences.batteryOptions)
+        hud.setFanOptions(HUDPreferences.fanOptions)
 
         // Restore metric visibility.
         for metric in HUDMetric.allCases {
@@ -582,14 +601,6 @@ final class AppDelegate:
             item.tag = metric.rawValue
             item.state = enabledMetrics.contains(metric) ? .on : .off
             item.isEnabled = HUDPreferences.alignment.allows(metric)
-            if !HUDPreferences.alignment.allows(metric) {
-                item.toolTip = "Available in Vertical alignment. Your selection is restored when switching back."
-            } else if metric == .fpsGraph {
-                item.toolTip = "Shows FPS trends over the last 60 seconds, using approximately one reading per second."
-            }
-            if metric == .deviceInfo {
-                item.toolTip = "Chip name and macOS version." + (HUDPreferences.alignment.allows(metric) ? "" : " Available in Vertical alignment; your selection is remembered.")
-            }
             menu.addItem(item)
             metricMenuItems[metric] = item
             addMetricPadding()
@@ -638,6 +649,19 @@ final class AppDelegate:
                 menu.addItem(item)
             }
         }
+        let fanView = HUDFanMenuView(options: HUDPreferences.fanOptions,
+                                     sample: fanMonitor.sample)
+        fanView.onChange = { [weak self] options in
+            guard let self else { return }
+            HUDPreferences.fanOptions = options
+            enabledMetrics = HUDPreferences.visibleMetrics
+            hudWindow?.setFanOptions(options)
+            reconcileMonitoring()
+        }
+        fanMenuView = fanView
+        let fanItem = NSMenuItem()
+        fanItem.view = fanView
+        menu.addItem(fanItem)
         let batteryView = HUDResourceMenuView(batteryOptions: HUDPreferences.batteryOptions)
         batteryView.onBatteryChange = { [weak self] options in
             guard let self else { return }
@@ -674,6 +698,9 @@ final class AppDelegate:
         powerHelperApprovalItem = helperApproval
         powerHelperRemoveItem = helperRemove
         menu.addItem(helperItem)
+        let guideItem = NSMenuItem(title: "Controls Guide…", action: #selector(showControlsGuide), keyEquivalent: "")
+        guideItem.target = self
+        menu.addItem(guideItem)
         menu.addItem(.separator())
         menu.delegate = self
         helperMenu.delegate = self
@@ -699,13 +726,6 @@ final class AppDelegate:
             closeItem
         )
 
-        menu.addItem(.separator())
-
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3"
-        let versionItem = NSMenuItem(title: "App version \(version)", action: nil, keyEquivalent: "")
-        versionItem.isEnabled = false
-        menu.addItem(versionItem)
-
         statusItem.menu =
             menu
 
@@ -713,7 +733,18 @@ final class AppDelegate:
             statusItem
     }
 
+    @objc private func showControlsGuide() {
+        statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if controlsGuide == nil { controlsGuide = HUDControlsGuide() }
+            controlsGuide?.present()
+        }
+    }
+
     func menuWillOpen(_ menu: NSMenu) {
+        let fan = HUDPreferences.fanOptions
+        fanMonitor.configure(readings: hudEnabled && fan.enabled && fan.usage)
         powerMonitor.helper.refreshStatus()
         updatePowerHelperMenu()
     }
@@ -865,6 +896,7 @@ final class AppDelegate:
 
     private func resetHUDOptions() {
         HUDPreferences.resetOptions()
+        HUDPreferences.applyFanDetectionDefault(fanMonitor.sample)
         // Restore display defaults without bypassing a denied or failed helper.
         if powerMonitor.helper.shouldTurnPowerOff {
             for group in HUDResourceGroup.allCases where group.supportsPower {
@@ -887,6 +919,7 @@ final class AppDelegate:
             hudWindow?.setResourceOptions(HUDPreferences.resourceOptions(for: group), for: group)
         }
         hudWindow?.setBatteryOptions(HUDPreferences.batteryOptions)
+        hudWindow?.setFanOptions(HUDPreferences.fanOptions)
         hudWindow?.setPackagePowerOptions(HUDPreferences.packagePowerOptions)
         hudWindow?.setAlignment(HUDPreferences.alignment)
         hudWindow?.setHUDScale(hudScale)
@@ -917,9 +950,6 @@ final class AppDelegate:
             guard let item = metricMenuItems[metric] else { continue }
             item.isEnabled = alignment.allows(metric)
             item.state = enabledMetrics.contains(metric) ? .on : .off
-            item.toolTip = !alignment.allows(metric)
-                ? (metric == .deviceInfo ? "Chip name and macOS version. " : "") + "Available in Vertical alignment. Your selection is restored when switching back."
-                : metric == .fpsGraph ? "Shows FPS trends over the last 60 seconds, using approximately one reading per second." : "Chip name and macOS version."
         }
         reconcileMonitoring()
     }
@@ -1109,10 +1139,13 @@ final class AppDelegate:
     // current session, so changing an unrelated toggle does not reset baselines.
     private func reconcileMonitoring() {
         var metrics = hudEnabled ? enabledMetrics : []
-        // A temperature-only row is visible without collecting its utilization counter.
-        for group in HUDResourceGroup.allCases where !HUDPreferences.resourceOptions(for: group).totalUse {
+        // CPU/GPU rows can stay visible without utilization. Memory sampling also
+        // supplies Details, so it remains active for a Details-only row.
+        for group in HUDResourceGroup.allCases where group != .ram && !HUDPreferences.resourceOptions(for: group).totalUse {
             metrics.remove(group.totalMetric)
         }
+        let fan = HUDPreferences.fanOptions
+        fanMonitor.configure(readings: hudEnabled && fan.enabled && fan.usage)
         let cpu = HUDPreferences.resourceOptions(for: .cpu)
         let gpu = HUDPreferences.resourceOptions(for: .gpu)
         let resources = Dictionary(uniqueKeysWithValues: HUDResourceGroup.allCases.map {
@@ -1157,6 +1190,7 @@ final class AppDelegate:
     ) {
 
         temperatureMonitor.stop()
+        fanMonitor.stop()
         powerMonitor.stop()
         hudWindow?.shutdown()
         toggleShortcut.stop()

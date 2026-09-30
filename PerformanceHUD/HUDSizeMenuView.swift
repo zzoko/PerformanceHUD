@@ -27,7 +27,6 @@ final class HUDSizeMenuView: NSView {
         slider.isContinuous = true
         slider.target = self
         slider.action = #selector(scaleChanged(_:))
-        slider.toolTip = "Adjust HUD size from 0.75× to 1.25× in 0.05× steps. Default: 1×."
         slider.setAccessibilityLabel("HUD size")
 
         valueLabel.font = .monospacedDigitSystemFont(ofSize: NSFont.menuFont(ofSize: 0).pointSize, weight: .regular)

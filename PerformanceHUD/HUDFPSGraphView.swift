@@ -92,7 +92,6 @@ final class HUDFPSGraphView: NSView {
 
     init() {
         super.init(frame: .zero)
-        toolTip = "FPS history over the last 60 seconds, using approximately one reading per second. Not a frame-time graph."
         setAccessibilityElement(true)
         setAccessibilityLabel("FPS history, last 60 seconds")
     }

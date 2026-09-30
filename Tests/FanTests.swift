@@ -1,0 +1,272 @@
+import AppKit
+
+@main struct FanTests {
+    static func check(_ value: @autoclosure () -> Bool, _ message: String) {
+        precondition(value(), message)
+    }
+    @MainActor static func member<T>(_ object: Any, _ name: String) -> T {
+        Mirror(reflecting: object).children.first { $0.label == name }!.value as! T
+    }
+    @MainActor static func main() {
+        check(FanDecoder.number(type: "fpe2", bytes: [0x2a, 0x80]) == 2720, "Fixed-point RPM format")
+        check(FanDecoder.number(type: "flt ", bytes: [0, 0, 0x2a, 0x45]) == 2720, "Apple silicon float RPM format")
+        check(FanDecoder.number(type: "ui8 ", bytes: [4]) == 4, "Fan count")
+        check(FanDecoder.number(type: "ui16", bytes: [0x0a, 0xa0]) == 2720, "Big-endian integer format")
+        check(FanDecoder.number(type: "ui32", bytes: [0, 0, 9, 126]) == 2430, "Key count")
+        check(FanDecoder.number(type: "flt ", bytes: [0, 0, 0, 0]) == 0, "Zero RPM is valid")
+        for bytes: [UInt8] in [[0, 0, 0x80, 0x7f], [0, 0, 0xc0, 0x7f], [0, 0, 0x80, 0xbf], [0]] {
+            check(FanDecoder.number(type: "flt ", bytes: bytes) == nil, "Reject nonfinite, negative or truncated samples")
+        }
+        check(FanDecoder.number(type: "bad ", bytes: [0, 0]) == nil, "Unsupported format")
+        for value in [Double.nan, Double.infinity, -1, 0.5, 17] {
+            check(FanDecoder.count(value) == nil, "Bound malformed counts")
+        }
+        check(FanDecoder.count(0) == 0 && FanDecoder.count(4) == 4, "No fans and four fans")
+        check(FanDecoder.identifiers(in: ["F2Ac", "F0Ac", "F2Ac", "FNum", "F0Mx", "TEMP", "FqAc"]) == [0, 2], "Discover and deduplicate actual fan keys")
+        check(FanDecoder.identifiers(in: ["TC0P", "TB1T"]).isEmpty, "A successful key list with no fans")
+        check(FanDecoder.rpm(-1) == nil && FanDecoder.rpm(100_000) == nil, "RPM plausibility bounds")
+        check(FanReading(id: 0, rpm: 3000, maximumRPM: 6000).fraction == 0.5, "Bar reflects actual/max RPM")
+        check(FanReading(id: 0, rpm: 0, maximumRPM: 6000).fraction == 0, "Stopped fan has empty bar")
+        check(FanReading(id: 0, rpm: 7000, maximumRPM: 6000).fraction == 1, "Bar never overflows")
+        check(FanReading(id: 0, rpm: nil, maximumRPM: 6000).fraction == nil, "Missing RPM is unavailable")
+        check(FanReading(id: 0, rpm: 3000, maximumRPM: 0).fraction == nil, "No invented maximum")
+        let two = FanSample(status: .ready, fans: [FanReading(id: 0, rpm: 2720, maximumRPM: 6000), FanReading(id: 1, rpm: 2640, maximumRPM: 6000)])
+        let failed = FanSample.unavailable.preservingTopology(from: two)
+        check(failed.fans.count == 2 && failed.fans.allSatisfy { $0.rpm == nil }, "Failures retain rows but clear stale RPM")
+        check(FanSample.noFans.preservingTopology(from: two).fans.isEmpty, "Confirmed no-fan result is distinct from failure")
+
+        _ = NSApplication.shared
+        UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.alignment": "vertical"], forName: UserDefaults.argumentDomain)
+        let menu = HUDFanMenuView(options: .init(), sample: .noFans)
+        let usage: HUDReadingCheckbox = member(menu, "usage")
+        let master: NSButton = member(menu, "master")
+        let mode: NSSegmentedControl = member(menu, "mode")
+        let average: HUDReadingCheckbox = member(menu, "average")
+        check(master.isEnabled && !usage.isEnabled && usage.state == .off, "No fans disables only subordinate controls")
+        check(!average.isEnabled && average.state == .off, "No fans also dims and unchecks Average")
+        check(usage.toolTip == "No fans detected", "No-fan message")
+        check((0..<mode.segmentCount).map { mode.label(forSegment: $0)! } == ["Total", "RPM", "Both"] && mode.selectedSegment == 2, "Fan mode labels and Both default")
+        menu.update(sample: two)
+        check(usage.isEnabled && usage.state == .on && mode.isEnabled, "Saved usage returns on detection")
+        let averageMode: NSSegmentedControl = member(menu, "averageMode")
+        check(average.isEnabled && average.state == .on && averageMode.selectedSegment == 1, "Saved average returns on detection with Horizontal default")
+        let single = FanSample(status: .ready, fans: [FanReading(id: 0, rpm: 0, maximumRPM: 6000)])
+        menu.update(sample: single)
+        check(usage.isEnabled && mode.isEnabled, "Single fan retains normal reading controls")
+        check(!average.isEnabled && average.state == .off && !averageMode.isEnabled, "Single fan cannot enable average or its layout selector")
+        check(single.displayReadings(averaged: true).map(\.title) == ["FAN 1"], "Saved averaging cannot rename a single fan to FAN AVG")
+        menu.update(sample: two)
+        check(average.isEnabled && average.state == .on && averageMode.isEnabled, "Average preference returns for multiple fans")
+        let rpmHighlight: NSButton = member(menu, "rpmHighlight")
+        func selectFanMode(_ index: Int) {
+            mode.selectedSegment = index
+            mode.sendAction(mode.action, to: mode.target)
+        }
+        var lastFanOptions: HUDFanOptions?
+        menu.onChange = { lastFanOptions = $0 }
+        check(rpmHighlight.state == .off && rpmHighlight.isEnabled, "RPM emphasis defaults off and is available in Both")
+        rpmHighlight.performClick(nil)
+        check(lastFanOptions?.rpmHighlighted == true && lastFanOptions?.mode == .both, "Emphasis click preserves Both mode")
+        selectFanMode(0)
+        check(lastFanOptions?.mode == .bar && !rpmHighlight.isEnabled, "Total disables RPM emphasis")
+        selectFanMode(1)
+        check(lastFanOptions?.mode == .rpm && rpmHighlight.isEnabled && rpmHighlight.state == .on, "RPM restores saved emphasis")
+        rpmHighlight.performClick(nil)
+        check(lastFanOptions?.rpmHighlighted == false && lastFanOptions?.mode == .rpm, "Turning emphasis off does not change mode")
+        selectFanMode(2)
+        check(HUDAlignment.horizontal.allows(.fans), "Fans available horizontally")
+        check(HUDFanOptions().averages(in: .horizontal) && !HUDFanOptions().averages(in: .vertical), "Default affects Horizontal only")
+        let mixed = FanSample(status: .ready, fans: [FanReading(id: 0, rpm: 1000, maximumRPM: 2000), FanReading(id: 1, rpm: 3000, maximumRPM: 10000)])
+        let avg = mixed.displayReadings(averaged: true)[0]
+        check(avg.title == "FAN AVG" && avg.rpm == 2000 && abs(avg.fraction! - 0.4) < 0.0001, "Mean of normalized speeds, not ratio of means")
+        let missing = FanSample(status: .ready, fans: [mixed.fans[0], FanReading(id: 1, rpm: nil, maximumRPM: 10000)])
+        check(missing.displayReadings(averaged: true)[0].rpm == nil && missing.displayReadings(averaged: true)[0].fraction == nil, "No partial averages")
+        let noMaximum = FanSample(status: .ready, fans: [mixed.fans[0], FanReading(id: 1, rpm: 3000, maximumRPM: nil)])
+        check(noMaximum.displayReadings(averaged: true)[0].rpm == 2000 && noMaximum.displayReadings(averaged: true)[0].fraction == nil, "RPM average does not require maximum speeds")
+        check(FanSample.noFans.displayReadings(averaged: true).isEmpty, "No invented average on fanless Macs")
+        let suiteName = "PerformanceHUD.FanTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        for sample in [FanSample.checking, .unavailable, single, two] {
+            check(!HUDPreferences.applyFanDetectionDefault(sample, in: defaults), "Checking, errors and detected fans must not disable FAN")
+            check(defaults.object(forKey: "hud.metric.fans") == nil, "Hardware with fans retains the enabled default, including 0 RPM")
+        }
+        check(HUDPreferences.applyFanDetectionDefault(.noFans, in: defaults), "Confirmed fanless hardware defaults FAN off")
+        check(defaults.object(forKey: "hud.metric.fans") as? Bool == false, "Persist the fanless default across launches")
+        check(!HUDPreferences.applyFanDetectionDefault(.noFans, in: defaults), "Repeated detection leaves the saved off choice alone")
+        defaults.set(true, forKey: "hud.metric.fans")
+        check(!HUDPreferences.applyFanDetectionDefault(.noFans, in: defaults) && defaults.bool(forKey: "hud.metric.fans"), "Manual FAN enabling remains available on fanless Macs")
+        menu.update(sample: .noFans, options: .init(enabled: false))
+        check(master.state == .off && master.isEnabled, "The detected default updates the category checkmark without disabling it")
+        master.performClick(nil)
+        check(lastFanOptions?.enabled == true && master.state == .on && !usage.isEnabled, "The user can still enable FAN on fanless Macs")
+        menu.update(sample: two, options: .init())
+        for key in ["hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted"] { defaults.set("test", forKey: key) }
+        HUDPreferences.resetOptions(in: defaults)
+        check(HUDPreferences.applyFanDetectionDefault(.noFans, in: defaults) && !defaults.bool(forKey: "hud.metric.fans"), "Options reset reapplies the known fanless default")
+        check(defaults.object(forKey: "hud.fan.average") == nil && defaults.object(forKey: "hud.fan.averageMode") == nil, "Options reset includes average preferences")
+        check(defaults.object(forKey: "hud.fan.rpmHighlighted") == nil, "Options reset clears RPM emphasis")
+        let memMenu = HUDResourceMenuView(group: .ram, options: .init(enabled: true, temperature: false, totalUse: true, focusedApp: false))
+        let menuCanvas = NSView(frame: NSRect(x: 0, y: 0, width: menu.frame.width, height: 68))
+        menu.frame.origin.y = 0; memMenu.frame.origin.y = 34
+        menuCanvas.addSubview(menu); menuCanvas.addSubview(memMenu)
+        let menuWindow = NSWindow(contentRect: menuCanvas.frame, styleMask: [], backing: .buffered, defer: false)
+        menuWindow.contentView = menuCanvas
+        menuCanvas.layoutSubtreeIfNeeded()
+        let memoryControls: [Int: NSButton] = member(memMenu, "controls")
+        check(abs(average.frame.minX - memoryControls[5]!.convert(.zero, to: memMenu).x) < 1, "Average aligns under Details")
+        check(abs(usage.frame.minX - memoryControls[7]!.convert(.zero, to: memMenu).x) < 1, "Fan Usage aligns under MEM Usage")
+        check(average.frame.maxX < averageMode.frame.minX && averageMode.frame.maxX < usage.frame.minX, "Fan controls do not overlap")
+        check(averageMode.frame.width >= averageMode.intrinsicContentSize.width, "Layout selector fits its labels")
+        mode.layoutSubtreeIfNeeded()
+        check(abs(mode.alignmentRect(forFrame: mode.frame).width - 145) < 0.01, "Underline does not widen native selector")
+        check(rpmHighlight.frame.minX > mode.frame.minX && rpmHighlight.frame.maxX <= mode.frame.maxX, "Underline spans RPM and Both within selector width")
+        check(rpmHighlight.frame.maxY < mode.frame.midY && rpmHighlight.frame.minY >= 0, "Underline stays beneath labels inside the menu row: line=\(rpmHighlight.frame), selector=\(mode.frame), row=\(menu.frame)")
+        check(menu.hitTest(NSPoint(x: rpmHighlight.frame.midX, y: rpmHighlight.frame.midY)) === rpmHighlight, "Underline is independently clickable")
+
+        let hud = HUDWindowController()
+        hud.setHUDEnabled(false)
+        hud.setPackagePowerOptions(.init(enabled: false))
+        for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
+        let panel: HUDPanel = member(hud, "panel")
+        let fanView: HUDFanView = member(hud, "fanView")
+        let horizontal: HUDHorizontalView = member(hud, "horizontalView")
+        for alignment in HUDAlignment.allCases {
+            hud.setAlignment(alignment)
+            for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
+            for scale in HUDScale.allCases {
+                hud.setHUDScale(scale)
+                for count in [0, 1, 2, 4, 16] {
+                    for display in HUDFanMode.allCases {
+                        for averageMode in HUDFanAverageMode.allCases {
+                            for averaged in [false, true] {
+                                let options = HUDFanOptions(enabled: true, usage: true, mode: display, average: averaged, averageMode: averageMode)
+                                hud.setFanOptions(options)
+                                let sample = FanSample(status: count == 0 ? .noFans : .ready, fans: (0..<count).map { FanReading(id: $0, rpm: 0, maximumRPM: 6000) })
+                                hud.updateFans(sample)
+                                panel.contentView?.layoutSubtreeIfNeeded()
+                                let size = panel.frame.size
+                                let expectedRows = count == 0 ? 0 : options.averages(in: alignment) ? 1 : count
+                                if alignment == .vertical {
+                                    check(fanView.rowCount == max(1, expectedRows), "Correct averaged/individual vertical rows")
+                                    check(abs(fanView.frame.height - fanView.height(scale: scale)) <= 0.5, "All fan rows fit")
+                                    let maxBarWidth = display.showsRPM ? HUDFanBarView.verticalSize.width : HUDFanBarView.verticalBarOnlyWidth
+                                    check(fanView.barWidth > 0 && fanView.barWidth <= maxBarWidth * scale.rawValue, "Bar fits inside existing vertical columns")
+                                } else {
+                                    let labels: [String: NSTextField] = member(horizontal, "labels")
+                                    let titles = labels.filter { $0.key.hasPrefix("fan.") && $0.key.hasSuffix(".title") && !$0.value.isHidden }
+                                    check(titles.count == expectedRows, "Correct averaged/individual horizontal fans")
+                                    if count == 1 { check(titles.values.first?.stringValue == "FAN 1", "Single fan remains individually labelled in every mode") }
+                                    check(titles.values.allSatisfy { $0.font == HUDStyle.titleFont(for: .ramTotal, scale: scale) && $0.textColor == HUDStyle.primaryTitleColor(for: .ramTotal, background: .transparent) }, "FAN labels match MEM style")
+                                    if count == 0, let status = labels["fan.status"] {
+                                        check(status.font == HUDStyle.readingFont(scale: scale, highlighted: false), "No fan status stays regular faint text")
+                                    }
+                                    let dividers: [NSView] = member(horizontal, "dividers")
+                                    let visible = dividers.filter { !$0.isHidden }
+                                    check(visible.count == max(0, expectedRows - 1) && visible.allSatisfy { abs($0.frame.width - 0.5 * scale.rawValue) < 0.001 }, "Only faint dividers within FAN")
+                                }
+                                if count == 0 {
+                                    for status in [FanSample.checking, .noFans, .unavailable] {
+                                        hud.updateFans(status)
+                                        check(panel.frame.size == size, "Status message changes do not resize capture")
+                                    }
+                                    continue
+                                }
+                                for rpm: Double? in [0, 1, 2720, 9999, 99_999, nil] {
+                                    let update = FanSample(status: .ready, fans: sample.fans.map { FanReading(id: $0.id, rpm: rpm, maximumRPM: 6000) })
+                                    hud.updateFans(update)
+                                    check(panel.frame.size == size, "RPM changes never resize capture")
+                                }
+                                hud.updateFans(.unavailable.preservingTopology(from: sample))
+                                check(panel.frame.size == size, "Read failures never resize capture")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Adding FAN must not enlarge the established vertical MEM layout.
+        hud.setAlignment(.vertical)
+        for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
+        hud.setMetricEnabled(.ramTotal, enabled: true)
+        for scale in HUDScale.allCases {
+            hud.setHUDScale(scale)
+            hud.setFanOptions(.init(enabled: false))
+            let widthWithoutFans = panel.frame.width
+            var totalBarWidth: CGFloat?
+            for mode in HUDFanMode.allCases {
+                hud.setFanOptions(.init(mode: mode, average: false))
+                hud.updateFans(two)
+                panel.contentView?.layoutSubtreeIfNeeded()
+                check(panel.frame.width == widthWithoutFans, "Showing FAN does not widen the vertical HUD")
+                if mode == .bar { totalBarWidth = fanView.barWidth }
+                else if let totalBarWidth { check(fanView.barWidth < totalBarWidth, "Total-only bar is longer without widening the HUD") }
+            }
+        }
+        // Bold boundaries around FAN, faint separator between two fan readings.
+        hud.setAlignment(.horizontal)
+        for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
+        hud.setHUDScale(.normal)
+        hud.setMetricEnabled(.ramTotal, enabled: true)
+        hud.setMetricEnabled(.battery, enabled: true)
+        hud.setFanOptions(.init(average: false))
+        hud.updateFans(two)
+        let dividers: [NSView] = member(horizontal, "dividers")
+        check(dividers.filter { !$0.isHidden }.map { $0.frame.width } == [1.5, 0.5, 1.5], "Bold FAN boundaries, faint internal divider")
+        for alignment in HUDAlignment.allCases {
+            hud.setAlignment(alignment)
+            hud.setFanOptions(.init(average: false))
+            let unhighlightedSize = panel.frame.size
+            hud.setFanOptions(.init(average: false, rpmHighlighted: true))
+            check(panel.frame.size == unhighlightedSize, "RPM emphasis does not resize the HUD")
+            if alignment == .horizontal {
+                let labels: [String: NSTextField] = member(horizontal, "labels")
+                check(labels["fan.0.rpm"]?.font == HUDStyle.readingFont(scale: .normal, highlighted: true), "RPM uses highlighted font")
+            }
+        }
+        hud.setAlignment(.horizontal)
+        hud.shutdown()
+        print("PASS: fan formats/discovery, missing/zero/invalid readings, menu states, averages and defaults, aligned menu controls, both layouts at all scales and modes, stable capture geometry")
+        if CommandLine.arguments.contains("--probe") {
+            let actual = SMCTemperatureReader().readFans()
+            print("Actual hardware:", actual.status, "fans:", actual.fans.count)
+        }
+        if let index = CommandLine.arguments.firstIndex(of: "--preview"), CommandLine.arguments.indices.contains(index + 1) {
+            let path = CommandLine.arguments[index + 1]
+            func snapshot(_ view: NSView, at path: String) {
+                let canvas = NSView(frame: NSRect(x: 0, y: 0, width: view.frame.width + 40, height: view.frame.height + 40))
+                canvas.wantsLayer = true; canvas.layer?.backgroundColor = NSColor(calibratedWhite: 0.06, alpha: 1).cgColor
+                canvas.appearance = NSAppearance(named: .darkAqua)
+                view.frame.origin = NSPoint(x: 20, y: 20); canvas.addSubview(view)
+                let window = NSWindow(contentRect: canvas.frame, styleMask: [], backing: .buffered, defer: false)
+                window.contentView = canvas
+                canvas.layoutSubtreeIfNeeded()
+                let bitmap = canvas.bitmapImageRepForCachingDisplay(in: canvas.bounds)!
+                canvas.cacheDisplay(in: canvas.bounds, to: bitmap)
+                try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
+            }
+            snapshot(menuCanvas, at: path + "-menu.png")
+            for useAverage in [false, true] {
+                hud.setFanOptions(.init(average: useAverage))
+                hud.updateRAM(.ramTotal, usage: .init(percentage: 60, usedBytes: 16_000_000_000, swapUsedBytes: 0))
+                hud.updateMemoryPressure("normal")
+                hud.updateFans(two)
+                snapshot(horizontal, at: path + (useAverage ? "-horizontal-average.png" : "-horizontal-individual.png"))
+            }
+            let view = HUDFanView(frame: NSRect(x: 0, y: 0, width: 310, height: 21))
+            view.update(sample: two, options: .init(averageMode: .both), scale: .normal, background: .dark)
+            snapshot(view, at: path + "-vertical-average.png")
+            for mode in HUDFanMode.allCases {
+                view.update(sample: single, options: .init(mode: mode, averageMode: .both), scale: .normal, background: .dark)
+                snapshot(view, at: path + "-vertical-single-" + mode.rawValue + ".png")
+            }
+            menu.update(sample: single)
+            snapshot(menuCanvas, at: path + "-menu-single.png")
+            rpmHighlight.performClick(nil)
+            snapshot(menuCanvas, at: path + "-menu-highlighted.png")
+            view.update(sample: single, options: .init(rpmHighlighted: true), scale: .normal, background: .dark)
+            snapshot(view, at: path + "-vertical-highlighted.png")
+
+        }
+    }
+}

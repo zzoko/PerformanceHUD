@@ -63,9 +63,11 @@ From the repository folder, run:
 
 ```sh
 ./Tests/run-power-helper-tests.sh
+./Tests/run-fan-tests.sh
+./Tests/run-appearance-tests.sh
 ```
 
-These checks cover sample parsing, stale or invalid readings, process restarts, stopping/resuming, and expired client connections. They use a simulated data source, require no administrator approval, and do not register a helper. The test files are not included in the app. Real power readings and macOS approval still need testing with an exported app on a physical Mac.
+These checks cover sample parsing, stale or invalid readings, process restarts, stopping/resuming, and expired client connections. Fan checks cover decoding, missing and stopped fans, averaging, fanless defaults, menu availability, and stable layouts across fan counts, modes, and scales. Appearance checks cover saved choices, Follow system, and live Light/Dark changes. They use simulated data, require no administrator approval, and do not register a helper. The test files are not included in the app. Real fan RPM, power readings, and macOS approval still need testing with an exported app on suitable physical hardware. The optional `--probe` argument to the fan tests also reads the local Mac’s fan sensors.
 
 ## Quick controls
 
@@ -76,6 +78,9 @@ These checks cover sample parsing, stale or invalid readings, process restarts, 
 - **Reset → Position:** return to the default position.
 - **Reset → Options:** restore the default HUD categories, readings, highlighting, usage modes, alignment, size, and background after confirmation. The HUD is enabled; position and permissions are kept.
 - **Quit:** quit PerformanceHUD.
-- The faint **App version** line identifies the installed version.
+- **Controls Guide…:** explains the controls in menu order and shows the installed app version.
+- **Appearance → Follow system:** the default for fresh settings and Options reset; automatically switches the HUD between Light and Dark with macOS. Clear, Light, and Dark can still be selected manually.
+- Unified Memory **Details** and **Usage** work independently; **Total / App / Both** selects the source for both.
+- **FAN:** choose speed bars, RPM, or both, with optional averaging. On fanless Macs it defaults to off for fresh settings and Options reset. You can still enable it to show **No fans detected**; manual choices are remembered.
 
 FPS depends on the active game's rendering backend and available counters. An empty FPS value alone does not mean installation failed. Borderless or windowed mode is the recommended starting point for testing.

@@ -14,6 +14,7 @@ enum HUDMetric: Int, CaseIterable, Hashable {
     case battery = 8
     case deviceInfo
     case aneTotal = 11
+    case fans = 12
 
     // MARK: - Menu Titles
 
@@ -47,6 +48,9 @@ enum HUDMetric: Int, CaseIterable, Hashable {
 
         case .ramTotal:
             return "Unified Memory Total"
+
+        case .fans:
+            return "FAN"
 
         case .battery:
             return "Battery"
@@ -89,6 +93,9 @@ enum HUDMetric: Int, CaseIterable, Hashable {
         case .ramTotal:
             return "MEM"
 
+        case .fans:
+            return "FAN"
+
         case .battery:
             return "Battery"
 
@@ -115,6 +122,7 @@ enum HUDMetric: Int, CaseIterable, Hashable {
              .cpuTotal,
              .aneTotal,
              .ramTotal,
+             .fans,
              .battery,
              .deviceInfo:
 

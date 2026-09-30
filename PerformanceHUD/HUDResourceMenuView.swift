@@ -3,20 +3,34 @@ import AppKit
 @MainActor
 final class HUDResourceMenuView: NSView {
     static var masterWidth: CGFloat {
-        ceil((HUDResourceGroup.allCases.map(\.title) + ["Battery"]).map {
+        // Keep the options clear of every category title, even when resource
+        // names are shortened. The power connector shares this same column.
+        let titleWidth = ceil((HUDResourceGroup.allCases.map(\.title) + ["Battery", "FPS History", "Chip & OS"]).map {
             ($0 as NSString).size(withAttributes: [.font: NSFont.menuFont(ofSize: 0)]).width
-        }.max() ?? 0) + 24
+        }.max() ?? 0)
+        return max(144, titleWidth + 24)
     }
     static var powerColumnLeading: CGFloat { 8 + masterWidth + 8 + 8 }
-    static let choicesWidth: CGFloat = 16 + 90 + 126 + 106 + 145 + 36
-    static let readingsChoicesWidth: CGFloat = 8 + 90 + 12 + 126 + 4
-
-    private static let detailsHelp = "Shows physical memory for Total or App RAM; swap and memory pressure are system-wide and appear with Total. Horizontal layout uses PHY and SWP, with an outlined triangle for warning pressure or a filled triangle for critical pressure. Normal pressure has no triangle; unavailable readings stay blank. The attached strip highlights the values, not the labels."
+    // Keep the original sizing reference so the shorter Average label does not
+    // shift the shared menu columns or its layout selector.
+    static var firstChoiceWidth: CGFloat {
+        let checkbox = HUDReadingCheckbox(title: "Fan Average", supportsEmphasis: false)
+        checkbox.font = .menuFont(ofSize: 0)
+        return max(90, ceil(checkbox.intrinsicContentSize.width))
+    }
+    static var secondChoiceWidth: CGFloat {
+        let selector = NSSegmentedControl(labels: HUDFanAverageMode.allCases.map(\.title),
+                                          trackingMode: .selectOne, target: nil, action: nil)
+        selector.segmentStyle = .rounded
+        selector.font = .menuFont(ofSize: 0)
+        return max(126, ceil(selector.intrinsicContentSize.width))
+    }
+    static var choicesWidth: CGFloat { 16 + firstChoiceWidth + secondChoiceWidth + 106 + 145 + 36 }
+    static var readingsChoicesWidth: CGFloat { 8 + firstChoiceWidth + 12 + secondChoiceWidth + 4 }
 
     var onChange: ((HUDResourceOptions) -> Void)?
     var onPowerSetup: (() -> Void)?
     private var powerAvailability: PowerHelperAvailability = .ready
-    private var powerToolTip: String?
     var onBatteryChange: ((HUDBatteryOptions) -> Void)?
     private let group: HUDResourceGroup?
     private var options: HUDResourceOptions
@@ -42,9 +56,6 @@ final class HUDResourceMenuView: NSView {
         // container makes its subordinate choices read as one related group.
         let master = HUDResourceMasterButton(title: groupTitle, target: self, action: #selector(changed(_:)))
         master.tag = 0
-        master.toolTip = group == .ane
-            ? "Apple Neural Engine. Show or hide its power reading while keeping your choices."
-            : "Show or hide this group while keeping its individual choices."
         master.setAccessibilityLabel("Show \(groupTitle)")
         master.translatesAutoresizingMaskIntoConstraints = false
         addSubview(master)
@@ -63,10 +74,10 @@ final class HUDResourceMenuView: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         choices.addSubview(stack)
         let columns = group == .ram
-            ? [(5, "Details", 90.0), (1, "", 126.0), (7, "Usage", 106.0), (8, "", 145.0)]
+            ? [(5, "Details", Self.firstChoiceWidth), (1, "", Self.secondChoiceWidth), (7, "Usage", 106.0), (8, "", 145.0)]
             : group == nil
-            ? [(6, "Energy", 90.0), (1, "Temperature", 126.0), (2, "", 106.0), (3, "", 145.0)]
-            : [(4, "Power", 90.0), (1, "Temperature", 126.0), (7, "Usage", 106.0), (8, "", 145.0)]
+            ? [(6, "Energy", Self.firstChoiceWidth), (1, "Temperature", Self.secondChoiceWidth), (2, "", 106.0), (3, "", 145.0)]
+            : [(4, "Power", Self.firstChoiceWidth), (1, "Temperature", Self.secondChoiceWidth), (7, "Usage", 106.0), (8, "", 145.0)]
         for (tag, title, width) in columns {
             if tag == 8, let group, group.supportsTotalUse {
                 let control = NSSegmentedControl(labels: ["Total", "App", "Both"], trackingMode: .selectOne,
@@ -75,11 +86,6 @@ final class HUDResourceMenuView: NSView {
                 control.font = .menuFont(ofSize: 0)
                 control.widthAnchor.constraint(equalToConstant: width).isActive = true
                 control.setAccessibilityLabel("\(groupTitle) usage mode")
-                let help = "Total: usage across the whole system. App: usage for the focused app’s tracked process; helper processes may not be included. Both: shows the total and app readings together. The Usage checkbox controls visibility; its attached strip controls boldness. Power and temperature remain system-wide."
-                let modeHelp = help + (group == .cpu ? " App CPU uses 100% per fully used logical core, so it can exceed 100%; Total CPU is 0–100% across all cores." : "")
-                control.toolTip = modeHelp
-                control.setAccessibilityHelp(modeHelp)
-                for segment in 0..<3 { control.setToolTip(modeHelp, forSegment: segment) }
                 usageModeControl = control
                 stack.addArrangedSubview(control)
                 continue
@@ -98,25 +104,6 @@ final class HUDResourceMenuView: NSView {
             button.tag = tag
             button.setControlAccessibilityLabel("\(groupTitle) \(title)")
             button.widthAnchor.constraint(equalToConstant: width).isActive = true
-            if group == nil {
-                button.toolTip = tag == 1
-                    ? "Average of available battery temperature sensors, in °C, with the battery controller reading as a fallback. MacBooks only; unavailable readings stay blank."
-                    : "Shows battery charge with a dynamic icon. A bolt indicates external power; yellow indicates Low Power Mode."
-            } else if tag == 4 {
-                button.toolTip = "Estimated total \(group == .ane ? "Apple Neural Engine" : groupTitle) power in watts, averaged over the sampling interval. Requires approval for the Power Helper. SoC Power independently shows combined CPU, GPU and Neural Engine power, not whole-Mac power. Unavailable readings stay blank."
-            } else if tag == 1 {
-                button.toolTip = group == .cpu
-                    ? "Average of identified CPU temperature sensors for this chip, in °C. Sensor coverage varies by model; unavailable readings stay blank. Not a per-app reading."
-                    : "Average of available GPU temperature sensors, in °C. Not a per-app reading."
-            } else if tag == 7 {
-                button.toolTip = "Shows \(groupTitle) usage for the selected Total, App or Both mode."
-            } else if tag == 5 {
-                button.toolTip = Self.detailsHelp
-            }
-            if readingKind(for: tag) != nil || tag == 7 {
-                button.toolTip = (button.toolTip ?? "") + " Use the checkbox to show or hide; the attached strip toggles bold values independently and remembers the choice while hidden."
-            }
-            if tag == 4 { powerToolTip = button.toolTip }
             controls[tag] = button
             stack.addArrangedSubview(button)
         }
@@ -248,17 +235,6 @@ final class HUDResourceMenuView: NSView {
         }
         usageModeControl?.selectedSegment = HUDUsageMode.allCases.firstIndex(of: options.selectedUsageMode) ?? 0
         usageModeControl?.isEnabled = options.enabled
-        if group == .ram {
-            controls[5]?.state = options.showsDetails ? .on : .off
-            controls[5]?.isEnabled = options.detailsAvailable
-            if let details = controls[5] as? HUDReadingCheckbox {
-                details.emphasized = options.highlighted.contains(.details)
-                details.setAccessibilityValue(!options.showsDetails ? "Off" : details.emphasized ? "Highlighted" : "Faint")
-            }
-            controls[5]?.toolTip = options.detailsAvailable
-                ? Self.detailsHelp
-                : "Enable Unified Memory and Usage to show Details. Your Details selection is remembered."
-        }
         if let usage = controls[7] as? HUDReadingCheckbox {
             usage.emphasized = options.usageHighlighted
             usage.setAccessibilityValue(!options.usageVisible ? "Off" : usage.emphasized ? "Highlighted" : "Faint")
@@ -267,7 +243,7 @@ final class HUDResourceMenuView: NSView {
             power.highlightAvailable = powerAvailability.allowsPowerToggle
             // Visually unavailable, but still actionable: clicking offers setup.
             power.alphaValue = powerAvailability.usesNormalAppearance ? 1 : 0.5
-            power.toolTip = powerAvailability.explanation ?? powerToolTip
+            power.toolTip = powerAvailability.explanation
             power.setAccessibilityHelp(power.toolTip)
         }
     }
@@ -275,7 +251,7 @@ final class HUDResourceMenuView: NSView {
 
 /// A borderless toggle using AppKit's menu checkmark, rather than a boxed checkbox.
 @MainActor
-private final class HUDResourceMasterButton: NSButton {
+final class HUDResourceMasterButton: NSButton {
     private let checkmark = NSImageView()
     private let nameLabel: NSTextField
 
@@ -365,7 +341,6 @@ final class HUDReadingCheckbox: NSButton {
         highlight.isBordered = false
         highlight.target = self
         highlight.action = #selector(toggleHighlight)
-        highlight.toolTip = "Highlight this value in the HUD. The checkbox separately controls visibility."
         highlight.setAccessibilityRole(.checkBox)
         addSubview(visibility)
         if supportsEmphasis { addSubview(highlight) }
@@ -394,9 +369,6 @@ final class HUDReadingCheckbox: NSButton {
         visibility.isEnabled = isEnabled
         highlight.state = emphasized ? .on : .off
         highlight.isEnabled = isEnabled && state == .on && highlightAvailable
-        highlight.toolTip = highlight.isEnabled
-            ? "Toggle bold emphasis for this value. Visibility is controlled separately by the checkbox."
-            : "Enable this reading to change its bold emphasis. Your emphasis choice is remembered while hidden."
         visibility.needsDisplay = true
         highlight.needsDisplay = true
     }
