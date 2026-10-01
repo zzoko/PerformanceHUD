@@ -1,5 +1,5 @@
-PerformanceHUD Personal-Use Source-Available License
-Version 1.0
+PerformanceHUD Source-Available and Paid-App License
+Version 1.1
 
 Copyright (c) 2026 Andrei Dina. All rights reserved except as expressly granted below.
 
@@ -7,12 +7,14 @@ Copyright (c) 2026 Andrei Dina. All rights reserved except as expressly granted 
 
 This license applies to PerformanceHUD source code, documentation, and compiled
 versions provided by the copyright holder under this license (the "Software").
-It is a personal-use, source-available license, not an open-source license.
+It permits personal, non-commercial use of source builds and personal or
+commercial use of official paid copies as described below. It is a
+source-available license, not an open-source license.
 Third-party components remain subject to their own applicable licenses; this
 license does not replace those licenses or grant rights the copyright holder
 does not own.
 
-2. Permission for personal use
+2. Free source builds and personal use
 
 Subject to these terms, the copyright holder grants you, as an individual, a
 non-exclusive, non-transferable license to read and download the source code,
@@ -22,19 +24,24 @@ and use your copies on devices you own or personally control.
 
 Personal use does not include providing the Software to other people, using it
 on behalf of a business or organization, or providing a commercial service
-based on the Software. Uses outside the permission above require the copyright
-holder's prior written permission.
+based on the Software. Commercial use of official paid copies is separately
+permitted by section 5. Other uses outside these permissions require the
+copyright holder's prior written permission.
 
-3. No redistribution or commercial exploitation
+3. No redistribution, resale, or product integration
 
 Without the copyright holder's prior written permission, you may not:
 
 - Distribute, publish, upload, share, sublicense, rent, lease, or otherwise make
   compiled copies available to any other person, whether free of charge or for
   payment. This restriction includes original and modified versions, .app
-  bundles, installers, archives, and other executable packages.
+  bundles, installers, archives, and other executable packages, except for
+  internal installation and use expressly permitted by section 5.
 - Sell or resell the Software, modified versions, or copies of its source code.
-- Incorporate the Software or its code into a commercial product or service.
+- Incorporate the Software or its code into a commercial product or service
+  made available to others. Using an official paid copy as a standalone tool in a
+  business or commercial workflow, or showing its output in content as allowed
+  by section 5, is not incorporation for this purpose.
 - Distribute the source code or modified source code except as independently
   permitted by the GitHub platform terms described below, or submit it directly
   to the copyright holder for consideration.
@@ -49,21 +56,40 @@ Where the copyright holder publishes the Software in a public GitHub
 repository, this license does not limit rights independently granted under
 GitHub's Terms of Service, including the applicable rights to view and fork
 that repository on GitHub. This paragraph does not grant additional permission
-to redistribute compiled copies or commercially exploit the Software.
+to redistribute compiled copies or commercially use source-built versions.
+Permissions for official paid copies are set out in section 5.
 
 You may send proposed changes directly to the copyright holder. You retain any
 copyright you hold in your contributions. Any additional permissions needed to
 incorporate and distribute them must be agreed separately; submitting a change
 does not transfer ownership of your contribution.
 
-5. Official paid downloads
+5. Official paid downloads: personal and business use
 
 The copyright holder reserves the right to distribute and sell official
 compiled versions, including through Ko-fi, and to grant separate permissions.
-Purchasing an official download gives you a copy for the personal use permitted
-by this license. It does not transfer copyright or grant resale, redistribution,
-or commercial-use rights. Original and personally modified copies are subject
-to the same restrictions unless the copyright holder agrees otherwise in writing.
+
+If you purchase an official compiled copy from the copyright holder, you, as
+an individual or organization, receive a non-exclusive, non-transferable license
+to install and run that official copy for personal, professional, business,
+and other commercial purposes on devices you own or control. This includes
+using the app in monetized or sponsored videos, livestreams, reviews,
+tutorials, and benchmarks, and publishing screenshots or recordings of its
+interface and readings. No separate permission or attribution is required
+for that content.
+
+An organization that purchases an official copy may install it on its own or
+controlled devices and allow its personnel to use it for the organization's
+work. Copies needed for these installations and backups are permitted. This
+does not permit supplying copies to customers, other organizations, or the
+public, or making the app itself available as a hosted service.
+
+These permissions also apply to official copies previously purchased from the
+copyright holder and official updates provided for those purchases. Purchasing
+the app does not transfer copyright or grant resale, external redistribution,
+sublicensing, or product-integration rights. It does not grant commercial-use
+rights to the source code, self-compiled builds, or modified versions; those
+remain subject to section 2 unless separately agreed in writing.
 
 6. Disclaimer and mandatory rights
 
@@ -81,5 +107,6 @@ be restricted by a license.
 7. Other permissions
 
 All rights not expressly granted are reserved. For redistribution, commercial
-use, or other permissions, contact the copyright holder through the official
-PerformanceHUD repository or product page. Any exception must be given in writing.
+use of source-built or modified versions, or other uses not permitted above,
+contact the copyright holder through the official PerformanceHUD repository
+or product page. Any exception must be given in writing.

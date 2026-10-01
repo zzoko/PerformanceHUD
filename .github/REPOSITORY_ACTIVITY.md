@@ -15,13 +15,8 @@ GitHub can delay scheduled runs. The workflow must be on `main` to be scheduled.
    secret**, named **TRAFFIC_TOKEN**. Do not put it in a file, issue, or chat.
 3. Push the reviewed workflow and generator to `main`, then run the workflow
    manually. It creates the `stats` branch on its first successful run.
-4. After confirming the graph exists, replace the static preview in README.md with:
-
-   ```markdown
-   ![Repository activity: daily Git clones over the last 14 days](https://raw.githubusercontent.com/zzoko/PerformanceHUD/stats/repository-activity.svg)
-   ```
-
-   Remove the static preview comment and `docs/images/repository-activity-preview.svg`.
+4. Confirm that the graph appears below Download options in README.md. Its image
+   URL points to `stats/repository-activity.svg`; no daily README edits are needed.
 
 The workflow's normal `GITHUB_TOKEN` writes only the generated files on `stats`.
 The custom traffic token is used only to read the traffic endpoint. The workflow

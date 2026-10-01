@@ -2,11 +2,18 @@
 
 ## ↓ Download options
 
-➤ Source is available to build and modify for **personal use only** under the [personal-use license](LICENSE). You can build it yourself for free using the [installation instructions](docs/INSTALL.md).
+Get the ready-built app for a one-time **$3.99**, or build it yourself for free. Both offer the same features, with no subscription or feature unlocks.
 
-➤ <img src="https://cdn3.emoji.gg/emojis/24562-kofi.png" width="20" height="20" alt="Ko-fi"> **[Download on Ko-fi](https://ko-fi.com/s/01a23ddc51)** — Get the ready-built app for a one-time $3.99 to support me and the development time that has gone into it. It offers the same features as the version you build yourself. No subscription or feature unlocks.
+<p>
+  <a href="https://ko-fi.com/s/01a23ddc51"><img src="docs/images/download-kofi.svg" alt="Download app on Ko-fi — $3.99 one-time" width="250" height="64"></a>&nbsp;
+  <a href="docs/INSTALL.md#build-from-source"><img src="docs/images/build-from-source.svg" alt="Build it yourself — free, requires Xcode" width="250" height="64"></a>
+</p>
+
+Purchases support me and the development of PerformanceHUD. The paid app can be used personally or commercially, including in monetized videos and streams. Free source builds and modifications are for **personal, non-commercial use**. Resale and external redistribution are not permitted. See the [license](LICENSE) for details.
 
 **➤ GitHub sponsorships** — If you prefer to build the app yourself but would still like to support it, direct GitHub sponsorships will offer another way to contribute. A link will be added once approved.
+
+![Repository activity: daily Git clones over the last 14 days](https://raw.githubusercontent.com/zzoko/PerformanceHUD/stats/repository-activity.svg)
 
 ## Display compatibility
 
@@ -96,4 +103,4 @@ I’ve put a lot of thought into keeping the overlay easy to read and the contro
 
 ## License
 
-- [Read the personal-use license](LICENSE)
+- [Read the source-build and paid-app license](LICENSE)
