@@ -25,14 +25,20 @@ Forks are excluded. No third-party graph service or runtime packages are needed.
 
 ## What the graph counts
 
-It shows Git clone operations in 14 UTC calendar days, including the current
-partial day. **Yesterday** is the preceding complete UTC day; **Last 14 days**
-sums the displayed bars. The current day's bar is lighter and labeled **Today**.
+It shows Git clone operations in 14 completed UTC calendar days, ending
+yesterday. **Yesterday** is the last displayed day; **Last 14 days** sums the
+displayed bars. Today's incomplete readings are excluded entirely.
 This is repository activity, not unique people, successful builds, app usage,
 source ZIP downloads, or Ko-fi downloads. GitHub may revise recent counts.
 
-Only the latest window is stored in `activity.json`; this is not an all-time
-counter. Historical snapshots remain in the `stats` branch's commit history.
+The displayed window and saved daily history are stored in `activity.json`,
+preserving full days after they leave the API window. **Total tracked** sums
+these saved dates, excluding today. Overlapping snapshots replace the reading
+for each date instead of double-counting it. The file records `tracked_since`;
+this is not a claim of an all-time count from before tracking began. If a day is
+outside the API window and no saved reading exists, it is marked unavailable
+rather than silently counted as zero. Historical snapshots also remain in the
+`stats` branch's commit history.
 The image adapts to the viewer's light/dark preference. GitHub image caching can
 delay visible updates; the graph includes its generation time.
 

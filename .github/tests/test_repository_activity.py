@@ -19,22 +19,24 @@ def payload(rows):
 
 
 class ActivityTests(unittest.TestCase):
-    def test_utc_window_includes_partial_today_but_yesterday_is_separate(self):
+    def test_utc_window_ends_yesterday_and_excludes_today(self):
         days = activity.daily_counts(payload([
             ('2026-09-17', 100), ('2026-09-30', 19), ('2026-10-01', 2)]), NOW)
         self.assertEqual(len(days), 14)
-        self.assertEqual(days[0][0].isoformat(), '2026-09-18')
-        self.assertEqual(days[-2][1], 19)
-        self.assertEqual(days[-1][1], 2)
-        self.assertEqual(sum(c for _, c in days), 21)
+        self.assertEqual(days[0][0].isoformat(), '2026-09-17')
+        self.assertEqual(days[-1][0].isoformat(), '2026-09-30')
+        self.assertEqual(days[-1][1], 19)
+        self.assertEqual(sum(c for _, c in days), 119)
         svg = activity.render_svg(days, NOW)
         ET.fromstring(svg)
-        self.assertIn('21 Git clones, including 19 yesterday', svg)
-        self.assertIn('Today is partial', svg)
+        self.assertIn('119 Git clones, including 19 yesterday', svg)
+        self.assertNotIn('Today', svg)
+        self.assertNotIn('unique users', svg)
         self.assertIn('Oct 01, 2026 06:23 UTC', svg)
 
     def test_valid_zero_activity_is_renderable(self):
-        days = activity.daily_counts({'count': 0, 'clones': []}, NOW)
+        days = activity.daily_counts({'count': 0, 'clones': []}, NOW,
+                                    {'days': [{'date': '2026-09-17', 'count': 0}]})
         self.assertEqual(sum(c for _, c in days), 0)
         svg = activity.render_svg(days, NOW)
         root = ET.fromstring(svg)
@@ -58,8 +60,43 @@ class ActivityTests(unittest.TestCase):
     def test_year_boundary(self):
         now = datetime(2027, 1, 1, tzinfo=timezone.utc)
         days = activity.daily_counts(payload([('2026-12-31', 3)]), now)
-        self.assertEqual(days[0][0].isoformat(), '2026-12-19')
-        self.assertEqual(days[-2][1], 3)
+        self.assertEqual(days[0][0].isoformat(), '2026-12-18')
+        self.assertEqual(days[-1][1], 3)
+
+    def test_oldest_day_preserved_when_it_expires_from_api(self):
+        previous = {'days': [{'date': '2026-09-17', 'count': 7},
+                             {'date': '2026-09-30', 'count': 5}]}
+        days = activity.daily_counts(payload([('2026-09-30', 19)]), NOW, previous)
+        self.assertEqual(days[0][1], 7)
+        self.assertEqual(days[-1][1], 19)
+
+    def test_missing_oldest_day_is_not_reported_as_zero(self):
+        days = activity.daily_counts(payload([('2026-09-30', 19)]), NOW)
+        self.assertIsNone(days[0][1])
+        svg = activity.render_svg(days, NOW)
+        self.assertIn('≥19', svg)
+        self.assertIn('1 day(s) unavailable', svg)
+
+    def test_history_preserves_completed_days_for_total_but_excludes_today(self):
+        previous = {'history': [{'date': '2025-01-01', 'count': 100},
+                                {'date': '2026-09-17', 'count': 7},
+                                {'date': '2026-10-01', 'count': 50}]}
+        history = activity.collected_counts(payload([('2026-10-01', 100)]), NOW, previous)
+        self.assertNotIn(NOW.date(), history)
+        self.assertTrue(all(d < NOW.date() for d in history))
+        self.assertEqual(sum(history.values()), 107)
+        svg = activity.render_svg(activity.completed_days(history, NOW), NOW, history)
+        self.assertIn('Total tracked: 107', svg)
+        self.assertIn('since 2025-01-01', svg)
+
+    def test_repeat_snapshots_do_not_double_count(self):
+        data = payload([('2026-09-17', 7), ('2026-09-30', 19)])
+        previous = {'history': [{'date': '2026-09-17', 'count': 7},
+                                {'date': '2026-09-30', 'count': 15}]}
+        history = activity.collected_counts(data, NOW, previous)
+        self.assertEqual(sum(history.values()), 26)
+        repeated = {'history': [{'date': d.isoformat(), 'count': c} for d, c in history.items()]}
+        self.assertEqual(activity.collected_counts(data, NOW, repeated), history)
 
     def test_axis_contains_peak(self):
         for peak in (0, 1, 5, 9, 19, 35, 100, 1423, 10000):
