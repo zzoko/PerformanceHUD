@@ -71,7 +71,7 @@ final class AppDelegate:
     private var sizeMenuView:
         HUDSizeMenuView?
 
-    private var fpsModeMenuView: HUDFPSModeMenuView?
+    private var fpsMenuView: HUDFPSMenuView?
     private var backgroundMenuView: HUDBackgroundMenuView?
 
     private var backgroundStatusItem: NSMenuItem?
@@ -606,17 +606,22 @@ final class AppDelegate:
             metricMenuItems[metric] = item
             addMetricPadding()
         }
-        addMetric(.fps)
-        addMetric(.fpsGraph)
-        let fpsMode = HUDFPSModeMenuView(dynamic: HUDPreferences.dynamicFPS, alignment: HUDPreferences.alignment)
-        fpsMode.onChange = { [weak self] dynamic in
+        let fpsView = HUDFPSMenuView(options: HUDPreferences.fpsOptions, alignment: HUDPreferences.alignment)
+        fpsView.onChange = { [weak self] options in
+            guard let self else { return }
+            HUDPreferences.fpsOptions = options
+            enabledMetrics = HUDPreferences.visibleMetrics
+            hudWindow?.setFPSOptions(options)
+            reconcileMonitoring()
+        }
+        fpsMenuView = fpsView
+        let fpsItem = NSMenuItem()
+        fpsItem.view = fpsView
+        menu.addItem(fpsItem)
+        fpsView.onDynamicChange = { [weak self] dynamic in
             HUDPreferences.dynamicFPS = dynamic
             self?.hudWindow?.setDynamicFPS(dynamic)
         }
-        fpsModeMenuView = fpsMode
-        let fpsModeItem = NSMenuItem()
-        fpsModeItem.view = fpsMode
-        menu.addItem(fpsModeItem)
         var powerRows: [HUDResourceMenuView] = []
         for group in HUDResourceGroup.allCases {
             let view = HUDResourceMenuView(group: group, options: HUDPreferences.resourceOptions(for: group))
@@ -956,9 +961,9 @@ final class AppDelegate:
         HUDPreferences.alignment = alignment
         enabledMetrics = HUDPreferences.visibleMetrics
         hudWindow?.setAlignment(alignment)
-        fpsModeMenuView?.update(dynamic: HUDPreferences.dynamicFPS, alignment: alignment)
+        fpsMenuView?.update(options: HUDPreferences.fpsOptions, alignment: alignment)
         updatePackagePowerMenu()
-        for metric in [HUDMetric.fpsGraph, .deviceInfo] {
+        for metric in [HUDMetric.deviceInfo] {
             guard let item = metricMenuItems[metric] else { continue }
             item.isEnabled = alignment.allows(metric)
             item.state = enabledMetrics.contains(metric) ? .on : .off

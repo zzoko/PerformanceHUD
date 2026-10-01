@@ -1,7 +1,7 @@
 import Foundation
 
 struct HUDFPSAvailability {
-    static let collapseDelay: TimeInterval = 4
+    static let collapseDelay: TimeInterval = 3
     private(set) var hasReading = false
     private(set) var unavailableSince: TimeInterval?
     private(set) var expanded = false

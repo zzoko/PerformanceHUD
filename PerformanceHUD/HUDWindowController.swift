@@ -161,10 +161,11 @@ final class HUDWindowController {
     private var fpsAnimationTarget: CGFloat?
     private var fpsProgress: CGFloat = 1
     private var fpsCollapseDistance: CGFloat = 0
-    private var fpsBoundaryDivider: NSView?
+    private let collapsedFPSIndicator = NSImageView()
+    private var collapsedFPSHeaderHeight: CGFloat { HUDStyle.ramDetailHeight(scale: hudScale) }
     private var expandedHUDSize = NSSize.zero
     private var dynamicFPSActive: Bool {
-        dynamicFPS && alignment == .vertical && !enabledMetrics.isDisjoint(with: [.fps, .fpsGraph])
+        dynamicFPS && !enabledMetrics.isDisjoint(with: [.fps, .fpsGraph])
     }
 
     private var customGlass: PerformanceHUDGlassBackground? {
@@ -383,6 +384,9 @@ final class HUDWindowController {
         )
         host.addSubview(stackView)
         host.addSubview(horizontalView)
+        host.addSubview(collapsedFPSIndicator)
+        collapsedFPSIndicator.image = NSImage(systemSymbolName: "arrow.down", accessibilityDescription: "FPS enabled; rolled up while waiting for readings")
+        collapsedFPSIndicator.imageScaling = .scaleProportionallyUpOrDown
 
         let leading =
             stackView.leadingAnchor.constraint(
@@ -981,6 +985,19 @@ final class HUDWindowController {
         packageValueLabel?.stringValue = showsPackagePower ? text(sample.package) : ""
     }
 
+    func setFPSOptions(_ options: HUDFPSOptions) {
+        let visible = options.visibleMetrics(alignment: alignment)
+        enabledMetrics.subtract([.fps, .fpsGraph])
+        enabledMetrics.formUnion(visible)
+        for metric in [HUDMetric.fps, .fpsGraph] {
+            metricRows[metric]?.isHidden = !visible.contains(metric)
+        }
+        if !visible.contains(.fpsGraph) { fpsGraphView.reset() }
+        // Apply the pair together, avoiding an intermediate capture resize.
+        updateLayout()
+        updateVisibility()
+    }
+
     func setMetricEnabled(
         _ metric: HUDMetric,
         enabled: Bool
@@ -1264,6 +1281,7 @@ final class HUDWindowController {
     }
 
     private func updateMetricColors() {
+        collapsedFPSIndicator.contentTintColor = HUDStyle.titleColor(for: .deviceInfo, background: textBackground)
         fanView.update(sample: fanSample, options: fanOptions, scale: hudScale, background: textBackground)
         defer { updateReadingAppearance(); refreshHorizontalReadings() }
         fpsGraphView.applyStyle(scale: hudScale, background: textBackground)
@@ -1329,7 +1347,7 @@ final class HUDWindowController {
             + (valueLabels[reference]?.alignmentRectInsets.right ?? 0)
     }
 
-    private func refreshHorizontalReadings() {
+    private func refreshHorizontalReadings(forceLayout: Bool = false) {
         guard alignment == .horizontal else { return }
         horizontalView.battery.alignTemperature(trailingInset: batteryTemperatureTrailingInset)
         var sections: [[HUDHorizontalView.Reading]] = []
@@ -1411,7 +1429,12 @@ final class HUDWindowController {
                                             height: size.height + 2 * verticalPadding))
         // Readings usually fit their reserved width. Avoid touching the window or
         // capture geometry on each sample unless the actual size changes.
-        if container.frame.size != total { resizeHUD(width: total.width, height: total.height) }
+        if forceLayout || expandedHUDSize != total {
+            resizeHUD(width: total.width, height: total.height)
+        } else {
+            // Sampling must not undo the presentation offset or restart capture.
+            applyDynamicFPSPresentation()
+        }
     }
 
     private func horizontalFanReadings() -> [HUDHorizontalView.Reading] {
@@ -1430,8 +1453,9 @@ final class HUDWindowController {
             var values: [HUDHorizontalView.Reading] = [
                 .init(id: "fan.\(fan.id).title", text: fan.title, reference: fan.title,
                       font: HUDStyle.titleFont(for: .fans, scale: hudScale),
-                      color: HUDStyle.primaryTitleColor(for: .fans, background: textBackground),
-                      help: nil, startsMetric: true, metric: .fans)
+                      color: color,
+                      help: fan.id == "average" ? "Average fan speed" : fan.title,
+                      startsMetric: true, metric: .fans, fanMarker: fan.iconMarker)
             ]
             if fanOptions.usage {
                 if fanOptions.mode.showsBar {
@@ -1474,8 +1498,6 @@ final class HUDWindowController {
         // Measure the unchanged expanded stack before applying its presentation crop.
         stackTopConstraint?.constant = HUDStyle.verticalPadding(scale: hudScale)
         for metric in [HUDMetric.fps, .fpsGraph] { metricRows[metric]?.alphaValue = 1 }
-        fpsBoundaryDivider?.alphaValue = 1
-        fpsBoundaryDivider = nil
         updateReadingAppearance()
         updateRAMDetailsVisibility()
         fanView.update(sample: fanSample, options: fanOptions, scale: hudScale, background: textBackground)
@@ -1483,7 +1505,7 @@ final class HUDWindowController {
         stackView.isHidden = alignment == .horizontal
         horizontalView.isHidden = alignment != .horizontal
         if alignment == .horizontal {
-            refreshHorizontalReadings()
+            refreshHorizontalReadings(forceLayout: true)
             return
         }
 
@@ -1692,7 +1714,7 @@ final class HUDWindowController {
         scheduleCaptureRefresh()
     }
 
-    // MARK: - Dynamic FPS experiment
+    // MARK: - Dynamic FPS
 
     func setDynamicFPS(_ enabled: Bool) {
         guard dynamicFPS != enabled else { return }
@@ -1711,31 +1733,30 @@ final class HUDWindowController {
 
     private func configureDynamicFPSPresentation() {
         fpsCollapseDistance = 0
-        fpsBoundaryDivider?.alphaValue = 1
-        fpsBoundaryDivider = nil
         fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
-        if dynamicFPSActive {
+        if dynamicFPSActive && alignment == .horizontal {
+            fpsCollapseDistance = max(0, horizontalView.fpsSectionWidth - collapsedFPSHeaderHeight)
+        } else if dynamicFPSActive {
             let remaining = enabledMetrics.subtracting([.fps, .fpsGraph])
             if remaining.isEmpty && !showsPackagePower {
-                fpsCollapseDistance = expandedHUDSize.height
+                fpsCollapseDistance = max(0, expandedHUDSize.height - collapsedFPSHeaderHeight
+                    - 2 * HUDStyle.verticalPadding(scale: hudScale))
             } else {
-                // Keep the normal leading MEM/FAN/Chip divider, but roll away the
-                // FPS-to-CPU/GPU separator along with the FPS rows.
+                // Keep the existing section divider beneath the rolled-up indicator.
                 let firstGroup = verticalMetricGroups.indices.dropFirst().first { index in
                     verticalMetricGroups[index].contains { remaining.contains($0) }
                         || (index == 1 && showsPackagePower)
                 }
-                let keepDivider = firstGroup.map { $0 != 1 } ?? false
                 let divider = firstGroup.flatMap { groupDividers[$0] }
                 let firstBody = stackView.arrangedSubviews.first { view in
                     !view.isHidden && view !== metricRows[.fps] && view !== metricRows[.fpsGraph]
                         && !groupDividers.values.contains(where: { $0 === view }) && view !== bottomDivider
                 }
-                if let first = keepDivider ? divider : firstBody, let host = stackView.superview {
+                if let first = divider ?? firstBody, let host = stackView.superview {
                     let rect = first.convert(first.bounds, to: host)
-                    fpsCollapseDistance = max(0, host.bounds.maxY - rect.maxY - HUDStyle.verticalPadding(scale: hudScale))
+                    fpsCollapseDistance = max(0, host.bounds.maxY - rect.maxY - HUDStyle.verticalPadding(scale: hudScale)
+                        - collapsedFPSHeaderHeight - HUDStyle.rowSpacing(scale: hudScale))
                 }
-                if !keepDivider { fpsBoundaryDivider = divider }
             }
         }
         fpsProgress = dynamicFPSActive && !fpsAvailability.expanded ? 0 : 1
@@ -1745,22 +1766,42 @@ final class HUDWindowController {
     private func applyDynamicFPSPresentation() {
         let progress = dynamicFPSActive ? fpsProgress : 1
         let scale = panel.backingScaleFactor
-        let height = max(0, (expandedHUDSize.height - fpsCollapseDistance * (1 - progress)) * scale).rounded() / scale
-        let offset = expandedHUDSize.height - height
+        let horizontal = alignment == .horizontal
+        let reduction = fpsCollapseDistance * (1 - progress)
+        let height = max(0, (expandedHUDSize.height - (horizontal ? 0 : reduction)) * scale).rounded() / scale
+        let width = max(0, (expandedHUDSize.width - (horizontal ? reduction : 0)) * scale).rounded() / scale
+        let offset = horizontal ? expandedHUDSize.width - width : expandedHUDSize.height - height
         let margin = shadowMargin
         // The top edge, actual window frame, and full capture footprint stay fixed.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         container.frame = NSRect(x: margin, y: margin + expandedHUDSize.height - height,
-                                 width: expandedHUDSize.width, height: height)
-        stackTopConstraint?.constant = HUDStyle.verticalPadding(scale: hudScale) - offset
+                                 width: width, height: height)
+        stackTopConstraint?.constant = HUDStyle.verticalPadding(scale: hudScale) - (horizontal ? 0 : offset)
+        if horizontal {
+            horizontalView.frame.origin.x = HUDStyle.horizontalPadding(scale: hudScale) - offset
+            horizontalView.setFPSOpacity(progress)
+        }
         backgroundContentView.wantsLayer = true
         backgroundContentView.layer?.masksToBounds = dynamicFPSActive
         backgroundContentView.layer?.cornerRadius = dynamicFPSActive ? (customGlass?.glassAppearance.cornerRadius ?? 8) : 0
         container.layer?.masksToBounds = hudBackground == .off && dynamicFPSActive
         for metric in [HUDMetric.fps, .fpsGraph] { metricRows[metric]?.alphaValue = progress }
-        fpsBoundaryDivider?.alphaValue = progress
-        // An FPS-only HUD leaves no empty pill or invisible drag target.
+        // A quiet arrow points toward the space where FPS will return. Cross-fade
+        // it near the end of collapse so it does not overlap the regular FPS row.
+        collapsedFPSIndicator.image = NSImage(systemSymbolName: horizontal ? "arrow.right" : "arrow.down",
+            accessibilityDescription: "FPS enabled; collapsed while waiting for readings")
+        collapsedFPSIndicator.isHidden = !dynamicFPSActive || progress >= 0.4
+        let headerFade = min(1, max(0, 1 - progress / 0.4))
+        collapsedFPSIndicator.alphaValue = headerFade * headerFade * (3 - 2 * headerFade)
+        collapsedFPSIndicator.contentTintColor = HUDStyle.titleColor(for: .deviceInfo, background: textBackground)
+        let indicatorSize = 12 * CGFloat(hudScale.rawValue)
+        collapsedFPSIndicator.frame = NSRect(
+            x: horizontal ? HUDStyle.horizontalPadding(scale: hudScale) + (collapsedFPSHeaderHeight - indicatorSize) / 2
+                : (width - indicatorSize) / 2,
+            y: horizontal ? (height - indicatorSize) / 2
+                : height - HUDStyle.verticalPadding(scale: hudScale) - (collapsedFPSHeaderHeight + indicatorSize) / 2,
+            width: indicatorSize, height: indicatorSize)
         container.alphaValue = height < 1 ? 0 : 1
         panel.draggableContentRect = dynamicFPSActive ? container.frame : nil
         container.layoutSubtreeIfNeeded()

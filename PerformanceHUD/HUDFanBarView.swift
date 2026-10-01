@@ -4,8 +4,7 @@ import AppKit
 final class HUDFanBarView: NSView {
     // Desired dimensions; vertical drawing fits within the established HUD width.
     static let verticalSize = NSSize(width: 100, height: 6)
-    static let verticalBarOnlyWidth: CGFloat = 130
-    static let horizontalSize = NSSize(width: 64, height: 6)
+    static let horizontalSize = verticalSize
     var fraction: Double?
     var color = NSColor.secondaryLabelColor
 

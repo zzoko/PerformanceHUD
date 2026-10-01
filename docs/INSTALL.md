@@ -65,6 +65,8 @@ From the repository folder, run:
 ./Tests/run-power-helper-tests.sh
 ./Tests/run-fan-tests.sh
 ./Tests/run-appearance-tests.sh
+./Tests/run-dynamic-fps-tests.sh
+./Tests/run-dynamic-fps-glass-tests.sh
 ```
 
-These checks cover sample parsing, stale or invalid readings, process restarts, stopping/resuming, and expired client connections. Fan checks cover decoding, missing and stopped fans, averaging, fanless defaults, menu availability, and stable layouts across fan counts, modes, and scales. Appearance checks cover saved choices, Follow system, and live Light/Dark changes. They use simulated data, require no administrator approval, and do not register a helper. The test files are not included in the app. Real fan RPM, power readings, and macOS approval still need testing with an exported app on suitable physical hardware. The optional `--probe` argument to the fan tests also reads the local Mac’s fan sensors.
+These checks cover sample parsing, stale or invalid readings, process restarts, stopping/resuming, and expired client connections. Fan checks cover decoding, missing and stopped fans, averaging, fanless defaults, menu availability, and stable layouts across fan counts, modes, and scales. Appearance checks cover saved choices, Follow system, and live Light/Dark changes. FPS checks cover saved modes, collapse timing, both layouts, animation recovery, and fixed capture geometry; glass checks exercise the Metal renderer during width and height transitions. They use simulated data, require no administrator approval, and do not register a helper. The test files are not included in the app. Real fan RPM, power readings, and macOS approval still need testing with an exported app on suitable physical hardware. The optional `--probe` argument to the fan tests also reads the local Mac’s fan sensors.

@@ -2,6 +2,16 @@
 
 [← Back to README](../README.md)
 
+### v1.5
+
+- Combined **FPS** and **FPS History** into one menu category with **Value / History / Both** and **Static / Dynamic** selectors, aligned with the other controls. FPS is enabled with Both and Dynamic selected by default for fresh settings and Options reset. Saved choices are preserved; hiding FPS remembers the selected mode. Horizontal uses Value only and restores the history choice when returning to Vertical.
+- Added **Dynamic FPS** in both layouts. After three seconds without available readings, Vertical rolls up the selected FPS value/history section and Horizontal collapses the FPS value sideways. Readings returning smoothly expand the section again; Static keeps the existing fixed layout.
+- Kept a faint directional arrow and the divider beside following readings while FPS is collapsed: **downward in Vertical**, **rightward in Horizontal**. The arrow also remains when FPS is the only enabled category.
+- Kept the full expanded background-capture area fixed during FPS transitions, avoiding capture restarts as the visible HUD changes size. Returning readings can reverse an animation already in progress, and macOS **Reduce Motion** skips the animation.
+- Replaced **FAN 1 / FAN 2 / FAN AVG** labels with compact rounded-square badges in both layouts. Centred numbers identify individual fans; **A** identifies Average. The badges use a faint outline and scale with the HUD.
+- Unified fan bar widths across layouts and display modes. Total-only keeps the same bar size when aligned to the right in Vertical. Bars sit evenly between the badge and RPM text, and horizontal RPM values use the same trailing spacing as other readings. Live RPM updates retain stable HUD dimensions.
+- Updated the **Controls Guide** for the combined FPS controls, dynamic behaviour, and fan badges. Updated the app version to **1.5**.
+
 ### v1.4
 
 - Added **Follow system** beneath the Appearance choices, enabled by default for fresh settings and Options reset. It automatically uses the existing Light or Dark HUD background to match macOS, including changes while the app is running. Existing manual choices are preserved; Clear remains a manual choice.

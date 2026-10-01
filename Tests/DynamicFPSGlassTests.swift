@@ -53,6 +53,30 @@
                 }
             }
         }
-        print("PASS: real Metal glass rendering at full/partial/zero height, fixed textures, cropped backdrop, transparent hidden area, all three appearances")
+        // Width-only transitions use the same full capture texture.
+        for style in [PerformanceHUDGlassStyle.dark, .light, .transparent] {
+            let viewport = HUDGlassViewport()
+            let renderer = try HUDGlassRenderer(geometry: geometry, glass: true,
+                appearance: PerformanceHUDGlassAppearance(theme: style), viewport: viewport)
+            var referencePixel: [UInt8]?
+            for width: CGFloat in [320, 240, 100, 320] {
+                _ = viewport.setSize(CGSize(width: width, height: 500))
+                let image = try renderer.render(buffer: buffer)!
+                precondition(image.width == 320 && image.height == 500, "Horizontal output texture stays fixed")
+                let data = image.dataProvider!.data! as Data
+                let offset = 250 * image.bytesPerRow + 40 * 4
+                precondition(data[offset + 3] == 255, "Visible horizontal glass remains opaque")
+                let pixel = Array(data[offset..<(offset + 3)])
+                if let referencePixel {
+                    precondition(zip(pixel, referencePixel).allSatisfy { abs(Int($0) - Int($1)) <= 3 }, "Horizontal backdrop is cropped, not stretched")
+                } else { referencePixel = pixel }
+                for y in 0..<image.height {
+                    for x in Int(width)..<image.width {
+                        precondition(data[y * image.bytesPerRow + x * 4 + 3] == 0, "No expanded glass remains to the right")
+                    }
+                }
+            }
+        }
+        print("PASS: real Metal glass rendering at full/partial/zero height and partial width, fixed textures, cropped backdrop, transparent hidden area, all three appearances")
     }
 }

@@ -198,7 +198,7 @@ final class PerformanceHUDGlassBackground: NSView {
     }
     func updateVisibleSurface() {
         surface.frame = captureBounds
-        surface.setVisibleHeight(bounds.height, radius: glassAppearance.cornerRadius)
+        surface.setVisibleSize(bounds.size, radius: glassAppearance.cornerRadius)
         updateAppearance()
         if viewport.setSize(bounds.size) { capture.redraw() }
     }
@@ -323,14 +323,14 @@ final class PerformanceHUDGlassBackground: NSView {
 private final class HUDGlassSurfaceView: NSView {
     private let checkerboard = HUDCaptureCheckerboardView()
     private let viewportMask = CAShapeLayer()
-    func setVisibleHeight(_ height: CGFloat, radius: CGFloat) {
+    func setVisibleSize(_ size: NSSize, radius: CGFloat) {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        guard height < bounds.height else {
+        guard size.height < bounds.height || size.width < bounds.width else {
             layer?.mask = nil
             CATransaction.commit()
             return
         }
-        let visible = NSRect(x: 0, y: bounds.height - height, width: bounds.width, height: height)
+        let visible = NSRect(x: 0, y: bounds.height - size.height, width: size.width, height: size.height)
         viewportMask.frame = bounds
         viewportMask.path = CGPath(roundedRect: visible, cornerWidth: radius, cornerHeight: radius, transform: nil)
         layer?.mask = viewportMask

@@ -16,6 +16,7 @@ final class HUDHorizontalView: NSView {
         var metric: HUDMetric? = nil
         var tightLeading = false
         var leftAligned = false
+        var fanMarker: String? = nil
         var symbolName: String? = nil
         var symbolVisible = true
         var barWidth: CGFloat? = nil
@@ -24,6 +25,13 @@ final class HUDHorizontalView: NSView {
     }
 
     let battery = HUDBatteryIndicatorView(frame: .zero)
+    private(set) var fpsSectionWidth: CGFloat = 0
+    private var fpsLabels: [NSTextField] = []
+
+    func setFPSOpacity(_ opacity: CGFloat) {
+        fpsLabels.forEach { $0.alphaValue = opacity }
+    }
+
     private var labels: [String: NSTextField] = [:]
     private var dividers: [NSView] = []
     private var symbols: [String: NSImageView] = [:]
@@ -38,6 +46,8 @@ final class HUDHorizontalView: NSView {
     required init?(coder: NSCoder) { fatalError("Use init(frame:)") }
 
     func configure(sections: [[Reading]], showsBattery: Bool, scale: HUDScale, background: HUDBackground) -> NSSize {
+        fpsSectionWidth = 0
+        fpsLabels.removeAll()
         let factor = CGFloat(scale.rawValue)
         let reference = NSTextField(labelWithString: "FPS")
         reference.font = HUDStyle.valueFont(for: .fps, scale: scale)
@@ -86,7 +96,8 @@ final class HUDHorizontalView: NSView {
                         addDivider(compact: true, faint: sameFanCategory
                             || (reading.resourceGroup != nil && reading.resourceGroup == previousResource))
                     } else {
-                        let followsLabel = section[index - 1].startsMetric && reading.metric != .fps
+                        // Fan badge/bar/RPM use the same compact gap on both sides of the bar.
+                        let followsLabel = section[index - 1].startsMetric && reading.metric != .fps && reading.metric != .fans
                         let labelGap = followsLabel && reading.resourceGroup == .ram && reading.text == "PHY"
                             ? 2 : HUDStyle.horizontalLabelGapMultiplier
                         let bordersSymbol = reading.symbolName != nil || section[index - 1].symbolName != nil
@@ -111,6 +122,21 @@ final class HUDHorizontalView: NSView {
                                        width: barWidth * factor, height: barHeight)
                     bar.needsDisplay = true
                     x += bar.frame.width
+                    continue
+                }
+                if let marker = reading.fanMarker {
+                    let icon = symbols[reading.id] ?? NSImageView()
+                    if symbols[reading.id] == nil { symbols[reading.id] = icon; addSubview(icon) }
+                    icon.isHidden = false
+                    icon.image = HUDFanIcon.image(marker: marker)
+                    icon.contentTintColor = reading.color
+                    icon.imageScaling = .scaleProportionallyUpOrDown
+                    icon.setAccessibilityElement(true)
+                    icon.setAccessibilityRole(.image)
+                    icon.setAccessibilityLabel(reading.help ?? reading.text)
+                    let side = HUDFanIcon.side * factor
+                    icon.frame = NSRect(x: x, y: (height - side) / 2, width: side, height: side)
+                    x += side
                     continue
                 }
                 if let symbolName = reading.symbolName {
@@ -144,6 +170,8 @@ final class HUDHorizontalView: NSView {
                     addSubview(label)
                 }
                 label.isHidden = false
+                label.alphaValue = 1
+                if reading.metric == .fps { fpsLabels.append(label) }
                 label.stringValue = reading.text
                 label.font = reading.font
                 label.textColor = reading.color
@@ -162,6 +190,14 @@ final class HUDHorizontalView: NSView {
                     title.frame.origin.x += unusedWidth
                     label.alignment = .right
                 }
+                if reading.metric == .fans, index > 0,
+                   let bar = bars[section[index - 1].id], !bar.isHidden {
+                    // RPM ends at the same trailing column as other readings.
+                    // Split its unused reserved width around the bar so both
+                    // visible gaps remain equal without resizing the capture.
+                    let unusedWidth = max(0, width - label.intrinsicContentSize.width)
+                    bar.frame.origin.x += unusedWidth / 2
+                }
                 if let compactFPSWidth, !reading.startsMetric {
                     x = max(x, sectionStart + compactFPSWidth - width - label.alignmentRectInsets.right)
                 }
@@ -174,7 +210,10 @@ final class HUDHorizontalView: NSView {
                 label.frame = label.frame(forAlignmentRect: alignmentRect)
                 x += width
             }
-            if let compactFPSWidth { x = max(x, sectionStart + compactFPSWidth) }
+            if let compactFPSWidth {
+                x = max(x, sectionStart + compactFPSWidth)
+                fpsSectionWidth = x - sectionStart
+            }
         }
         if showsBattery {
             addDivider(compact: sections.last?.last?.resourceGroup == .ram)

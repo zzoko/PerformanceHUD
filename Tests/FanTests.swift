@@ -78,6 +78,7 @@ import AppKit
         check(HUDFanOptions().averages(in: .horizontal) && !HUDFanOptions().averages(in: .vertical), "Default affects Horizontal only")
         let mixed = FanSample(status: .ready, fans: [FanReading(id: 0, rpm: 1000, maximumRPM: 2000), FanReading(id: 1, rpm: 3000, maximumRPM: 10000)])
         let avg = mixed.displayReadings(averaged: true)[0]
+        check(avg.iconMarker == "A" && single.displayReadings(averaged: true)[0].iconMarker == "1", "Hub markers distinguish individuals and average")
         check(avg.title == "FAN AVG" && avg.rpm == 2000 && abs(avg.fraction! - 0.4) < 0.0001, "Mean of normalized speeds, not ratio of means")
         let missing = FanSample(status: .ready, fans: [mixed.fans[0], FanReading(id: 1, rpm: nil, maximumRPM: 10000)])
         check(missing.displayReadings(averaged: true)[0].rpm == nil && missing.displayReadings(averaged: true)[0].fraction == nil, "No partial averages")
@@ -150,14 +151,16 @@ import AppKit
                                 if alignment == .vertical {
                                     check(fanView.rowCount == max(1, expectedRows), "Correct averaged/individual vertical rows")
                                     check(abs(fanView.frame.height - fanView.height(scale: scale)) <= 0.5, "All fan rows fit")
-                                    let maxBarWidth = display.showsRPM ? HUDFanBarView.verticalSize.width : HUDFanBarView.verticalBarOnlyWidth
+                                    let maxBarWidth = HUDFanBarView.verticalSize.width
                                     check(fanView.barWidth > 0 && fanView.barWidth <= maxBarWidth * scale.rawValue, "Bar fits inside existing vertical columns")
                                 } else {
                                     let labels: [String: NSTextField] = member(horizontal, "labels")
-                                    let titles = labels.filter { $0.key.hasPrefix("fan.") && $0.key.hasSuffix(".title") && !$0.value.isHidden }
-                                    check(titles.count == expectedRows, "Correct averaged/individual horizontal fans")
-                                    if count == 1 { check(titles.values.first?.stringValue == "FAN 1", "Single fan remains individually labelled in every mode") }
-                                    check(titles.values.allSatisfy { $0.font == HUDStyle.titleFont(for: .ramTotal, scale: scale) && $0.textColor == HUDStyle.primaryTitleColor(for: .ramTotal, background: .transparent) }, "FAN labels match MEM style")
+                                    let symbols: [String: NSImageView] = member(horizontal, "symbols")
+                                    let icons = symbols.filter { $0.key.hasPrefix("fan.") && $0.key.hasSuffix(".title") && !$0.value.isHidden }
+                                    check(icons.count == expectedRows, "Correct averaged/individual horizontal fan icons")
+                                    check(icons.values.allSatisfy { $0.image != nil && $0.frame.width == HUDFanIcon.side * scale.rawValue
+                                        && $0.frame.height == HUDFanIcon.side * scale.rawValue }, "Icons retain their compact square size")
+                                    if count == 1 { check(icons.values.first?.accessibilityLabel() == "FAN 1", "Single fan keeps an accessible label") }
                                     if count == 0, let status = labels["fan.status"] {
                                         check(status.font == HUDStyle.readingFont(scale: scale, highlighted: false), "No fan status stays regular faint text")
                                     }
@@ -200,7 +203,7 @@ import AppKit
                 panel.contentView?.layoutSubtreeIfNeeded()
                 check(panel.frame.width == widthWithoutFans, "Showing FAN does not widen the vertical HUD")
                 if mode == .bar { totalBarWidth = fanView.barWidth }
-                else if let totalBarWidth { check(fanView.barWidth < totalBarWidth, "Total-only bar is longer without widening the HUD") }
+                else if let totalBarWidth { check(fanView.barWidth == totalBarWidth, "Total-only and Both keep exactly the same bar width") }
             }
         }
         // Bold boundaries around FAN, faint separator between two fan readings.
@@ -256,6 +259,10 @@ import AppKit
             let view = HUDFanView(frame: NSRect(x: 0, y: 0, width: 310, height: 21))
             view.update(sample: two, options: .init(averageMode: .both), scale: .normal, background: .dark)
             snapshot(view, at: path + "-vertical-average.png")
+            view.frame.size.height = view.height(scale: .normal) * 2 + HUDStyle.rowSpacing(scale: .normal)
+            view.update(sample: two, options: .init(average: false), scale: .normal, background: .dark)
+            snapshot(view, at: path + "-vertical-individual.png")
+            view.frame.size.height = HUDStyle.rowHeight(scale: .normal)
             for mode in HUDFanMode.allCases {
                 view.update(sample: single, options: .init(mode: mode, averageMode: .both), scale: .normal, background: .dark)
                 snapshot(view, at: path + "-vertical-single-" + mode.rawValue + ".png")

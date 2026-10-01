@@ -62,6 +62,7 @@ nonisolated struct FanDisplayReading: Equatable, Sendable {
     let title: String
     let rpm: Double?
     let fraction: Double?
+    var iconMarker: String { id == "average" ? "A" : Int(id).map { String($0 + 1) } ?? "?" }
     var rpmText: String { rpm.flatMap(FanDecoder.rpm).map { "\(Int($0.rounded())) RPM" } ?? "" }
 }
 

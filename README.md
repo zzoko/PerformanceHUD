@@ -52,7 +52,7 @@ I’ve put a lot of thought into keeping the overlay easy to read and the contro
       <a href="docs/images/HUD_vertical_dark.png"><img src="docs/images/HUD_vertical_dark.png" alt="PerformanceHUD v1.4 vertical layout with a dark background" width="100%"></a>
     </td>
     <td valign="top" align="center">
-      <a href="docs/images/HUD_menu_dark.png"><img src="docs/images/HUD_menu_dark.png" alt="PerformanceHUD v1.4 menu controls in dark mode" width="100%"></a>
+      <a href="docs/images/HUD_menu_dark.png"><img src="docs/images/HUD_menu_dark.png" alt="PerformanceHUD v1.5 menu controls in dark mode" width="100%"></a>
     </td>
   </tr>
   <tr>
@@ -60,7 +60,7 @@ I’ve put a lot of thought into keeping the overlay easy to read and the contro
       <a href="docs/images/HUD_vertical_light.png"><img src="docs/images/HUD_vertical_light.png" alt="PerformanceHUD v1.4 vertical layout with a light background" width="100%"></a>
     </td>
     <td valign="top" align="center">
-      <a href="docs/images/HUD_menu_light.png"><img src="docs/images/HUD_menu_light.png" alt="PerformanceHUD v1.4 menu controls in light mode" width="100%"></a>
+      <a href="docs/images/HUD_menu_light.png"><img src="docs/images/HUD_menu_light.png" alt="PerformanceHUD v1.5 menu controls in light mode" width="100%"></a>
     </td>
   </tr>
 </table>

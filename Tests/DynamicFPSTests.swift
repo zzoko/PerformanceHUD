@@ -14,9 +14,9 @@ import AppKit
         availability.receivedReading()
         availability.unavailable(at: 10)
         availability.unavailable(at: 12)
-        availability.advance(to: 13.9)
+        availability.advance(to: 12.9)
         check(availability.expanded, "Brief gaps keep the FPS area open")
-        availability.advance(to: 14)
+        availability.advance(to: 13)
         check(!availability.expanded, "Repeated unavailability must not extend the deadline")
         availability.receivedReading()
         availability.unavailable(at: 20)
@@ -27,32 +27,77 @@ import AppKit
         let domain: [String: Any] = ["hud.enabled": false, "hud.background": "dark", "hud.alignment": "vertical",
             "hud.fps.dynamic": false]
         UserDefaults.standard.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
-        check(!HUDPreferences.dynamicFPS, "Static remains the default")
-        let menu = HUDFPSModeMenuView(dynamic: true, alignment: .vertical)
-        let control: NSSegmentedControl = member(menu, "control")
+        check(!HUDPreferences.dynamicFPS, "Saved Static remains selected")
+        let menu = HUDFPSMenuView(options: .init(enabled: true, mode: .both), alignment: .vertical, dynamic: true)
+        let control: NSSegmentedControl = member(menu, "presentation")
         check(control.selectedSegment == 1 && control.isEnabled, "Dynamic is selectable vertically")
-        menu.update(dynamic: true, alignment: .horizontal)
-        check(control.selectedSegment == 0 && !control.isEnabled, "Horizontal forces Static")
-        menu.update(dynamic: true, alignment: .vertical)
+        menu.update(options: .init(enabled: true, mode: .both), alignment: .horizontal, dynamic: true)
+        check(control.selectedSegment == 1 && control.isEnabled, "Horizontal supports Dynamic")
+        menu.update(options: .init(enabled: true, mode: .both), alignment: .vertical, dynamic: true)
         check(control.selectedSegment == 1 && control.isEnabled, "Vertical restores saved choice")
-        let menuWindow = NSWindow(contentRect: menu.frame, styleMask: [], backing: .buffered, defer: false)
-        menuWindow.contentView = menu
-        menu.layoutSubtreeIfNeeded()
-        check(control.frame.maxX <= menu.bounds.width && control.frame.minX > 100,
-              "Shared FPS mode control fits without crowding its label")
-        if CommandLine.arguments.contains("--preview") {
-            menu.appearance = NSAppearance(named: .darkAqua)
-            menu.wantsLayer = true
-            menu.layer?.backgroundColor = NSColor(calibratedWhite: 0.16, alpha: 1).cgColor
-            let bitmap = menu.bitmapImageRepForCachingDisplay(in: menu.bounds)!
-            menu.cacheDisplay(in: menu.bounds, to: bitmap)
-            try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-dynamic-fps-menu.png"))
-        }
         let suiteName = "DynamicFPS.tests.\(UUID().uuidString)"
         let suite = UserDefaults(suiteName: suiteName)!
         suite.set(true, forKey: "hud.fps.dynamic")
         HUDPreferences.resetOptions(in: suite)
         check(suite.persistentDomain(forName: suiteName)?["hud.fps.dynamic"] == nil, "Reset removes the experimental setting")
+
+        // Migrate all legacy combinations and remember the selected mode while off.
+        for value in [false, true] {
+            for history in [false, true] {
+                suite.removePersistentDomain(forName: suiteName)
+                suite.set(value, forKey: "hud.metric.fps")
+                suite.set(history, forKey: "hud.metric.fpsGraph")
+                let options = HUDPreferences.fpsOptions(in: suite)
+                check(options.enabled == (value || history), "Existing FPS visibility is preserved")
+                let expected: Set<HUDMetric> = Set([value ? HUDMetric.fps : nil, history ? HUDMetric.fpsGraph : nil].compactMap { $0 })
+                check(options.visibleMetrics(alignment: .vertical) == expected, "Existing value/history selection migrates")
+            }
+        }
+        for mode in HUDFPSDisplayMode.allCases {
+            HUDPreferences.setFPSOptions(.init(enabled: false, mode: mode), in: suite)
+            let saved = HUDPreferences.fpsOptions(in: suite)
+            check(!saved.enabled && saved.mode == mode, "Disabled FPS remembers its selected mode")
+            HUDPreferences.setFPSOptions(.init(enabled: true, mode: saved.mode), in: suite)
+            check(HUDPreferences.fpsOptions(in: suite).mode == mode, "Re-enabling restores the mode")
+            check(HUDPreferences.fpsOptions(in: suite).visibleMetrics(alignment: .horizontal) == [.fps], "Horizontal uses Value")
+        }
+        HUDPreferences.resetOptions(in: suite)
+        check(HUDPreferences.fpsOptions(in: suite).enabled && HUDPreferences.fpsOptions(in: suite).mode == .both,
+              "Reset restores FPS with Both")
+        suite.removePersistentDomain(forName: suiteName)
+
+        let fpsMenu = HUDFPSMenuView(options: .init(enabled: true, mode: .both), alignment: .vertical)
+        let fpsSelector: NSSegmentedControl = member(fpsMenu, "control")
+        let fpsMaster: NSButton = member(fpsMenu, "master")
+        let fpsWindow = NSWindow(contentRect: fpsMenu.frame, styleMask: [], backing: .buffered, defer: false)
+        fpsWindow.contentView = fpsMenu
+        fpsMenu.layoutSubtreeIfNeeded()
+        check(fpsSelector.frame.minX == 8 + HUDResourceMenuView.masterWidth + 8,
+              "FPS selector starts at the GPU options column")
+        check(fpsSelector.frame.maxX <= fpsMenu.bounds.maxX, "FPS selector fits its row")
+        var selected: HUDFPSOptions?
+        fpsMenu.onChange = { selected = $0 }
+        fpsSelector.selectedSegment = 1
+        _ = fpsSelector.sendAction(fpsSelector.action, to: fpsSelector.target)
+        check(selected?.mode == .history, "History button updates options")
+        fpsMaster.performClick(nil)
+        check(selected?.enabled == false && selected?.mode == .history && !fpsSelector.isEnabled,
+              "Master hides FPS and remembers History")
+        fpsMaster.performClick(nil)
+        check(selected?.enabled == true && fpsSelector.selectedSegment == 1, "Master restores History")
+        fpsMenu.update(options: .init(enabled: true, mode: .both), alignment: .horizontal)
+        check(fpsSelector.selectedSegment == 0 && !fpsSelector.isEnabled(forSegment: 1)
+              && !fpsSelector.isEnabled(forSegment: 2), "Horizontal disables History and Both")
+        fpsMenu.update(options: .init(enabled: true, mode: .both), alignment: .vertical)
+        check(fpsSelector.selectedSegment == 2 && fpsSelector.isEnabled(forSegment: 1), "Vertical restores Both")
+        if CommandLine.arguments.contains("--preview") {
+            fpsMenu.appearance = NSAppearance(named: .darkAqua)
+            fpsMenu.wantsLayer = true
+            fpsMenu.layer?.backgroundColor = NSColor(calibratedWhite: 0.16, alpha: 1).cgColor
+            let bitmap = fpsMenu.bitmapImageRepForCachingDisplay(in: fpsMenu.bounds)!
+            fpsMenu.cacheDisplay(in: fpsMenu.bounds, to: bitmap)
+            try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-fps-selector-preview.png"))
+        }
 
         for scale in [HUDScale(rawValue: 0.75), .normal, HUDScale(rawValue: 1.25)] {
             for fpsMetrics: Set<HUDMetric> in [[.fps], [.fpsGraph], [.fps, .fpsGraph]] {
@@ -72,8 +117,19 @@ import AppKit
                     check(container.frame.height < expandedSize.height, "Unavailable FPS collapses")
                     check(panel.frame == expandedFrame, "Collapse must not resize or move the capture window")
                     check(captureRect() == originalRect, "Capture mismatch scale=\(scale) fps=\(fpsMetrics) body=\(body), old=\(originalRect) new=\(captureRect()), container=\(container.frame), glass=\(glass.frame)")
+                    let header: NSImageView = member(hud, "collapsedFPSIndicator")
+                    check(!header.isHidden && header.alphaValue == 1 && header.image != nil,
+                          "Collapsed FPS keeps a visible reminder, including History-only")
+                    check(abs(header.frame.midX - container.bounds.midX) < 0.1,
+                          "Rolled-up arrow is centered")
+                    let dividers: [Int: NSView] = member(hud, "groupDividers")
+                    for divider in dividers.values where !divider.isHidden {
+                        check(divider.alphaValue == 1, "Section dividers remain visible while rolled up")
+                    }
+                    check(header.frame.minY >= 0 && header.frame.maxY <= container.frame.height,
+                          "Reminder stays inside the compact panel")
                     if body.isEmpty {
-                        check(container.alphaValue == 0 && container.frame.height == 0, "FPS-only leaves no empty panel")
+                        check(container.alphaValue == 1 && container.frame.height > 0, "FPS-only retains the compact header")
                     } else {
                         check(container.alphaValue == 1 && container.frame.height > 0, "Other metrics remain visible")
                         let rows: [HUDMetric: NSView] = member(hud, "metricRows")
@@ -82,19 +138,87 @@ import AppKit
                             let row = rows[metric]!
                             let rect = row.convert(row.bounds, to: host)
                             check(rect.minY >= -0.1 && rect.maxY <= host.bounds.height + 0.1, "Body rows must stay inside the visible crop: \(metric)")
+                            check(rect.maxY <= header.frame.minY, "Compact header must not overlap other metrics")
                         }
                     }
+                    if CommandLine.arguments.contains("--preview"), scale == .normal,
+                       fpsMetrics == [.fps, .fpsGraph], body == [.cpuTotal, .ramTotal, .battery] {
+                        // Render the real native layout over a neutral backing without capture.
+                        let surface: NSView = member(glass, "surface")
+                        surface.isHidden = true
+                        glass.layer?.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 1).cgColor
+                        hud.updateMetric(.cpuTotal, value: "24%")
+                        hud.updateRAM(.ramTotal, usage: .init(percentage: 65, usedBytes: 15_580_000_000, swapUsedBytes: 0))
+                        hud.updateMemoryPressure("normal")
+                        let bitmap = container.bitmapImageRepForCachingDisplay(in: container.bounds)!
+                        container.cacheDisplay(in: container.bounds, to: bitmap)
+                        try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-rolled-header-preview.png"))
+                        surface.isHidden = false
+                        glass.layer?.backgroundColor = NSColor.clear.cgColor
+                    }
                     hud.updateFPS(0)
+                    check(header.isHidden, "Expanded FPS must not show a duplicate small header")
                     check(container.frame.size == expandedSize, "Zero FPS is a valid reading and expands the panel")
                     hud.updateFPS(60)
                     check(panel.frame == expandedFrame && captureRect() == originalRect, "Samples do not move capture")
                     hud.markFPSUnavailable()
                     check(container.frame.size == expandedSize, "A single missing reading must not collapse")
                     hud.setDynamicFPS(false)
+                    check(header.isHidden, "Static does not show the compact reminder")
                     check(container.frame.size == expandedSize && glass.reservedCaptureSize == nil, "Static restores original geometry")
                     hud.setAlignment(.horizontal)
                     hud.setDynamicFPS(true)
-                    check(glass.reservedCaptureSize == nil, "Horizontal never reserves Dynamic geometry")
+                    check(glass.reservedCaptureSize != nil && header.isHidden, "Horizontal reserves capture while valid FPS remains expanded")
+                    hud.shutdown()
+                }
+            }
+        }
+
+        for scale in [HUDScale(rawValue: 0.75), .normal, HUDScale(rawValue: 1.25)] {
+            for background in [HUDBackground.dark, .light, .transparent, .off] {
+                for body: Set<HUDMetric> in [[], [.cpuTotal], [.ramTotal, .battery], [.fans]] {
+                    let hud = HUDWindowController()
+                    hud.setDynamicFPS(false)
+                    hud.setAlignment(.horizontal)
+                    hud.setBackground(background)
+                    hud.setPackagePowerOptions(.init(enabled: false))
+                    for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: body.union([.fps]).contains(metric)) }
+                    hud.setHUDScale(scale)
+                    let panel: HUDPanel = member(hud, "panel")
+                    let container: NSView = member(hud, "container")
+                    let horizontal: HUDHorizontalView = member(hud, "horizontalView")
+                    let arrow: NSImageView = member(hud, "collapsedFPSIndicator")
+                    let glass: PerformanceHUDGlassBackground = member(hud, "backgroundView")
+                    let expandedSize = container.frame.size
+                    let expandedFrame = panel.frame
+                    func captureRect() -> NSRect { panel.convertToScreen(glass.convert(glass.captureBounds, to: nil)) }
+                    let originalCapture = captureRect()
+                    hud.setDynamicFPS(true)
+                    let collapsedSize = container.frame.size
+                    check(collapsedSize.width < expandedSize.width && collapsedSize.height == expandedSize.height,
+                          "Horizontal collapses width only")
+                    check(!arrow.isHidden && arrow.alphaValue == 1 && container.bounds.contains(arrow.frame),
+                          "Sideways reminder fits inside the compact HUD")
+                    check(panel.frame == expandedFrame && captureRect() == originalCapture, "Horizontal capture stays fixed")
+                    hud.updateMetric(.cpuTotal, value: "24%")
+                    check(container.frame.size == collapsedSize && captureRect() == originalCapture,
+                          "Regular sampling cannot reset a collapsed width or resize capture")
+                    if CommandLine.arguments.contains("--preview"), scale == .normal,
+                       background == .dark, body == [.cpuTotal] {
+                        let surface: NSView = member(glass, "surface")
+                        surface.isHidden = true
+                        glass.layer?.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 1).cgColor
+                        let bitmap = container.bitmapImageRepForCachingDisplay(in: container.bounds)!
+                        container.cacheDisplay(in: container.bounds, to: bitmap)
+                        try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-horizontal-collapsed.png"))
+                        surface.isHidden = false
+                    }
+                    hud.updateFPS(60)
+                    check(container.frame.size == expandedSize && arrow.isHidden, "Horizontal FPS recovery restores full width")
+                    check(horizontal.frame.minX == HUDStyle.horizontalPadding(scale: scale), "Expanded FPS keeps its original alignment")
+                    check(panel.frame == expandedFrame && captureRect() == originalCapture, "Recovery keeps capture fixed")
+                    hud.setDynamicFPS(false)
+                    check(glass.reservedCaptureSize == nil && container.frame.size == expandedSize, "Static clears horizontal reservation")
                     hud.shutdown()
                 }
             }
@@ -114,10 +238,10 @@ import AppKit
         hud.resetFPS()
         try? await Task.sleep(for: .milliseconds(100))
         hud.updateFPS(45)
-        try? await Task.sleep(for: .seconds(4.1))
+        try? await Task.sleep(for: .seconds(3.1))
         check(container.frame.height == expanded, "Cancelled deadline cannot hide recovered FPS")
         hud.markFPSUnavailable()
-        try? await Task.sleep(for: .seconds(4.1))
+        try? await Task.sleep(for: .seconds(3.1))
         // A busy system may deliver the main-actor deadline after this task resumes.
         for _ in 0..<100 where container.frame.height != compact {
             try? await Task.sleep(for: .milliseconds(20))
@@ -130,7 +254,7 @@ import AppKit
         hud.setDynamicFPS(false)
         let staticSize = container.frame.size
         hud.markFPSUnavailable()
-        try? await Task.sleep(for: .seconds(4.1))
+        try? await Task.sleep(for: .seconds(3.1))
         check(container.frame.size == staticSize && glass.reservedCaptureSize == nil, "Static ignores the collapse deadline")
         // Animate a visible native window with capture deliberately off. This
         // exercises the real timer without prompting for screen-recording access.
@@ -152,12 +276,40 @@ import AppKit
         let finalExpanded = container.frame.height
         check(finalExpanded > animationStart && panel.frame == animationWindow, "Animation completes at expanded size")
         hud.resetFPS()
-        try? await Task.sleep(for: .seconds(4.2))
+        try? await Task.sleep(for: .seconds(3.2))
         hud.updateFPS(48) // Reverse a collapse that has already started.
         try? await Task.sleep(for: .milliseconds(700))
         check(container.frame.height == finalExpanded, "Returning readings reverse an in-flight collapse")
         hud.setHUDEnabled(false)
         hud.shutdown()
+        let sideways = HUDWindowController()
+        sideways.setAlignment(.horizontal)
+        sideways.setBackground(.off)
+        sideways.setDynamicFPS(true)
+        sideways.setHUDEnabled(true)
+        let sidewaysContainer: NSView = member(sideways, "container")
+        let sidewaysPanel: HUDPanel = member(sideways, "panel")
+        let initialWidth = sidewaysContainer.frame.width
+        let fixedFrame = sidewaysPanel.frame
+        sideways.updateFPS(60)
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            try? await Task.sleep(for: .milliseconds(180))
+            check(sidewaysContainer.frame.width > initialWidth, "Horizontal animation advances through intermediate widths")
+            let midway = sidewaysContainer.frame.width
+            sideways.updateMetric(.cpuTotal, value: "35%")
+            check(abs(sidewaysContainer.frame.width - midway) < 1, "Mid-animation sampling does not jump to an endpoint")
+        }
+        try? await Task.sleep(for: .milliseconds(650))
+        let fullWidth = sidewaysContainer.frame.width
+        check(fullWidth > initialWidth && sidewaysPanel.frame == fixedFrame, "Sideways expansion leaves window fixed")
+        sideways.resetFPS()
+        try? await Task.sleep(for: .seconds(3.2))
+        sideways.updateFPS(48)
+        try? await Task.sleep(for: .milliseconds(700))
+        check(sidewaysContainer.frame.width == fullWidth && sidewaysPanel.frame == fixedFrame,
+              "Horizontal recovery reverses an in-flight collapse")
+        sideways.setHUDEnabled(false)
+        sideways.shutdown()
         print("PASS: FPS availability, shared mode/reset, all scales/row selections, fixed capture geometry, FPS-only, horizontal, cancelled deadlines, recovery, native animation and reversal")
     }
 }

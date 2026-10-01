@@ -18,7 +18,7 @@ enum HUDPreferences {
     // Remove only display choices so the existing first-launch defaults stay
     // authoritative. Position, helper registration/setup, and other app data stay.
     static func resetOptions(in store: UserDefaults = .standard) {
-        var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background", "hud.fps.dynamic",
+        var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode",
                     "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
                     "hud.group.ram.details", "hud.fan.usage", "hud.fan.mode",
@@ -69,10 +69,30 @@ enum HUDPreferences {
         set { defaults.set(newValue.rawValue, forKey: "hud.alignment") }
     }
 
-    // Opt-in experiment: horizontal always remains static without losing this choice.
+    // One presentation choice applies to both HUD alignments.
     static var dynamicFPS: Bool {
-        get { defaults.bool(forKey: "hud.fps.dynamic") }
+        get { defaults.object(forKey: "hud.fps.dynamic") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "hud.fps.dynamic") }
+    }
+
+    static var fpsOptions: HUDFPSOptions {
+        get { fpsOptions(in: defaults) }
+        set { setFPSOptions(newValue, in: defaults) }
+    }
+
+    static func fpsOptions(in store: UserDefaults) -> HUDFPSOptions {
+        let value = store.object(forKey: metricKey(.fps)) as? Bool ?? HUDMetric.fps.defaultEnabled
+        let history = store.object(forKey: metricKey(.fpsGraph)) as? Bool ?? HUDMetric.fpsGraph.defaultEnabled
+        let mode: HUDFPSDisplayMode = value && history ? .both : value ? .value : history ? .history
+            : store.string(forKey: "hud.fps.displayMode").flatMap(HUDFPSDisplayMode.init(rawValue:)) ?? .both
+        return HUDFPSOptions(enabled: value || history, mode: mode)
+    }
+
+    static func setFPSOptions(_ options: HUDFPSOptions, in store: UserDefaults) {
+        store.set(options.mode.rawValue, forKey: "hud.fps.displayMode")
+        let metrics = options.visibleMetrics(alignment: .vertical)
+        store.set(metrics.contains(.fps), forKey: metricKey(.fps))
+        store.set(metrics.contains(.fpsGraph), forKey: metricKey(.fpsGraph))
     }
 
     // MARK: - HUD Scale
@@ -281,6 +301,8 @@ enum HUDPreferences {
 
     static var visibleMetrics: Set<HUDMetric> {
         var metrics = Set(HUDMetric.allCases.filter { isMetricEnabled($0) })
+        metrics.subtract([.fps, .fpsGraph])
+        metrics.formUnion(fpsOptions.visibleMetrics(alignment: alignment))
         for group in HUDResourceGroup.allCases {
             if let appMetric = group.appMetric { metrics.remove(appMetric) }
             metrics.remove(group.totalMetric)
