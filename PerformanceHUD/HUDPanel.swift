@@ -3,6 +3,7 @@ import AppKit
 @MainActor
 final class HUDPanel: NSPanel {
     var onDragFinished: (() -> Void)?
+    var draggableContentRect: NSRect?
     private var modifierTimer: Timer?
     private var dragging = false
 
@@ -43,11 +44,13 @@ final class HUDPanel: NSPanel {
             dragging = false
             onDragFinished?()
         }
-        ignoresMouseEvents = !isVisible || (!dragging && !Self.dragModifiersHeld(NSEvent.modifierFlags))
+        let insideContent = draggableContentRect.map { $0.contains(convertPoint(fromScreen: NSEvent.mouseLocation)) } ?? true
+        ignoresMouseEvents = !isVisible || (!dragging && (!insideContent || !Self.dragModifiersHeld(NSEvent.modifierFlags)))
     }
 
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .leftMouseDown && Self.dragModifiersHeld(event.modifierFlags) {
+        if event.type == .leftMouseDown && Self.dragModifiersHeld(event.modifierFlags)
+            && (draggableContentRect?.contains(event.locationInWindow) ?? true) {
             dragging = true
             performDrag(with: event)
             return

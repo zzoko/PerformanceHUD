@@ -118,6 +118,14 @@ final class PerformanceHUDGlassBackground: NSView {
     }
     private var lastGeometry: Geometry?
     private var geometryInvalidated = false
+    // A larger capture footprint can remain fixed while the visible HUD rolls up.
+    // Only the shader viewport and shadow change; SCStream keeps its configuration.
+    var reservedCaptureSize: NSSize?
+    private let viewport = HUDGlassViewport()
+    var captureBounds: NSRect {
+        let size = reservedCaptureSize ?? bounds.size
+        return NSRect(x: 0, y: bounds.maxY - size.height, width: size.width, height: size.height)
+    }
     var isShowingFallback: Bool { surface.isShowingFallback }
     var onFallbackChange: (() -> Void)?
     var style: PerformanceHUDGlassStyle {
@@ -159,7 +167,7 @@ final class PerformanceHUDGlassBackground: NSView {
         surface.onFallbackChange = { [weak self] in self?.onFallbackChange?() }
         wantsLayer = true
         surface.frame = bounds
-        surface.autoresizingMask = [.width, .height]
+        surface.autoresizingMask = []
         surface.wantsLayer = true
         surface.layer?.cornerRadius = glassAppearance.cornerRadius
         surface.layer?.masksToBounds = false // Shader already supplies rounded alpha.
@@ -186,10 +194,16 @@ final class PerformanceHUDGlassBackground: NSView {
     }
     override func layout() {
         super.layout()
+        updateVisibleSurface()
+    }
+    func updateVisibleSurface() {
+        surface.frame = captureBounds
+        surface.setVisibleHeight(bounds.height, radius: glassAppearance.cornerRadius)
         updateAppearance()
+        if viewport.setSize(bounds.size) { capture.redraw() }
     }
     private func updateAppearance() {
-        glassAppearance.applyShadow(to: self, enabled: showsShadow)
+        glassAppearance.applyShadow(to: self, enabled: showsShadow && bounds.height >= 1)
         surface.layer?.backgroundColor = NSColor.clear.cgColor
     }
     func start() {
@@ -279,7 +293,7 @@ final class PerformanceHUDGlassBackground: NSView {
         guard running, !suspended, let window, window.isVisible, !isHidden,
               let screen = window.screen,
               let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return nil }
-        return Geometry(rect: window.convertToScreen(convert(bounds, to: nil)),
+        return Geometry(rect: window.convertToScreen(convert(captureBounds, to: nil)),
                         screenFrame: screen.frame, displayID: number.uint32Value,
                         scale: screen.backingScaleFactor, style: style)
     }
@@ -298,16 +312,30 @@ final class PerformanceHUDGlassBackground: NSView {
         guard geometry != lastGeometry || geometryInvalidated else { return }
         lastGeometry = geometry
         geometryInvalidated = false
-        surface.frame = bounds
+        updateVisibleSurface()
         surface.showFallback()
         updateAppearance()
-        capture.configure(view: surface, appearance: glassAppearance)
+        capture.configure(view: surface, appearance: glassAppearance, viewport: viewport)
     }
 }
 
 @MainActor
 private final class HUDGlassSurfaceView: NSView {
     private let checkerboard = HUDCaptureCheckerboardView()
+    private let viewportMask = CAShapeLayer()
+    func setVisibleHeight(_ height: CGFloat, radius: CGFloat) {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        guard height < bounds.height else {
+            layer?.mask = nil
+            CATransaction.commit()
+            return
+        }
+        let visible = NSRect(x: 0, y: bounds.height - height, width: bounds.width, height: height)
+        viewportMask.frame = bounds
+        viewportMask.path = CGPath(roundedRect: visible, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        layer?.mask = viewportMask
+        CATransaction.commit()
+    }
     private(set) var isShowingFallback = true
     var onFallbackChange: (() -> Void)?
 
@@ -377,6 +405,22 @@ private struct HUDGlassCaptureGeometry {
     }
 }
 
+// Main-thread animation writes; the render worker takes one coherent snapshot per frame.
+private final class HUDGlassViewport: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: CGSize?
+    func setSize(_ size: CGSize) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard value != size else { return false }
+        value = size
+        return true
+    }
+    func size(or fallback: CGSize) -> CGSize {
+        lock.lock(); defer { lock.unlock() }
+        return value ?? fallback
+    }
+}
+
 @MainActor private final class HUDGlassCaptureController {
     private var revision = 0
     private var transition: Task<Void, Never>?
@@ -411,7 +455,8 @@ private struct HUDGlassCaptureGeometry {
         feed?.deactivate()
         if !state.needsAttention { state = .starting }
     }
-    func configure(view: NSView?, appearance: PerformanceHUDGlassAppearance = PerformanceHUDGlassAppearance(isDark: true)) {
+    func redraw() { feed?.redraw() }
+    func configure(view: NSView?, appearance: PerformanceHUDGlassAppearance = PerformanceHUDGlassAppearance(isDark: true), viewport: HUDGlassViewport? = nil) {
         firstFrameTask?.cancel()
         firstFrameTask = nil
         revision += 1
@@ -463,7 +508,7 @@ private struct HUDGlassCaptureGeometry {
                 config.showsCursor = false
                 config.capturesAudio = false
                 config.captureMicrophone = false
-                let processor = try HUDGlassRenderer(geometry: geometry, glass: true, appearance: appearance)
+                let processor = try HUDGlassRenderer(geometry: geometry, glass: true, appearance: appearance, viewport: viewport)
                 let feed = HUDGlassCaptureFeed(processor: processor)
                 feed.onFrame = { [weak self, weak view] image, milliseconds, age, received in
                     guard let self, self.revision == ticket else { return }
@@ -538,12 +583,23 @@ private final class HUDGlassCaptureFeed: NSObject, SCStreamOutput, SCStreamDeleg
     private var active = true
     private var busy = false
     private var pending: Frame?
+    private var latest: Frame?
     private var received = 0
     let processor: HUDGlassRenderer?
     var onFrame: (@MainActor (CGImage?, Double, Double?, Int) -> Void)?
     var onError: (@MainActor (NSError) -> Void)?
     init(processor: HUDGlassRenderer?) { self.processor = processor }
-    func deactivate() { lock.lock(); active = false; pending = nil; lock.unlock() }
+    func deactivate() { lock.lock(); active = false; pending = nil; latest = nil; lock.unlock() }
+    // A static desktop may deliver no new frames during the animation. Recompose
+    // the most recent pixels with the new viewport without restarting capture.
+    func redraw() {
+        lock.lock()
+        guard active, let latest else { lock.unlock(); return }
+        if busy { if pending == nil { pending = latest }; lock.unlock(); return }
+        busy = true
+        lock.unlock()
+        process(latest)
+    }
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         DispatchQueue.main.async { self.onError?(error as NSError) }
     }
@@ -556,6 +612,7 @@ private final class HUDGlassCaptureFeed: NSObject, SCStreamOutput, SCStreamDeleg
         lock.lock()
         guard active else { lock.unlock(); return }
         received += 1
+        latest = frame
         if busy { pending = frame; lock.unlock(); return }
         busy = true; lock.unlock()
         process(frame)
@@ -611,11 +668,12 @@ private final class HUDGlassRenderer {
     let geometry: HUDGlassCaptureGeometry
     let glass: Bool
     let appearance: PerformanceHUDGlassAppearance
+    private let viewport: HUDGlassViewport?
     private var scratchA: MTLTexture?
     private var scratchB: MTLTexture?
     private var output: MTLTexture?
-    init(geometry: HUDGlassCaptureGeometry, glass: Bool, appearance: PerformanceHUDGlassAppearance = PerformanceHUDGlassAppearance(isDark: true)) throws {
-        self.geometry = geometry; self.glass = glass; self.appearance = appearance
+    init(geometry: HUDGlassCaptureGeometry, glass: Bool, appearance: PerformanceHUDGlassAppearance = PerformanceHUDGlassAppearance(isDark: true), viewport: HUDGlassViewport? = nil) throws {
+        self.geometry = geometry; self.glass = glass; self.appearance = appearance; self.viewport = viewport
         guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else {
             throw NSError(domain: "Metal unavailable", code: 1)
         }
@@ -646,7 +704,10 @@ private final class HUDGlassRenderer {
             scratchA = try texture(w, h); scratchB = try texture(w, h)
         }
         guard let command = queue.makeCommandBuffer() else { throw NSError(domain: "Command allocation failed", code: 5) }
-        var params = Params(sourceSize: SIMD2(Float(w), Float(h)), outputSize: SIMD2(Float(ow), Float(oh)),
+        let visible = viewport?.size(or: geometry.size) ?? geometry.size
+        var params = Params(sourceSize: SIMD2(Float(w), Float(h)),
+                            outputSize: SIMD2(Float(min(geometry.size.width, visible.width) * geometry.scale),
+                                              Float(min(geometry.size.height, visible.height) * geometry.scale)),
                             offset: SIMD2(Float(geometry.offset.x*geometry.scale), Float(geometry.offset.y*geometry.scale)),
                             scale: Float(geometry.scale), glass: glass ? 1 : 0, tint: appearance.tint, optics: appearance.optics)
         func encode(_ pipeline: MTLComputePipelineState, input: MTLTexture, target: MTLTexture, direction: SIMD2<Float>) throws {
@@ -701,6 +762,9 @@ private final class HUDGlassRenderer {
     kernel void compose(texture2d<float, access::sample> input [[texture(0)]], texture2d<float, access::write> out [[texture(1)]],
                         constant Params& p [[buffer(0)]], uint2 id [[thread_position_in_grid]]) {
         if(id.x>=out.get_width() || id.y>=out.get_height()) return;
+        if(p.outputSize.x < 1 || p.outputSize.y < 1 || float(id.x) >= p.outputSize.x || float(id.y) >= p.outputSize.y) {
+            out.write(float4(0),id); return;
+        }
         float2 pixel=float2(id)+0.5;
         float2 local=(pixel-p.outputSize*0.5)/p.scale;
         float2 halfSize=p.outputSize*0.5/p.scale-0.5;

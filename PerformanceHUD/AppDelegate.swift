@@ -71,6 +71,7 @@ final class AppDelegate:
     private var sizeMenuView:
         HUDSizeMenuView?
 
+    private var fpsModeMenuView: HUDFPSModeMenuView?
     private var backgroundMenuView: HUDBackgroundMenuView?
 
     private var backgroundStatusItem: NSMenuItem?
@@ -607,6 +608,15 @@ final class AppDelegate:
         }
         addMetric(.fps)
         addMetric(.fpsGraph)
+        let fpsMode = HUDFPSModeMenuView(dynamic: HUDPreferences.dynamicFPS, alignment: HUDPreferences.alignment)
+        fpsMode.onChange = { [weak self] dynamic in
+            HUDPreferences.dynamicFPS = dynamic
+            self?.hudWindow?.setDynamicFPS(dynamic)
+        }
+        fpsModeMenuView = fpsMode
+        let fpsModeItem = NSMenuItem()
+        fpsModeItem.view = fpsMode
+        menu.addItem(fpsModeItem)
         var powerRows: [HUDResourceMenuView] = []
         for group in HUDResourceGroup.allCases {
             let view = HUDResourceMenuView(group: group, options: HUDPreferences.resourceOptions(for: group))
@@ -921,6 +931,7 @@ final class AppDelegate:
         hudWindow?.setBatteryOptions(HUDPreferences.batteryOptions)
         hudWindow?.setFanOptions(HUDPreferences.fanOptions)
         hudWindow?.setPackagePowerOptions(HUDPreferences.packagePowerOptions)
+        hudWindow?.setDynamicFPS(HUDPreferences.dynamicFPS)
         hudWindow?.setAlignment(HUDPreferences.alignment)
         hudWindow?.setHUDScale(hudScale)
         hudWindow?.setBackground(hudBackground)
@@ -945,6 +956,7 @@ final class AppDelegate:
         HUDPreferences.alignment = alignment
         enabledMetrics = HUDPreferences.visibleMetrics
         hudWindow?.setAlignment(alignment)
+        fpsModeMenuView?.update(dynamic: HUDPreferences.dynamicFPS, alignment: alignment)
         updatePackagePowerMenu()
         for metric in [HUDMetric.fpsGraph, .deviceInfo] {
             guard let item = metricMenuItems[metric] else { continue }

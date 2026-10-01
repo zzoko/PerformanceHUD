@@ -18,7 +18,7 @@ enum HUDPreferences {
     // Remove only display choices so the existing first-launch defaults stay
     // authoritative. Position, helper registration/setup, and other app data stay.
     static func resetOptions(in store: UserDefaults = .standard) {
-        var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background",
+        var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background", "hud.fps.dynamic",
                     "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
                     "hud.group.ram.details", "hud.fan.usage", "hud.fan.mode",
@@ -67,6 +67,12 @@ enum HUDPreferences {
     static var alignment: HUDAlignment {
         get { HUDAlignment(rawValue: defaults.string(forKey: "hud.alignment") ?? "") ?? .vertical }
         set { defaults.set(newValue.rawValue, forKey: "hud.alignment") }
+    }
+
+    // Opt-in experiment: horizontal always remains static without losing this choice.
+    static var dynamicFPS: Bool {
+        get { defaults.bool(forKey: "hud.fps.dynamic") }
+        set { defaults.set(newValue, forKey: "hud.fps.dynamic") }
     }
 
     // MARK: - HUD Scale

@@ -153,6 +153,20 @@ final class HUDWindowController {
     private var geometryObservers: [NSObjectProtocol] = []
     private var captureRefreshTask: Task<Void, Never>?
 
+    // Dynamic FPS changes the visible surface, never the reserved window/capture area.
+    private var dynamicFPS = HUDPreferences.dynamicFPS
+    private var fpsAvailability = HUDFPSAvailability()
+    private var fpsAvailabilityTask: Task<Void, Never>?
+    private var fpsAnimationTimer: Timer?
+    private var fpsAnimationTarget: CGFloat?
+    private var fpsProgress: CGFloat = 1
+    private var fpsCollapseDistance: CGFloat = 0
+    private var fpsBoundaryDivider: NSView?
+    private var expandedHUDSize = NSSize.zero
+    private var dynamicFPSActive: Bool {
+        dynamicFPS && alignment == .vertical && !enabledMetrics.isDisjoint(with: [.fps, .fpsGraph])
+    }
+
     private var customGlass: PerformanceHUDGlassBackground? {
         backgroundView as? PerformanceHUDGlassBackground
     }
@@ -166,6 +180,8 @@ final class HUDWindowController {
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         for observer in geometryObservers { NotificationCenter.default.removeObserver(observer) }
         captureRefreshTask?.cancel()
+        fpsAvailabilityTask?.cancel()
+        fpsAnimationTimer?.invalidate()
     }
 
     // MARK: - Init
@@ -218,7 +234,17 @@ final class HUDWindowController {
             geometryObservers.append(NotificationCenter.default.addObserver(
                 forName: name, object: panel, queue: .main
             ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.scheduleCaptureRefresh() }
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if name == NSWindow.didChangeBackingPropertiesNotification {
+                        // Re-align the reserved footprint when moving between
+                        // Retina and non-Retina displays before resuming capture.
+                        self.updateLayout()
+                        self.restorePosition()
+                    } else {
+                        self.scheduleCaptureRefresh()
+                    }
+                }
             })
         }
         screenObserver = NotificationCenter.default.addObserver(
@@ -853,6 +879,12 @@ final class HUDWindowController {
 
         hudEnabled =
             enabled
+        if !enabled {
+            fpsAnimationTimer?.invalidate()
+            fpsAnimationTimer = nil
+            fpsProgress = dynamicFPSActive && !fpsAvailability.expanded ? 0 : 1
+            applyDynamicFPSPresentation()
+        }
 
         updateVisibility()
     }
@@ -1168,6 +1200,10 @@ final class HUDWindowController {
     }
 
     func shutdown() {
+        fpsAvailabilityTask?.cancel()
+        fpsAvailabilityTask = nil
+        fpsAnimationTimer?.invalidate()
+        fpsAnimationTimer = nil
         appearanceObservation?.invalidate()
         appearanceObservation = nil
         fpsGraphView.reset()
@@ -1371,7 +1407,8 @@ final class HUDWindowController {
         let horizontalPadding = HUDStyle.horizontalPadding(scale: hudScale)
         let verticalPadding = HUDStyle.verticalPadding(scale: hudScale)
         horizontalView.frame = NSRect(x: horizontalPadding, y: verticalPadding, width: size.width, height: size.height)
-        let total = NSSize(width: size.width + 2 * horizontalPadding, height: size.height + 2 * verticalPadding)
+        let total = pixelAlignedSize(NSSize(width: size.width + 2 * horizontalPadding,
+                                            height: size.height + 2 * verticalPadding))
         // Readings usually fit their reserved width. Avoid touching the window or
         // capture geometry on each sample unless the actual size changes.
         if container.frame.size != total { resizeHUD(width: total.width, height: total.height) }
@@ -1432,6 +1469,13 @@ final class HUDWindowController {
     }
 
     private func updateLayout() {
+        fpsAnimationTimer?.invalidate()
+        fpsAnimationTimer = nil
+        // Measure the unchanged expanded stack before applying its presentation crop.
+        stackTopConstraint?.constant = HUDStyle.verticalPadding(scale: hudScale)
+        for metric in [HUDMetric.fps, .fpsGraph] { metricRows[metric]?.alphaValue = 1 }
+        fpsBoundaryDivider?.alphaValue = 1
+        fpsBoundaryDivider = nil
         updateReadingAppearance()
         updateRAMDetailsVisibility()
         fanView.update(sample: fanSample, options: fanOptions, scale: hudScale, background: textBackground)
@@ -1604,7 +1648,18 @@ final class HUDWindowController {
         resizeHUD(width: width, height: totalHeight)
     }
 
-    private func resizeHUD(width: CGFloat, height totalHeight: CGFloat) {
+    private func pixelAlignedSize(_ size: NSSize) -> NSSize {
+        let scale = panel.backingScaleFactor
+        return NSSize(width: ceil(size.width * scale) / scale, height: ceil(size.height * scale) / scale)
+    }
+
+    private func resizeHUD(width proposedWidth: CGFloat, height proposedHeight: CGFloat) {
+        // Auto Layout rounds the background to backing pixels. Match that grid
+        // so the reserved capture rect cannot drift by a fraction of a point.
+        expandedHUDSize = pixelAlignedSize(NSSize(width: proposedWidth, height: proposedHeight))
+        let width = expandedHUDSize.width
+        let totalHeight = expandedHUDSize.height
+        customGlass?.reservedCaptureSize = dynamicFPSActive ? expandedHUDSize : nil
         let anchor = visibleTopLeft
         let margin = shadowMargin
         panel.setFrame(
@@ -1633,7 +1688,133 @@ final class HUDWindowController {
             )
             CATransaction.commit()
         }
+        configureDynamicFPSPresentation()
         scheduleCaptureRefresh()
+    }
+
+    // MARK: - Dynamic FPS experiment
+
+    func setDynamicFPS(_ enabled: Bool) {
+        guard dynamicFPS != enabled else { return }
+        let previousProgress = fpsProgress
+        dynamicFPS = enabled
+        updateLayout()
+        // Switching back to Static restores the complete layout immediately.
+        if dynamicFPSActive {
+            let target = fpsProgress
+            fpsProgress = previousProgress
+            applyDynamicFPSPresentation()
+            animateFPS(to: target)
+        }
+        restorePosition()
+    }
+
+    private func configureDynamicFPSPresentation() {
+        fpsCollapseDistance = 0
+        fpsBoundaryDivider?.alphaValue = 1
+        fpsBoundaryDivider = nil
+        fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
+        if dynamicFPSActive {
+            let remaining = enabledMetrics.subtracting([.fps, .fpsGraph])
+            if remaining.isEmpty && !showsPackagePower {
+                fpsCollapseDistance = expandedHUDSize.height
+            } else {
+                // Keep the normal leading MEM/FAN/Chip divider, but roll away the
+                // FPS-to-CPU/GPU separator along with the FPS rows.
+                let firstGroup = verticalMetricGroups.indices.dropFirst().first { index in
+                    verticalMetricGroups[index].contains { remaining.contains($0) }
+                        || (index == 1 && showsPackagePower)
+                }
+                let keepDivider = firstGroup.map { $0 != 1 } ?? false
+                let divider = firstGroup.flatMap { groupDividers[$0] }
+                let firstBody = stackView.arrangedSubviews.first { view in
+                    !view.isHidden && view !== metricRows[.fps] && view !== metricRows[.fpsGraph]
+                        && !groupDividers.values.contains(where: { $0 === view }) && view !== bottomDivider
+                }
+                if let first = keepDivider ? divider : firstBody, let host = stackView.superview {
+                    let rect = first.convert(first.bounds, to: host)
+                    fpsCollapseDistance = max(0, host.bounds.maxY - rect.maxY - HUDStyle.verticalPadding(scale: hudScale))
+                }
+                if !keepDivider { fpsBoundaryDivider = divider }
+            }
+        }
+        fpsProgress = dynamicFPSActive && !fpsAvailability.expanded ? 0 : 1
+        applyDynamicFPSPresentation()
+    }
+
+    private func applyDynamicFPSPresentation() {
+        let progress = dynamicFPSActive ? fpsProgress : 1
+        let scale = panel.backingScaleFactor
+        let height = max(0, (expandedHUDSize.height - fpsCollapseDistance * (1 - progress)) * scale).rounded() / scale
+        let offset = expandedHUDSize.height - height
+        let margin = shadowMargin
+        // The top edge, actual window frame, and full capture footprint stay fixed.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        container.frame = NSRect(x: margin, y: margin + expandedHUDSize.height - height,
+                                 width: expandedHUDSize.width, height: height)
+        stackTopConstraint?.constant = HUDStyle.verticalPadding(scale: hudScale) - offset
+        backgroundContentView.wantsLayer = true
+        backgroundContentView.layer?.masksToBounds = dynamicFPSActive
+        backgroundContentView.layer?.cornerRadius = dynamicFPSActive ? (customGlass?.glassAppearance.cornerRadius ?? 8) : 0
+        container.layer?.masksToBounds = hudBackground == .off && dynamicFPSActive
+        for metric in [HUDMetric.fps, .fpsGraph] { metricRows[metric]?.alphaValue = progress }
+        fpsBoundaryDivider?.alphaValue = progress
+        // An FPS-only HUD leaves no empty pill or invisible drag target.
+        container.alphaValue = height < 1 ? 0 : 1
+        panel.draggableContentRect = dynamicFPSActive ? container.frame : nil
+        container.layoutSubtreeIfNeeded()
+        customGlass?.updateVisibleSurface()
+        CATransaction.commit()
+    }
+
+    private func animateFPS(to target: CGFloat) {
+        if fpsAnimationTimer != nil && fpsAnimationTarget == target { return }
+        fpsAnimationTarget = target
+        fpsAnimationTimer?.invalidate()
+        fpsAnimationTimer = nil
+        guard dynamicFPSActive, fpsProgress != target else { return }
+        guard hudEnabled, panel.isVisible, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            fpsProgress = target
+            applyDynamicFPSPresentation()
+            return
+        }
+        let start = fpsProgress
+        let started = ProcessInfo.processInfo.systemUptime
+        let duration = 0.55 * Double(abs(target - start))
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self else { timer.invalidate(); return }
+                let t = min(1, (ProcessInfo.processInfo.systemUptime - started) / duration)
+                let eased = t * t * (3 - 2 * t)
+                self.fpsProgress = start + (target - start) * CGFloat(eased)
+                self.applyDynamicFPSPresentation()
+                if t >= 1 { timer.invalidate(); self.fpsAnimationTimer = nil }
+            }
+        }
+        fpsAnimationTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func fpsBecameAvailable() {
+        fpsAvailabilityTask?.cancel()
+        fpsAvailabilityTask = nil
+        fpsAvailability.receivedReading()
+        // Do not restart an in-flight expansion for each arriving sample.
+        animateFPS(to: 1)
+    }
+
+    private func fpsBecameUnavailable() {
+        fpsAvailability.unavailable(at: ProcessInfo.processInfo.systemUptime)
+        guard fpsAvailabilityTask == nil, let since = fpsAvailability.unavailableSince else { return }
+        let delay = max(0, HUDFPSAvailability.collapseDelay - (ProcessInfo.processInfo.systemUptime - since))
+        fpsAvailabilityTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard let self else { return }
+            fpsAvailabilityTask = nil
+            fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
+            if !fpsAvailability.expanded { animateFPS(to: 0) }
+        }
     }
 
     private var shadowMargin: CGFloat {
@@ -1654,6 +1835,7 @@ final class HUDWindowController {
     }
 
     private func restorePosition() {
+        let positioningSize = dynamicFPSActive ? expandedHUDSize : container.frame.size
         defer { scheduleCaptureRefresh() }
         if let customTopLeft, !NSScreen.screens.isEmpty {
             // Choose the nearest remaining display if the saved display was disconnected.
@@ -1663,7 +1845,7 @@ final class HUDWindowController {
             }!
             let contentOrigin = HUDPositioning.origin(
                 for: customTopLeft,
-                size: container.frame.size,
+                size: positioningSize,
                 in: screen.frame
             )
             panel.setFrameOrigin(NSPoint(x: contentOrigin.x - shadowMargin,
@@ -1692,7 +1874,7 @@ final class HUDWindowController {
 
         let y =
             usableFrame.maxY
-            - container.frame.height
+            - positioningSize.height
             - inset
             - shadowMargin
 
@@ -1756,7 +1938,7 @@ final class HUDWindowController {
     ) {
 
         guard
-            fps.isFinite
+            fps.isFinite, fps >= 0, fps < Double(Int.max)
         else {
 
             markFPSUnavailable()
@@ -1764,6 +1946,7 @@ final class HUDWindowController {
             return
         }
 
+        fpsBecameAvailable()
         updateMetric(
             .fps,
             value:
@@ -1779,6 +1962,7 @@ final class HUDWindowController {
     }
 
     func markFPSUnavailable() {
+        fpsBecameUnavailable()
         updateMetric(.fps, value: "")
         if hudEnabled && enabledMetrics.contains(.fpsGraph) {
             fpsGraphView.markUnavailable()
@@ -1786,6 +1970,7 @@ final class HUDWindowController {
     }
 
     func resetFPS() {
+        fpsBecameUnavailable()
 
         fpsGraphView.reset()
 
