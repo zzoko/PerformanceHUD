@@ -1,0 +1,35 @@
+name: Update repository activity
+
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repository-activity
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.repository == 'zzoko/PerformanceHUD' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Fetch only the generator, not a Git clone that could affect the chart.
+      - name: Load generator from this workflow's commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/contents/.github/scripts/repository_activity.py?ref=${GITHUB_SHA}" \
+            --jq '.content' | base64 --decode > "${RUNNER_TEMP}/repository_activity.py"
+
+      - name: Read traffic and update the stats branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        run: python3 "${RUNNER_TEMP}/repository_activity.py"
