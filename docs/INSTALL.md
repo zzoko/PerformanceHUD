@@ -57,10 +57,12 @@ Before deleting the app, choose **Power Helper → Remove Power Helper**, wait f
 
 </details>
 
+*or*
+
 <details>
 <summary><strong>Watch the installation walkthrough</strong></summary>
 
-Watch a quick walkthrough of installing the app and granting macOS permissions. These are normally remembered for later launches. When updating the app, you usually only need to approve the updated power helper if prompted. The exact prompts may vary.
+Watch a quick walkthrough of installing the app and granting macOS permissions the first time. These are remembered for later launches. When updating the app, you usually only need to approve the updated power helper if prompted. The exact prompts and order may vary.
 
 [![Watch the PerformanceHUD installation walkthrough on YouTube](https://img.youtube.com/vi/7mou4dwnUpE/hqdefault.jpg)](https://youtu.be/7mou4dwnUpE)
 

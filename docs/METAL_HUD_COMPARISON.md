@@ -1,21 +1,27 @@
-# Compared with Apple's Metal performance HUD
+# Differences between PerformanceHUD and MetalHUD
 
 [← Back to README](../README.md)
 
-This isn't aimed at replacing MetalHUD — Apple's built-in tool is for deep graphics diagnostics and debugging. PerformanceHUD is a lighter, always-available layer on top of that: a system-resource overlay in the spirit of MSI Afterburner on Windows, not a rendering profiler.
+If you already use MetalHUD to keep an eye on FPS, PerformanceHUD brings more of your Mac’s activity into the same view: CPU and GPU usage, temperatures, power draw, memory pressure, fan speeds, and battery information.
 
-### Advantages
+It’s built around the experience of using an overlay while playing. Keep a few readings visible throughout a session, or open up a fuller view when you want to see how your Mac is handling a game.
 
-- Toggles on anytime, mid-session — MetalHUD requires setting `MTL_HUD_ENABLED=1` before the game launches and can't be enabled for a session already in progress.
-- Shows system context MetalHUD doesn't report at all: CPU, GPU, and RAM usage, temperatures, swap, memory pressure, fan speeds, and battery — MetalHUD is scoped to GPU rendering stats only.
-- Fully yours to lay out — per-metric visibility, size, position, and keyboard shortcuts — versus MetalHUD's fixed overlay.
-- A tiny, single-purpose app (<4 MB) rather than a debugging surface built into the graphics stack.
+## What PerformanceHUD adds
 
-### Tradeoffs
+- **A wider view of your Mac.** See system usage alongside supported focused-app readings, plus CPU, GPU, and Neural Engine watts, temperatures, swap, memory pressure, fans, and battery state. These give you more context when adjusting settings or comparing how demanding different games are.
+- **A layout that fits your setup.** Choose a horizontal strip or vertical layout, show individual readings, and highlight the values that matter most. Adjust the size, position, and appearance, including the custom glass effect and automatic Light/Dark switching.
+- **Convenient controls while you play.** Turn the overlay on or off from the menu bar or with a keyboard shortcut, even after launching a game. Your choices stay saved as you move between apps, and supported focused-app readings follow the active app.
+- **Small details for everyday use.** A 60-second FPS history, optional automatic collapsing when FPS becomes unavailable, individual or averaged fan readings, and a battery icon that reflects your Mac’s power state.
 
-- No frame-time graphs or detailed Metal rendering diagnostics — for that, MetalHUD is still the right tool.
-- Most metrics refresh about once per second (battery and the glass background run on their own schedules); FPS specifically updates a bit slower than MetalHUD's.
-- FPS and app GPU readings depend on what macOS exposes per game, so unsupported titles show blank readings — but compatibility tracks MetalHUD's own, covering most Crossover games, Steam games, Minecraft (Vulkan), and similar.
-- Per-app readings cover the tracked process and may exclude helper processes, so values can differ from Activity Monitor.
-- See [Display compatibility](../README.md#display-compatibility) for how this behaves in fullscreen.
-- Adds its own sampling/rendering overhead — around 4% FPS impact in testing, varying by game and hardware.
+## Where MetalHUD goes further
+
+MetalHUD provides detailed frame timing, GPU rendering information, shader compilation statistics, and performance logging. Those tools are useful for investigating stutter and rendering bottlenecks. PerformanceHUD’s FPS history shows sampled FPS over time; it does not replace a frame-time graph or Metal rendering diagnostics. See [Apple’s MetalHUD overview](https://developer.apple.com/documentation/xcode/monitoring-your-metal-apps-graphics-performance).
+
+MetalHUD also supports changing its displayed metrics, size, opacity, and position. PerformanceHUD’s appeal is its combination of system readings, layouts, and everyday controls. See [Apple’s customization guide](https://developer.apple.com/documentation/xcode/customizing-metal-performance-hud).
+
+## Things to know
+
+- **Readings and compatibility:** FPS and focused-app GPU readings depend on what macOS exposes for each app. Unsupported readings stay blank; matching MetalHUD compatibility is not guaranteed. Per-app readings cover the tracked process and may exclude helper processes, so values can differ from Activity Monitor. See [Display compatibility](../README.md#display-compatibility) for fullscreen behavior.
+- **Refresh rate:** Most metrics update about once per second; temperatures, battery information, and the glass effect use different schedules. The FPS display is sampled, rather than updated for every frame.
+- **Setup:** PerformanceHUD is a separate app. Its glass effect needs screen recording permission, and watt readings need the approved power helper. See [installation](INSTALL.md#downloaded-app) and [Privacy & access](PRIVACY_AND_ACCESS.md).
+- **Performance impact:** Sampling and drawing the overlay add overhead. Testing has shown around a 4% FPS reduction, but the impact varies with the game, hardware, and selected options; this is not a fixed cost or a comparison against MetalHUD.

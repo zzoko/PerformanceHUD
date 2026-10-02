@@ -2,14 +2,38 @@
 
 [← Back to README](../README.md)
 
-FPS comes from Apple's macOS metalperftrace tool. CPU and app memory readings use macOS process statistics; GPU readings use IOKit GPU counters. System memory, swap, memory pressure, and battery readings come from macOS system statistics and power information. PerformanceHUD reads these measurements without modifying game files or injecting code into games.
+PerformanceHUD processes readings and screen pixels locally on your Mac. The app and its power helper contain no analytics, advertising, or network uploads. They do not send performance readings or captured screen content to the developer or any other service.
 
-Temperature estimates use read-only AppleSMC sensor readings, with the battery controller as a fallback for battery temperature. Fan detection, RPM, and maximum-speed readings also use read-only AppleSMC access, without the power helper or changes to fan control. CPU, GPU, ANE, and SoC power estimates use Apple’s `powermetrics` through a bundled, administrator-approved helper. These private interfaces and available sensors vary by hardware and macOS version; unavailable readings stay blank. ANE shows power only, with no utilization percentage, temperature, or focused-app option. SoC power combines CPU, GPU, and Neural Engine readings and does not include the display or all other components of the Mac.
+## What it reads
 
-CPU, GPU, and ANE Power are enabled by default, and first launch offers helper setup. Sampling runs only while the HUD is enabled and a visible category or SoC Power needs readings. SoC Power can run independently of the CPU, GPU, and ANE Power checkboxes; it is available in both alignments.
+- **FPS:** Apple's macOS `metalperftrace` tool provides readings for the focused app. The FPS history is held in memory, not saved as a recording or log.
+- **CPU, GPU, and memory:** macOS process and system statistics provide CPU and memory usage, swap, and memory pressure. GPU usage comes from IOKit counters. The app identifies the frontmost process for focused-app readings; those readings may exclude the app's helper processes.
+- **Temperatures and fans:** Read-only AppleSMC access provides available temperature sensors, fan RPM, and maximum fan speeds. Battery temperature can fall back to the battery controller. Fan monitoring does not need the power helper and never changes fan speeds or cooling settings.
+- **Battery and device information:** macOS power and system information provides charge, power source, power mode, chip name, and macOS version.
+- **Power:** Apple's `powermetrics` provides estimated CPU, GPU, and Apple Neural Engine watts through the bundled power helper. SoC Power combines all three from the same sample; it is not the Mac's total power consumption and excludes the display and other components. ANE offers power only.
 
-With an approved helper, Power checkboxes look normal while sampling is off. They are muted while requested readings start, then return to their normal appearance after the first valid helper sample. This confirms communication, not that every individual counter is supported. Declining setup, missing approval, removing the helper, or a persistent failure turns these options off and leaves them muted. They remain clickable while their category is enabled: click **Power** to open setup, repair, or approval settings. Successful setup or later approval enables these options again. Brief sampling gaps do not change your selections. To avoid flicker during short delays, the HUD can retain each last valid power reading for up to five seconds from its original timestamp; longer gaps clear it. Stopping the HUD, sleep, and disconnects clear retained readings immediately. While power readings are active, the app declares a user-requested activity to keep updates running when a game is in front; normal system sleep remains allowed.
+PerformanceHUD does not modify game files or inject code into games. Some readings rely on private interfaces or hardware-specific sensors, so availability varies by Mac, macOS version, and tracked app. Unsupported readings remain blank; fan detection failures are shown separately from “No fans detected.”
 
-If macOS remembers approval but cannot start the helper, PerformanceHUD attempts to refresh its registration once before reporting failure. Setup, status, approval settings, and removal are available under **Power Helper**. Other metrics remain usable. SoC Power uses CPU, GPU, and Neural Engine values from the same sample; missing or stale readings stay blank. See [installation and helper setup](INSTALL.md#enable-power-readings) for details.
+## Screen recording permission
 
-ScreenCaptureKit is required to capture the area behind the HUD to display the transparent overlay on top, pixels are processed locally and captured frames stay in memory and are not saved as recordings or uploaded. This requires granting Screen Capture permission.
+All appearance modes—Clear, Light, Dark, and Follow system—use ScreenCaptureKit for the custom glass effect. macOS lists this permission under **Screen & System Audio Recording**, but PerformanceHUD captures neither system audio nor microphone audio.
+
+The capture stream is cropped to the area around the HUD, including a small margin for the effect, and excludes PerformanceHUD itself. With Dynamic FPS, the full expanded HUD area remains reserved for capture while the visible overlay collapses. Captured pixels may include whatever other apps display in that area. Frames stay in memory and are not saved as screenshots, video recordings, or uploaded.
+
+macOS may also ask to allow capture without its private window picker. PerformanceHUD selects the display behind the HUD directly and crops the capture to the area described above.
+
+Screen capture supplies the glass effect, not the performance statistics. Without approval, metrics remain usable over a checkerboard fallback. You can revoke capture permission in System Settings; see [Apple’s screen recording permission guide](https://support.apple.com/guide/mac-help/mchld6aa7d23/mac).
+
+## Power helper access
+
+CPU, GPU, and ANE Power are enabled by default, and first launch offers helper setup. The helper runs with administrator privileges after macOS approval through **Background App Activity**. It runs a fixed `powermetrics` command; the app cannot send it arbitrary commands, file paths, or sampling arguments. App and helper connections are checked against their signing identities and matching developer team.
+
+Power sampling runs only while the HUD is enabled and a visible power option needs readings. SoC Power can request readings independently of the individual CPU, GPU, and ANE options. Otherwise, the installed helper is idle. Quitting the app stops sampling; normal system sleep remains allowed.
+
+Brief gaps can retain the last valid power value for up to five seconds from its sample timestamp. Longer gaps clear it, as do stopping the HUD, sleep, or a helper disconnect. Other metrics remain usable if power setup is declined or unavailable.
+
+Use **Power Helper** in the menu for status, setup, repair, or **Remove Power Helper** to unregister it. If macOS remembers approval but cannot start it, the app can attempt one registration refresh; this does not bypass approval. See the [installation guide](INSTALL.md#downloaded-app) for setup and removal steps.
+
+## What is stored
+
+HUD preferences and helper setup state are saved locally using macOS preferences. Live readings, FPS history, and captured frames are not written to a usage-history database or uploaded. Resetting display options does not revoke macOS permissions or remove the helper; those are managed separately as described above.

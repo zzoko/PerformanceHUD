@@ -9,11 +9,85 @@ Get the ready-built app for a one-time **$3.99**, or build it yourself for free.
   <a href="docs/INSTALL.md#build-from-source"><img src="docs/images/build-from-source.svg" alt="Build it yourself — free, requires Xcode" width="250" height="64"></a>
 </p>
 
-Purchases support me and the development of PerformanceHUD. The paid app can be used personally or commercially, including in monetized videos and streams. Free source builds and modifications are for **personal, non-commercial use**. Resale and external redistribution are not permitted. See the [license](LICENSE) for details.
+Purchases support me and the continuing of maintenance and development of PerformanceHUD. The paid app can be used personally or commercially, including in monetized videos and streams. Free source builds and modifications are for **personal, non-commercial use**. Resale and external redistribution are not permitted. See the [license](LICENSE) for details.
 
-**➤ GitHub sponsorships** — If you prefer to build the app yourself but would still like to support it, direct GitHub sponsorships will offer another way to contribute. A link will be added once approved.
+If you prefer to build the app yourself but would still like to support it, **GitHub Sponsorships** will offer another way to contribute. A link will be added once approved.
 
 ![Repository activity: daily Git clones over the last 14 days](https://raw.githubusercontent.com/zzoko/PerformanceHUD/stats/repository-activity.svg)
+
+## ✦ About PerformanceHUD
+
+<table>
+<tr>
+<td width="1000">
+
+<details>
+<summary><strong>Take a closer look — features, screenshots &amp; controls</strong></summary>
+
+PerformanceHUD is a tiny (<4 MB) app that displays a performance overlay over games and apps. You can use it as just an FPS display, or also show CPU, GPU, and memory usage, temperatures, power readings, fan speeds, and battery information for a deeper overview of how your Mac is handling the workload.
+
+The HUD is customized from the menu bar. You can choose which readings to display and highlight, swap between vertical and horizontal layouts, adjust the size and appearance, and move the overlay where you want it. You can also turn it on and off at any time, even if the game is already running. There’s a built-in Controls Guide explaining in detail what each option in the menu does and how it works.
+
+I’ve put a lot of thought into keeping the overlay easy to read and the controls organized, even as more features have been added. Attention to detail and making something genuinely useful that I would want to use myself and would improve my macOS experience have been the goal. There are many small details, from the battery icon dynamically changing with your Mac’s power state to the custom glass effect that lets the HUD blend naturally into whatever’s on screen.
+
+<table>
+  <tr>
+    <th colspan="2">Dark appearance</th>
+  </tr>
+  <tr>
+    <td width="33%" valign="top" align="center">
+      <a href="docs/images/HUD_vertical_dark.png"><img src="docs/images/HUD_vertical_dark.png" alt="PerformanceHUD vertical HUD with a dark background" width="100%"></a><br>
+      <sub>Vertical HUD</sub>
+    </td>
+    <td width="67%" valign="top" align="center">
+      <a href="docs/images/HUD_menu_dark.png"><img src="docs/images/HUD_menu_dark.png" alt="PerformanceHUD menu controls in dark mode" width="100%"></a><br>
+      <sub>Menu controls</sub>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <a href="docs/images/HUD_horizontal_dark.png"><img src="docs/images/HUD_horizontal_dark.png" alt="PerformanceHUD horizontal HUD with a dark background" width="100%"></a><br>
+      <sub>Horizontal HUD</sub>
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <th colspan="2">Light appearance</th>
+  </tr>
+  <tr>
+    <td width="33%" valign="top" align="center">
+      <a href="docs/images/HUD_vertical_light.png"><img src="docs/images/HUD_vertical_light.png" alt="PerformanceHUD vertical HUD with a light background" width="100%"></a><br>
+      <sub>Vertical HUD</sub>
+    </td>
+    <td width="67%" valign="top" align="center">
+      <a href="docs/images/HUD_menu_light.png"><img src="docs/images/HUD_menu_light.png" alt="PerformanceHUD menu controls in light mode" width="100%"></a><br>
+      <sub>Menu controls</sub>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <a href="docs/images/HUD_horizontal_light.png"><img src="docs/images/HUD_horizontal_light.png" alt="PerformanceHUD horizontal HUD with a light background" width="100%"></a><br>
+      <sub>Horizontal HUD</sub>
+    </td>
+  </tr>
+</table>
+
+<details>
+<summary>Watch PerformanceHUD in-game</summary>
+
+[![Watch PerformanceHUD in-game on YouTube](https://img.youtube.com/vi/-b_t999Q9pQ/hqdefault.jpg)](https://youtu.be/-b_t999Q9pQ)
+
+</details>
+
+</details>
+
+</td>
+</tr>
+</table>
+
+<br>
 
 ## Display compatibility
 
@@ -31,76 +105,16 @@ To find your current resolution, open **System Settings → Displays** and hover
 ## Requirements
 
 <details>
-<summary>View system and permission requirements</summary>
+<summary>View system requirements</summary>
 
 - Apple silicon Mac (M-series), running macOS 27.0 or later.
-- Screen Capture permission for the glass background.
-- Administrator approval for the optional power-reading helper.
 
 </details>
 
-## What is this?
+## More resources
 
-PerformanceHUD is a tiny (<4 MB) app that displays a performance overlay over games and apps. Use it as just an FPS display, or also show CPU, GPU, and memory usage, temperatures, power readings, fan speeds, and battery information for a fuller picture of how your Mac is handling the workload. Some readings depend on your Mac and the app you’re using.
-
-The controls live in the menu bar. Choose which readings to display and highlight, with vertical and horizontal layouts to fit your setup. Adjust the size, choose an appearance or let it follow macOS, and move the overlay where you want it. You can turn it on even if the game is already running, and the built-in Controls Guide explains each option.
-
-I’ve put a lot of thought into keeping the overlay easy to read and the controls organized, even as more features have been added. That care extends to the smaller details, from the battery icon changing with your Mac’s power state to the custom glass background that adapts to what’s behind the overlay.
-
-## Showcase
-
-<table>
-  <tr>
-    <th width="33%">Vertical HUD</th>
-    <th width="67%">Menu controls</th>
-  </tr>
-  <tr>
-    <td valign="top" align="center">
-      <a href="docs/images/HUD_vertical_dark.png"><img src="docs/images/HUD_vertical_dark.png" alt="PerformanceHUD v1.4 vertical layout with a dark background" width="100%"></a>
-    </td>
-    <td valign="top" align="center">
-      <a href="docs/images/HUD_menu_dark.png"><img src="docs/images/HUD_menu_dark.png" alt="PerformanceHUD v1.5 menu controls in dark mode" width="100%"></a>
-    </td>
-  </tr>
-  <tr>
-    <td valign="top" align="center">
-      <a href="docs/images/HUD_vertical_light.png"><img src="docs/images/HUD_vertical_light.png" alt="PerformanceHUD v1.4 vertical layout with a light background" width="100%"></a>
-    </td>
-    <td valign="top" align="center">
-      <a href="docs/images/HUD_menu_light.png"><img src="docs/images/HUD_menu_light.png" alt="PerformanceHUD v1.5 menu controls in light mode" width="100%"></a>
-    </td>
-  </tr>
-</table>
-
-**Horizontal HUD**
-
-<a href="docs/images/HUD_horizontal_dark.png"><img src="docs/images/HUD_horizontal_dark.png" alt="PerformanceHUD v1.4 horizontal layout with a dark background" width="100%"></a>
-
-<a href="docs/images/HUD_horizontal_light.png"><img src="docs/images/HUD_horizontal_light.png" alt="PerformanceHUD v1.4 horizontal layout with a light background" width="100%"></a>
-
-<details>
-<summary>Watch PerformanceHUD in-game</summary>
-
-[![Watch PerformanceHUD in-game on YouTube](https://img.youtube.com/vi/-b_t999Q9pQ/hqdefault.jpg)](https://youtu.be/-b_t999Q9pQ)
-
-</details>
-
-## Compared with Apple's Metal performance HUD
-
-- [Compare features and tradeoffs](docs/METAL_HUD_COMPARISON.md)
-
-## Future ideas — under consideration
-
-- [Explore potential future additions](docs/FUTURE_IDEAS.md)
-
-## Changelog
-
-- [See what changed in each version](docs/CHANGELOG.md)
-
-## Privacy & access
-
-- [Read about data sources, permissions, and the power helper](docs/PRIVACY_AND_ACCESS.md)
-
-## License
-
-- [Read the source-build and paid-app license](LICENSE)
+- [Differences between PerformanceHUD and MetalHUD](docs/METAL_HUD_COMPARISON.md)
+- [Bugs & suggestions](docs/FEEDBACK.md)
+- [Changelog](docs/CHANGELOG.md)
+- [Privacy & access](docs/PRIVACY_AND_ACCESS.md)
+- [License](LICENSE)
