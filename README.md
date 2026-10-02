@@ -19,7 +19,7 @@ If you prefer to build the app yourself but would still like to support it, **Gi
 
 <table>
 <tr>
-<td width="1000">
+<td>
 
 <details>
 <summary><strong>Take a closer look — features, screenshots &amp; controls</strong></summary>
@@ -36,17 +36,17 @@ I’ve put a lot of thought into keeping the overlay easy to read and the contro
   </tr>
   <tr>
     <td width="33%" valign="top" align="center">
-      <a href="docs/images/HUD_vertical_dark.png"><img src="docs/images/HUD_vertical_dark.png" alt="PerformanceHUD vertical HUD with a dark background" width="100%"></a><br>
+      <a href="docs/images/HUD_vertical_dark.png"><img src="docs/images/HUD_vertical_dark.png" alt="PerformanceHUD vertical HUD with a dark background" width="240"></a><br>
       <sub>Vertical HUD</sub>
     </td>
     <td width="67%" valign="top" align="center">
-      <a href="docs/images/HUD_menu_dark.png"><img src="docs/images/HUD_menu_dark.png" alt="PerformanceHUD menu controls in dark mode" width="100%"></a><br>
+      <a href="docs/images/HUD_menu_dark.png"><img src="docs/images/HUD_menu_dark.png" alt="PerformanceHUD menu controls in dark mode" width="480"></a><br>
       <sub>Menu controls</sub>
     </td>
   </tr>
   <tr>
     <td colspan="2" align="center">
-      <a href="docs/images/HUD_horizontal_dark.png"><img src="docs/images/HUD_horizontal_dark.png" alt="PerformanceHUD horizontal HUD with a dark background" width="100%"></a><br>
+      <a href="docs/images/HUD_horizontal_dark.png"><img src="docs/images/HUD_horizontal_dark.png" alt="PerformanceHUD horizontal HUD with a dark background" width="760"></a><br>
       <sub>Horizontal HUD</sub>
     </td>
   </tr>
@@ -58,17 +58,17 @@ I’ve put a lot of thought into keeping the overlay easy to read and the contro
   </tr>
   <tr>
     <td width="33%" valign="top" align="center">
-      <a href="docs/images/HUD_vertical_light.png"><img src="docs/images/HUD_vertical_light.png" alt="PerformanceHUD vertical HUD with a light background" width="100%"></a><br>
+      <a href="docs/images/HUD_vertical_light.png"><img src="docs/images/HUD_vertical_light.png" alt="PerformanceHUD vertical HUD with a light background" width="240"></a><br>
       <sub>Vertical HUD</sub>
     </td>
     <td width="67%" valign="top" align="center">
-      <a href="docs/images/HUD_menu_light.png"><img src="docs/images/HUD_menu_light.png" alt="PerformanceHUD menu controls in light mode" width="100%"></a><br>
+      <a href="docs/images/HUD_menu_light.png"><img src="docs/images/HUD_menu_light.png" alt="PerformanceHUD menu controls in light mode" width="480"></a><br>
       <sub>Menu controls</sub>
     </td>
   </tr>
   <tr>
     <td colspan="2" align="center">
-      <a href="docs/images/HUD_horizontal_light.png"><img src="docs/images/HUD_horizontal_light.png" alt="PerformanceHUD horizontal HUD with a light background" width="100%"></a><br>
+      <a href="docs/images/HUD_horizontal_light.png"><img src="docs/images/HUD_horizontal_light.png" alt="PerformanceHUD horizontal HUD with a light background" width="760"></a><br>
       <sub>Horizontal HUD</sub>
     </td>
   </tr>
