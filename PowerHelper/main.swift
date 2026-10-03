@@ -1,5 +1,7 @@
 import Foundation
 
+PowerSamplerChild.runIfRequested()
+
 final class Client: NSObject, PowerHelperProtocol {
     let id = UUID()
     let sampler: PowerSampler

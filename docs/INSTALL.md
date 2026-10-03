@@ -30,7 +30,7 @@ This uses an exception for this app, not a system-wide change. Do not disable Ga
 
 Background activity approval allows PerformanceHUD’s power helper to provide CPU, GPU, ANE, and SoC watt readings. On first launch, choose **Enable Power Readings** in the app’s prompt. If macOS requests approval, open **System Settings → General → Login Items & Extensions → Login Items** and turn on **PerformanceHUD** under **Background App Activity**. The path may vary slightly between macOS versions. Authenticate with Touch ID or an administrator password if asked. CPU, GPU, and ANE Power are enabled by default.
 
-You can choose **Not Now** and continue using the other metrics. If setup is declined, approval is missing, the helper is removed, or it repeatedly fails to respond, Power checkboxes turn off and appear muted. They remain clickable while their category is enabled: click **Power** to open setup, repair, or approval settings. Successful setup or later approval enables these options again. Brief startup delays or missing samples do not change your selections. Use **Power Helper → Set Up Power Readings…** in the menu to enable watts later, or **Remove Power Helper** to unregister it. Sampling stops when no visible category needs Power, or when the HUD is disabled or the app is closed. The installed helper is otherwise idle.
+You can choose **Not Now** and continue using the other metrics. If setup is declined, approval is missing, the helper is removed, or it repeatedly fails to respond, Power checkboxes turn off and appear muted. They remain clickable while their category is enabled: click **Power** to open setup, repair, or approval settings. Successful setup or later approval enables these options again. Brief startup delays or missing samples do not change your selections. Use **Power Helper → Set Up Power Readings…** in the menu to enable watts later, or **Remove Power Helper** to unregister it. Sampling stops when no visible category needs Power, when the HUD is disabled or fully auto-hidden, or when the app is closed. The installed helper is otherwise idle.
 
 CPU, GPU, ANE, and SoC watts all use this helper. ANE shows power only; utilization percentage, temperature, and focused-app usage are not offered. SoC Power is the combined CPU, GPU, and Neural Engine estimate, not whole-Mac power consumption. Its checkbox works independently of the individual Power options and is available in both Vertical and Horizontal alignment. Missing or unsupported readings stay blank.
 
@@ -92,14 +92,16 @@ A locally compiled app generally does not need the downloaded-app Gatekeeper exc
 From the repository folder, run:
 
 ```sh
-./Tests/run-power-helper-tests.sh
-./Tests/run-fan-tests.sh
-./Tests/run-appearance-tests.sh
-./Tests/run-dynamic-fps-tests.sh
-./Tests/run-dynamic-fps-glass-tests.sh
+for script in Tests/run-*-tests.sh; do
+  sh "$script" || exit 1
+done
+python3 Tests/run-power-lifecycle-tests.py
+python3 -B -m unittest discover -s .github/tests -p 'test_*.py'
 ```
 
-These checks cover sample parsing, stale or invalid readings, process restarts, stopping/resuming, and expired client connections. Fan checks cover decoding, missing and stopped fans, averaging, fanless defaults, menu availability, and stable layouts across fan counts, modes, and scales. Appearance checks cover saved choices, Follow system, and live Light/Dark changes. FPS checks cover saved modes, collapse timing, both layouts, animation recovery, and fixed capture geometry; glass checks exercise the Metal renderer during width and height transitions. They use simulated data, require no administrator approval, and do not register a helper. The test files are not included in the app. Real fan RPM, power readings, and macOS approval still need testing with an exported app on suitable physical hardware. The optional `--probe` argument to the fan tests also reads the local Mac’s fan sensors.
+The app checks cover power parsing and recovery, fan detection and layouts, saved preferences, Follow system, menu alignment, the full size range, FPS history, Auto hide, fullscreen window geometry, and glass rendering and transitions. They use simulated data, need no administrator approval, and do not register the app’s power helper. The power lifecycle check also creates and removes a temporary LaunchAgent in your user session to verify child-process cleanup. The repository-activity checks cover the README graph.
+
+Test files are not included in the app. Actual sensor readings and macOS approval should also be checked with an exported app on suitable hardware. Add `--probe` to `sh Tests/run-fan-tests.sh` to read the local Mac’s fan sensors.
 
 </details>
 

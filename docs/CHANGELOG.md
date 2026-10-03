@@ -2,6 +2,20 @@
 
 [← Back to README](../README.md)
 
+### v1.6
+
+- Added **Auto hide → FPS / Off / All options** near the top of the menu, replacing the FPS category’s Static / Dynamic selector. FPS is the default and collapses only the FPS area; Off keeps everything visible; All options hides the whole HUD after three seconds without FPS readings and reveals it when readings return. Existing Static / Dynamic choices are preserved. Enable / Disable remains the master switch.
+- Matched FPS and whole-HUD transitions to a quicker **0.4-second animation** in both layouts, with rounded moving edges and a fixed capture footprint. Hidden vertical rows stay independent of the shrinking horizontal viewport, avoiding layout conflicts during collapse. Reduce Motion skips animations. All options keeps FPS detection active even with the FPS category unchecked, and pauses other readings and glass capture once hidden. Its explanation includes **Don’t show this again**.
+- Expanded **Size** from **0.5× to 2×**, with finer **0.01× steps** and the same 1× default, allowing more adjustment for different display scaling and fullscreen games.
+- Added separate **Reset → Position / Size** buttons, with **All options** below. Size returns to 1×; All options resets size, position, and the other HUD options after confirmation while preserving macOS permissions. Added **Don’t show this again** for reset confirmations, remembered across resets. Updated the Controls Guide to match.
+- Fixed menu labels shifting sideways when switching to **Horizontal** alignment, and matched the reset shortcut hint’s text intensity to the native Enable / Disable shortcut.
+- Stabilized the left edge of the **60-second FPS history** as older samples leave the graph, preventing the brief gap or jump after the graph fills.
+- Softened glass transitions when changing size, layout, or appearance by briefly retaining the previous glass image and matching text colors while a fresh capture arrives. The HUD also waits briefly for its first usable glass frame when appearing, reducing checkerboard flashes. Capture delays or failures still fall back to the dark checkerboard, now with slightly larger squares.
+- Refined the HUD with **softer continuous corners** that scale consistently from 0.5× to 2×, including shadows, fallback glass, and collapse animations.
+- Fixed the reproduced **power-reading dropouts under sustained load**: the helper now keeps its power reader running continuously instead of restarting it every five samples, and allows more time for the first reading. Stalled readers still recover automatically, empty exits back off before retrying, and the reader is cleaned up when the helper stops. Validated under RDR2 load and Low Power Mode.
+- Fixed **HUD clipping in exclusive-fullscreen games** such as Metro Exodus when changing layout, size, or visible readings. The HUD now reapplies its current dimensions after macOS finishes changing the display mode, preventing an older window size from clipping the contents. Verified in both layouts.
+- Updated the **Controls Guide** for Auto hide, resets, sizing, and glass transitions. Added a compact version badge beside Download options in the README, linking to the changelog. Updated the app version to **1.6**.
+
 ### v1.5
 
 - Combined **FPS** and **FPS History** into one menu category with **Value / History / Both** and **Static / Dynamic** selectors, aligned with the other controls. FPS is enabled with Both and Dynamic selected by default for fresh settings and Options reset. Saved choices are preserved; hiding FPS remembers the selected mode. Horizontal uses Value only and restores the history choice when returning to Vertical.

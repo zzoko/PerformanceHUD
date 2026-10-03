@@ -3,10 +3,11 @@ import AppKit
 @MainActor
 final class HUDPositionMenuView: NSView {
     var onReset: (() -> Void)?
+    var onResetSize: (() -> Void)?
     var onResetOptions: (() -> Void)?
 
     init() {
-        super.init(frame: NSRect(x: 0, y: 0, width: 290, height: 28))
+        super.init(frame: NSRect(x: 0, y: 0, width: 290, height: 56))
         // Let NSMenu expand this row to its full width.
         autoresizingMask = [.width]
         let label = NSTextField(labelWithString: "Reset")
@@ -15,11 +16,15 @@ final class HUDPositionMenuView: NSView {
         button.bezelStyle = .rounded
         button.font = .menuFont(ofSize: 0)
         button.setAccessibilityLabel("Reset HUD position")
-        let options = NSButton(title: "Options", target: self, action: #selector(optionsClicked(_:)))
+        let size = NSButton(title: "Size", target: self, action: #selector(sizeClicked(_:)))
+        size.bezelStyle = .rounded
+        size.font = .menuFont(ofSize: 0)
+        size.setAccessibilityLabel("Reset HUD size to 1×")
+        let options = NSButton(title: "All options", target: self, action: #selector(optionsClicked(_:)))
         options.bezelStyle = .rounded
         options.font = .menuFont(ofSize: 0)
-        options.setAccessibilityLabel("Reset HUD options")
-        let actions = NSStackView(views: [button, options])
+        options.setAccessibilityLabel("Reset all HUD options, including size and position")
+        let actions = NSStackView(views: [button, size])
         actions.orientation = .horizontal
         actions.spacing = 6
         actions.distribution = .fillEqually
@@ -31,23 +36,31 @@ final class HUDPositionMenuView: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         let hint = NSTextField(labelWithString: "⌃⌥⌘ + drag")
         hint.font = .menuFont(ofSize: 0)
-        hint.textColor = .secondaryLabelColor
+        // Match the faint native keyboard equivalent beside Enable/Disable.
+        hint.textColor = .tertiaryLabelColor
         hint.setAccessibilityLabel("Hold Control, Option, and Command and drag the HUD to move it. Release all three keys after dragging to prevent automatic snapping to the grid.")
         hint.setContentCompressionResistancePriority(.required, for: .horizontal)
         hint.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         addSubview(hint)
+        options.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(options)
         NSLayoutConstraint.activate([
             label.widthAnchor.constraint(equalToConstant: HUDMenuLayout.labelWidth),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 30),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 2),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: hint.leadingAnchor, constant: -16),
             hint.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
-            hint.centerYAnchor.constraint(equalTo: centerYAnchor)
+            hint.centerYAnchor.constraint(equalTo: actions.centerYAnchor),
+            options.topAnchor.constraint(equalTo: actions.bottomAnchor, constant: 4),
+            options.leadingAnchor.constraint(equalTo: actions.leadingAnchor),
+            options.trailingAnchor.constraint(equalTo: actions.trailingAnchor)
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    @objc private func sizeClicked(_ sender: NSButton) { onResetSize?() }
 
     @objc private func optionsClicked(_ sender: NSButton) { onResetOptions?() }
 

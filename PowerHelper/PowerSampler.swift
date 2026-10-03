@@ -2,8 +2,9 @@ import Foundation
 import Darwin
 
 // Queue-confined state. One child serves authenticated connections. Five-second
-// leases cover lost stop messages; bounded children also limit orphan lifetime
-// if the helper itself is killed. No launch arguments come from an XPC client.
+// leases cover lost stop messages. The child joins the launchd job’s process
+// group so launchd also cleans it up if the helper dies. No commands or launch
+// arguments come from an XPC client.
 final class PowerSampler {
     private let queue = DispatchQueue(label: "PerformanceHUD.PowerHelper", qos: .utility)
     private var timer: DispatchSourceTimer?
@@ -13,7 +14,10 @@ final class PowerSampler {
     private var stopping = false
     private var buffer = Data()
     private var reading: HelperPowerReading?
-    private var lastOutput: TimeInterval = 0
+    private var launchedAt: TimeInterval = 0
+    private var lastValidOutput: TimeInterval?
+    private static let startupTimeout: TimeInterval = 10
+    private static let samplingTimeout: TimeInterval = 4
     private var nextStart: TimeInterval = 0
     private let plistEnd = Data("</plist>".utf8)
     private let makeProcess: () -> Process
@@ -26,17 +30,21 @@ final class PowerSampler {
         guard timer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + 1, repeating: 1, leeway: .milliseconds(100))
-        timer.setEventHandler { [weak self] in self?.maintain() }
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.maintain()
+        }
         self.timer = timer
         timer.resume()
     }
 
     static func powerProcess() -> Process {
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/powermetrics")
-        // Pipes otherwise buffer output, which delays samples until they are stale.
-        p.arguments = ["--samplers", "cpu_power,gpu_power", "--sample-rate", "1000",
-                       "--sample-count", "5", "--format", "plist", "--buffer-size", "0"]
+        // Foundation's Process creates a separate process group. The private
+        // child entry point rejoins our launchd group before exec'ing the fixed
+        // sampler command, so a helper crash cannot orphan a continuous reader.
+        p.executableURL = PowerSamplerChild.helperExecutableURL
+        p.arguments = [PowerSamplerChild.argument]
         p.environment = ["PATH": "/usr/bin:/bin", "LANG": "C"]
         p.standardError = FileHandle.nullDevice
         p.standardInput = FileHandle.nullDevice
@@ -46,11 +54,13 @@ final class PowerSampler {
     func sample(client: UUID, reply: @escaping (NSDictionary) -> Void) {
         queue.async {
             self.startTimer()
-            self.leases[client] = Date.timeIntervalSinceReferenceDate + 5
+            self.leases[client] = ProcessInfo.processInfo.systemUptime + 5
             self.maintain()
             if let reading = self.reading, abs(reading.timestamp.timeIntervalSinceNow) < 3 {
                 reply(reading.reply)
-            } else { reply([:]) }
+            } else {
+                reply([:])
+            }
         }
     }
 
@@ -63,13 +73,16 @@ final class PowerSampler {
     }
 
     private func maintain() {
-        let now = Date.timeIntervalSinceReferenceDate
+        let now = ProcessInfo.processInfo.systemUptime
         // EOF and process exit can arrive in either order. Finish only once both
         // happened, without waitUntilExit (which can stall in a launchd daemon).
         if let child = process, outputDrained, !child.isRunning {
             process = nil
             buffer.removeAll(keepingCapacity: true)
-            nextStart = now + (stopping || child.terminationStatus == 0 ? 0 : 10)
+            // Even a successful exit is a failure if no reading was produced.
+            // Back off instead of repeatedly launching an empty sampler.
+            let completedWithReadings = child.terminationStatus == 0 && lastValidOutput != nil
+            nextStart = now + (stopping || completedWithReadings ? 0 : 10)
         }
         leases = leases.filter { $0.value > now }
         guard !leases.isEmpty else {
@@ -77,7 +90,11 @@ final class PowerSampler {
             terminate(); reading = nil; return
         }
         if let process {
-            if process.isRunning && now - lastOutput > 4 { terminate() }
+            let age = now - (lastValidOutput ?? launchedAt)
+            let timeout = lastValidOutput == nil ? Self.startupTimeout : Self.samplingTimeout
+            if process.isRunning && !stopping && age > timeout {
+                terminate()
+            }
         } else if now >= nextStart { launch() }
     }
 
@@ -89,17 +106,20 @@ final class PowerSampler {
         child.standardOutput = pipe
         process = child
         buffer.removeAll(keepingCapacity: true)
-        lastOutput = Date.timeIntervalSinceReferenceDate
+        launchedAt = ProcessInfo.processInfo.systemUptime
+        lastValidOutput = nil
         child.terminationHandler = { [weak self] child in
             self?.queue.async { [weak self] in
                 guard let self, self.process === child else { return }
                 self.maintain()
             }
         }
-        do { try child.run() }
+        do {
+            try child.run()
+        }
         catch {
             process = nil; reading = nil
-            nextStart = Date.timeIntervalSinceReferenceDate + 10
+            nextStart = ProcessInfo.processInfo.systemUptime + 10
             return
         }
         // Drain to EOF before completing a child. A Process termination callback
@@ -122,7 +142,7 @@ final class PowerSampler {
                 guard let self, self.process === child else { return }
                 self.outputDrained = true
                 // All reads have been queued before this completion. Keep the
-                // latest sample during the handoff to the next bounded child.
+                // latest sample during recovery from an unexpected child exit.
                 self.maintain()
             }
         }
@@ -130,11 +150,13 @@ final class PowerSampler {
 
     private func consume(_ bytes: Data) {
         guard !bytes.isEmpty else { return }
-        guard buffer.count + bytes.count <= 1_048_576 else { terminate(); return }
+        guard buffer.count + bytes.count <= 1_048_576 else {
+            terminate(); return
+        }
         buffer.append(bytes)
         // powermetrics emits NUL-separated XML documents, not NUL-terminated
         // documents. Waiting for the separator delays every sample by one
-        // interval and loses the final sample when the bounded child exits.
+        // interval and can lose a final sample if the child exits.
         while let end = buffer.range(of: plistEnd) {
             let data = Data(buffer[..<end.upperBound].drop(while: {
                 $0 == 0 || $0 == 10 || $0 == 13 || $0 == 32 || $0 == 9
@@ -142,21 +164,26 @@ final class PowerSampler {
             buffer.removeSubrange(..<end.upperBound)
             if let sample = HelperPowerReading.parse(data) {
                 reading = sample
-                lastOutput = Date.timeIntervalSinceReferenceDate
+                lastValidOutput = ProcessInfo.processInfo.systemUptime
             }
         }
     }
 
     private func terminate() {
         reading = nil
-        guard let child = process, child.isRunning else { return }
+        guard let child = process, child.isRunning, !stopping else { return }
         stopping = true
-        child.terminate()
+        kill(child.processIdentifier, SIGTERM)
         // Keep this Process until exit; do not signal a stale/reused PID.
         queue.asyncAfter(deadline: .now() + 1) {
-            if child.isRunning { kill(child.processIdentifier, SIGKILL) }
+            if child.isRunning {
+                kill(child.processIdentifier, SIGKILL)
+            }
         }
     }
 
-    deinit { timer?.cancel(); if process?.isRunning == true { process?.terminate() } }
+    deinit {
+        timer?.cancel()
+        if let process, process.isRunning { kill(process.processIdentifier, SIGTERM) }
+    }
 }

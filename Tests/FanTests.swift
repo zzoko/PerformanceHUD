@@ -36,7 +36,7 @@ import AppKit
         check(FanSample.noFans.preservingTopology(from: two).fans.isEmpty, "Confirmed no-fan result is distinct from failure")
 
         _ = NSApplication.shared
-        UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.alignment": "vertical"], forName: UserDefaults.argumentDomain)
+        UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "fps", "hud.alignment": "vertical"], forName: UserDefaults.argumentDomain)
         let menu = HUDFanMenuView(options: .init(), sample: .noFans)
         let usage: HUDReadingCheckbox = member(menu, "usage")
         let master: NSButton = member(menu, "master")

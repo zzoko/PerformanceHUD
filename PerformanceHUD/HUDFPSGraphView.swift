@@ -32,7 +32,17 @@ struct FPSHistory {
     mutating func advance(to time: TimeInterval) {
         guard time.isFinite, time >= endTime else { return }
         endTime = time
-        samples.removeAll { $0.time < time - Self.duration }
+        let cutoff = time - Self.duration
+        guard let firstVisible = samples.firstIndex(where: { $0.time >= cutoff }) else {
+            samples.removeAll(keepingCapacity: true)
+            return
+        }
+        // Keep one predecessor so the curve reaches the exact window boundary
+        // even when sample timing varies. Never bridge an unavailable interval.
+        let needsPredecessor = firstVisible > 0 && samples[firstVisible].time > cutoff
+            && !samples[firstVisible].startsSegment
+        let removeCount = firstVisible - (needsPredecessor ? 1 : 0)
+        if removeCount > 0 { samples.removeFirst(removeCount) }
     }
 
     mutating func reset() {
@@ -41,9 +51,28 @@ struct FPSHistory {
         interrupted = false
     }
 
+    var visibleSegments: [[Sample]] {
+        let cutoff = endTime - Self.duration
+        var segments: [[Sample]] = []
+        for (index, sample) in samples.enumerated() where sample.time >= cutoff {
+            if segments.isEmpty || sample.startsSegment { segments.append([]) }
+            if index > 0, segments[segments.count - 1].isEmpty,
+               !sample.startsSegment, samples[index - 1].time < cutoff {
+                let previous = samples[index - 1]
+                let fraction = (cutoff - previous.time) / (sample.time - previous.time)
+                let boundary = Sample(time: cutoff,
+                    fps: previous.fps + (sample.fps - previous.fps) * fraction, startsSegment: true)
+                segments[segments.count - 1].append(boundary)
+            }
+            segments[segments.count - 1].append(sample)
+        }
+        return segments
+    }
+
     var displayRange: ClosedRange<Double> {
-        let minimum = samples.map(\.fps).min() ?? 0
-        let maximum = samples.map(\.fps).max() ?? 0
+        let visible = visibleSegments.flatMap { $0 }
+        let minimum = visible.map(\.fps).min() ?? 0
+        let maximum = visible.map(\.fps).max() ?? 0
         // A tighter range reveals trends without turning 1 FPS of jitter into
         // a full-height spike. Round outwards to reduce small scale changes.
         let padding = max(3, (maximum - minimum) * 0.15)
@@ -151,14 +180,13 @@ final class HUDFPSGraphView: NSView {
         let fillBaseline = bounds.minY
         guard plot.width > 0, plot.height > 0 else { return }
         let range = history.displayRange
-        var segments: [[NSPoint]] = []
-        for (index, sample) in history.samples.enumerated() {
-            let fraction = 1 - (history.endTime - sample.time) / FPSHistory.duration
-            let point = NSPoint(x: plot.minX + CGFloat(fraction) * plot.width,
-                                y: plot.minY + CGFloat((sample.fps - range.lowerBound)
-                                    / (range.upperBound - range.lowerBound)) * plot.height)
-            if index == 0 || sample.startsSegment { segments.append([]) }
-            segments[segments.count - 1].append(point)
+        let segments = history.visibleSegments.map { samples in
+            samples.map { sample in
+                let fraction = 1 - (history.endTime - sample.time) / FPSHistory.duration
+                return NSPoint(x: plot.minX + CGFloat(fraction) * plot.width,
+                               y: plot.minY + CGFloat((sample.fps - range.lowerBound)
+                                   / (range.upperBound - range.lowerBound)) * plot.height)
+            }
         }
         // A long, gentle tail avoids a bright shelf followed by a rapid falloff.
         // Retain a faint tint at the divider so the fill stays visibly connected.

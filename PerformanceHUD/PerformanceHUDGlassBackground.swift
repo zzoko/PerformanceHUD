@@ -60,10 +60,103 @@ nonisolated enum PerformanceHUDGlassStyle: Int, CaseIterable {
     var title: String { ["Dark", "Light", "Transparent"][rawValue] }
 }
 
+// A continuous, squircle-like corner inspired by native macOS menus. This is
+// our own curve, not Finder's private geometry. Its curvature eases to zero at
+// the straight edges. The larger reach preserves the former 10-point corner's
+// apparent roundness while making that transition softer.
+nonisolated enum HUDCornerShape {
+    static let reach: CGFloat = 1.8
+
+    private struct Segment {
+        let start: CGPoint
+        let control1: CGPoint
+        let control2: CGPoint
+        let end: CGPoint
+    }
+    // Cubic Hermite approximation of x^4 + y^4 = 1. Split at the diagonal
+    // so all derivatives stay finite; reflect the first octant for the second.
+    // Cached unit curves keep path construction cheap during roll-up animation.
+    private static let quarter: [Segment] = {
+        let diagonal = pow(CGFloat(0.5), 0.25)
+        let step = diagonal / 4
+        func point(_ x: CGFloat) -> CGPoint {
+            CGPoint(x: x, y: pow(max(0, 1 - x * x * x * x), 0.25))
+        }
+        let points = (0...4).map { point(CGFloat($0) * step) }
+        var slopes = points.map { -pow($0.x / $0.y, 3) }
+        // Limit the first segment's endpoint tangent: its first two controls
+        // share the straight edge, giving zero curvature there with no tiny
+        // cubic overshoot outside the HUD. Reuse that tangent on the next arc.
+        slopes[1] = 3 * (points[1].y - 1) / step
+        let first = (0..<4).map { i -> Segment in
+            let a = points[i], b = points[i + 1]
+            return Segment(start: a,
+                control1: CGPoint(x: a.x + step / 3, y: a.y + slopes[i] * step / 3),
+                control2: CGPoint(x: b.x - step / 3, y: i == 0 ? 1 : b.y - slopes[i + 1] * step / 3), end: b)
+        }
+        func swap(_ p: CGPoint) -> CGPoint { CGPoint(x: p.y, y: p.x) }
+        return first + first.reversed().map {
+            Segment(start: swap($0.end), control1: swap($0.control2),
+                    control2: swap($0.control1), end: swap($0.start))
+        }
+    }()
+
+    static func path(in rect: CGRect, radius: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        guard rect.width > 0, rect.height > 0 else { return path }
+        let r = max(0, min(radius * reach, min(rect.width, rect.height) / 2))
+        guard r > 0 else { path.addRect(rect); return path }
+        let centers = [CGPoint(x: rect.maxX - r, y: rect.maxY - r),
+                       CGPoint(x: rect.maxX - r, y: rect.minY + r),
+                       CGPoint(x: rect.minX + r, y: rect.minY + r),
+                       CGPoint(x: rect.minX + r, y: rect.maxY - r)]
+        for corner in 0..<4 {
+            func map(_ p: CGPoint) -> CGPoint {
+                let rotated: CGPoint
+                switch corner {
+                case 0: rotated = p
+                case 1: rotated = CGPoint(x: p.y, y: -p.x)
+                case 2: rotated = CGPoint(x: -p.x, y: -p.y)
+                default: rotated = CGPoint(x: -p.y, y: p.x)
+                }
+                return CGPoint(x: centers[corner].x + r * rotated.x,
+                               y: centers[corner].y + r * rotated.y)
+            }
+            let start = map(quarter[0].start)
+            if corner == 0 { path.move(to: start) } else { path.addLine(to: start) }
+            for segment in quarter {
+                path.addCurve(to: map(segment.end), control1: map(segment.control1), control2: map(segment.control2))
+            }
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    @MainActor static func applyMask(to layer: CALayer?, radius: CGFloat?) {
+        guard let layer else { return }
+        // A circular cornerRadius would otherwise clip the continuous path a
+        // second time. Use the same outline as the glass and shadow instead.
+        layer.cornerRadius = 0
+        layer.masksToBounds = radius != nil
+        guard let radius else { layer.mask = nil; return }
+        let mask = (layer.mask as? CAShapeLayer) ?? CAShapeLayer()
+        mask.frame = layer.bounds
+        mask.path = path(in: CGRect(origin: .zero, size: layer.bounds.size), radius: radius)
+        layer.mask = mask
+    }
+}
+
 nonisolated struct PerformanceHUDGlassAppearance {
+    static let baseCornerRadius: CGFloat = 10
     let theme: PerformanceHUDGlassStyle
-    init(isDark: Bool) { theme = isDark ? .dark : .light }
-    init(theme: PerformanceHUDGlassStyle) { self.theme = theme }
+    let hudScale: CGFloat
+    init(isDark: Bool, hudScale: CGFloat = 1) {
+        self.init(theme: isDark ? .dark : .light, hudScale: hudScale)
+    }
+    init(theme: PerformanceHUDGlassStyle, hudScale: CGFloat = 1) {
+        self.theme = theme
+        self.hudScale = hudScale
+    }
     var isDark: Bool { theme != .light }
     var tint: SIMD4<Float> {
         // Transparent favours scene colour and lens depth over text contrast.
@@ -72,10 +165,11 @@ nonisolated struct PerformanceHUDGlassAppearance {
     }
     // Corner radius, blur sigma, saturation, shader style (0 dark, 2 transparent, 3 Light v2). Units: points.
     var optics: SIMD4<Float> {
-        if theme == .transparent { return SIMD4(10, 3.5, 1.04, 2) }
-        return isDark ? SIMD4(10, 7, 0.88, 0) : SIMD4(10, 7, 1.0, 3)
+        let radius = Float(cornerRadius)
+        if theme == .transparent { return SIMD4(radius, 3.5, 1.04, 2) }
+        return isDark ? SIMD4(radius, 7, 0.88, 0) : SIMD4(radius, 7, 1.0, 3)
     }
-    var cornerRadius: CGFloat { CGFloat(optics.x) }
+    var cornerRadius: CGFloat { Self.baseCornerRadius * hudScale }
     var textColor: NSColor { NSColor(white: isDark ? 0.96 : 0.10, alpha: 1) }
     var secondaryTextColor: NSColor { NSColor(white: isDark ? 0.76 : 0.31, alpha: 1) }
     var separatorColor: NSColor { NSColor(white: isDark ? 1 : 0, alpha: isDark ? 0.12 : 0.11) }
@@ -91,8 +185,7 @@ nonisolated struct PerformanceHUDGlassAppearance {
         layer.shadowOpacity = enabled ? (isDark ? 0.32 : 0.17) : 0
         layer.shadowRadius = 6
         layer.shadowOffset = CGSize(width: 0, height: -2)
-        layer.shadowPath = CGPath(roundedRect: view.bounds, cornerWidth: cornerRadius,
-                                 cornerHeight: cornerRadius, transform: nil)
+        layer.shadowPath = HUDCornerShape.path(in: view.bounds, radius: cornerRadius)
         CATransaction.commit()
     }
 }
@@ -115,18 +208,31 @@ final class PerformanceHUDGlassBackground: NSView {
         let displayID: UInt32
         let scale: CGFloat
         let style: PerformanceHUDGlassStyle
+        let cornerRadius: CGFloat
     }
     private var lastGeometry: Geometry?
     private var geometryInvalidated = false
     // A larger capture footprint can remain fixed while the visible HUD rolls up.
     // Only the shader viewport and shadow change; SCStream keeps its configuration.
     var reservedCaptureSize: NSSize?
+    // HUD scale is separate from the display's Retina backing scale. The host
+    // coalesces capture refreshes after layout, so changing it cannot restart
+    // the stream with a mixture of old bounds and new corner geometry.
+    var hudScale: CGFloat = 1 {
+        didSet { if oldValue != hudScale { updateVisibleSurface() } }
+    }
+    // Prepare the full glass before a rolled-up HUD starts expanding. A frame
+    // rendered at a zero-sized viewport would otherwise be entirely transparent.
+    var preparingForReveal = false {
+        didSet { if oldValue != preparingForReveal { updateVisibleSurface() } }
+    }
     private let viewport = HUDGlassViewport()
     var captureBounds: NSRect {
         let size = reservedCaptureSize ?? bounds.size
         return NSRect(x: 0, y: bounds.maxY - size.height, width: size.width, height: size.height)
     }
     var isShowingFallback: Bool { surface.isShowingFallback }
+    var displayedStyle: PerformanceHUDGlassStyle? { surface.displayedStyle }
     var onFallbackChange: (() -> Void)?
     var style: PerformanceHUDGlassStyle {
         didSet { if oldValue != style { updateAppearance(); refreshGeometry() } }
@@ -137,7 +243,7 @@ final class PerformanceHUDGlassBackground: NSView {
         set { style = newValue ? .dark : .light }
     }
     var showsShadow = true { didSet { updateAppearance() } }
-    var glassAppearance: PerformanceHUDGlassAppearance { PerformanceHUDGlassAppearance(theme: style) }
+    var glassAppearance: PerformanceHUDGlassAppearance { PerformanceHUDGlassAppearance(theme: style, hudScale: hudScale) }
     var captureStatus: String { capture.state.description }
     var captureState: HUDGlassCaptureState { capture.state }
     var onCaptureStateChange: ((HUDGlassCaptureState) -> Void)?
@@ -169,7 +275,6 @@ final class PerformanceHUDGlassBackground: NSView {
         surface.frame = bounds
         surface.autoresizingMask = []
         surface.wantsLayer = true
-        surface.layer?.cornerRadius = glassAppearance.cornerRadius
         surface.layer?.masksToBounds = false // Shader already supplies rounded alpha.
         addSubview(surface)
         updateAppearance()
@@ -198,9 +303,10 @@ final class PerformanceHUDGlassBackground: NSView {
     }
     func updateVisibleSurface() {
         surface.frame = captureBounds
-        surface.setVisibleSize(bounds.size, radius: glassAppearance.cornerRadius)
+        let visibleSize = preparingForReveal ? captureBounds.size : bounds.size
+        surface.setVisibleSize(visibleSize, radius: glassAppearance.cornerRadius)
         updateAppearance()
-        if viewport.setSize(bounds.size) { capture.redraw() }
+        if viewport.setSize(visibleSize) { capture.redraw() }
     }
     private func updateAppearance() {
         glassAppearance.applyShadow(to: self, enabled: showsShadow && bounds.height >= 1)
@@ -295,14 +401,16 @@ final class PerformanceHUDGlassBackground: NSView {
               let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return nil }
         return Geometry(rect: window.convertToScreen(convert(captureBounds, to: nil)),
                         screenFrame: screen.frame, displayID: number.uint32Value,
-                        scale: screen.backingScaleFactor, style: style)
+                        scale: screen.backingScaleFactor, style: style, cornerRadius: glassAppearance.cornerRadius)
     }
 
-    // Stop stale frames immediately; the host still coalesces expensive stream restarts.
+    // Retire old capture callbacks immediately, but keep their last good image
+    // visible while the host coalesces resize/move notifications.
     func prepareForGeometryChange() {
-        guard let geometry = currentGeometry(), geometry != lastGeometry, !geometryInvalidated else { return }
+        guard let geometry = currentGeometry(), geometry != lastGeometry else { return }
+        surface.holdLastFrame()
+        guard !geometryInvalidated else { return }
         geometryInvalidated = true
-        surface.showFallback()
         capture.invalidateFrames()
     }
 
@@ -313,7 +421,9 @@ final class PerformanceHUDGlassBackground: NSView {
         lastGeometry = geometry
         geometryInvalidated = false
         updateVisibleSurface()
-        surface.showFallback()
+        // Keep the previous glass through style changes too; the first frame
+        // with the new appearance replaces it without a checkerboard flash.
+        surface.holdLastFrame()
         updateAppearance()
         capture.configure(view: surface, appearance: glassAppearance, viewport: viewport)
     }
@@ -323,20 +433,35 @@ final class PerformanceHUDGlassBackground: NSView {
 private final class HUDGlassSurfaceView: NSView {
     private let checkerboard = HUDCaptureCheckerboardView()
     private let viewportMask = CAShapeLayer()
+    private let heldFrameLayer = CALayer()
+    private var lastFrame: CGImage?
+    private var lastFrameScale: CGFloat = 1
+    private var lastFrameVisibleSize = NSSize.zero
+    private var visibleSize = NSSize.zero
+    private var holdTask: Task<Void, Never>?
+    private static let holdDuration: Duration = .seconds(2)
+
+    deinit { holdTask?.cancel() }
+
     func setVisibleSize(_ size: NSSize, radius: CGFloat) {
+        visibleSize = size
+        checkerboard.cornerRadius = radius
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        let visible = NSRect(x: 0, y: bounds.height - size.height, width: size.width, height: size.height)
+        heldFrameLayer.frame = visible
+        HUDCornerShape.applyMask(to: heldFrameLayer, radius: radius)
         guard size.height < bounds.height || size.width < bounds.width else {
             layer?.mask = nil
             CATransaction.commit()
             return
         }
-        let visible = NSRect(x: 0, y: bounds.height - size.height, width: size.width, height: size.height)
         viewportMask.frame = bounds
-        viewportMask.path = CGPath(roundedRect: visible, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        viewportMask.path = HUDCornerShape.path(in: visible, radius: radius)
         layer?.mask = viewportMask
         CATransaction.commit()
     }
     private(set) var isShowingFallback = true
+    private(set) var displayedStyle: PerformanceHUDGlassStyle?
     var onFallbackChange: (() -> Void)?
 
     override init(frame: NSRect) {
@@ -346,12 +471,52 @@ private final class HUDGlassSurfaceView: NSView {
         checkerboard.frame = bounds
         checkerboard.autoresizingMask = [.width, .height]
         addSubview(checkerboard)
+        heldFrameLayer.contentsGravity = .resize
+        heldFrameLayer.masksToBounds = true
+        heldFrameLayer.isHidden = true
+        layer?.addSublayer(heldFrameLayer)
     }
     required init?(coder: NSCoder) { fatalError("Use init(frame:)") }
 
+    func holdLastFrame() {
+        guard !isShowingFallback, let lastFrame,
+              lastFrameVisibleSize.width > 0, lastFrameVisibleSize.height > 0 else {
+            showFallback()
+            return
+        }
+        if heldFrameLayer.contents == nil {
+            // Dynamic FPS textures include transparent reserved space. Keep only
+            // the previously visible top-left area before fitting it to new bounds.
+            let crop = CGRect(x: 0, y: 0,
+                width: min(CGFloat(lastFrame.width), lastFrameVisibleSize.width * lastFrameScale),
+                height: min(CGFloat(lastFrame.height), lastFrameVisibleSize.height * lastFrameScale))
+            guard let image = lastFrame.cropping(to: crop) else { showFallback(); return }
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            layer?.contents = nil
+            heldFrameLayer.contents = image
+            heldFrameLayer.isHidden = false
+            checkerboard.isHidden = true
+            CATransaction.commit()
+        }
+        // Refresh the deadline while actively adjusting, without repeatedly
+        // cropping or resampling the snapshot. Never retain it through failures.
+        holdTask?.cancel()
+        holdTask = Task { [weak self] in
+            do { try await Task.sleep(for: Self.holdDuration) } catch { return }
+            guard !Task.isCancelled else { return }
+            self?.showFallback()
+        }
+    }
+
     func showFallback() {
+        holdTask?.cancel()
+        holdTask = nil
+        lastFrame = nil
+        displayedStyle = nil
         CATransaction.begin(); CATransaction.setDisableActions(true)
         layer?.contents = nil
+        heldFrameLayer.contents = nil
+        heldFrameLayer.isHidden = true
         checkerboard.isHidden = false
         CATransaction.commit()
         let changed = !isShowingFallback
@@ -359,13 +524,21 @@ private final class HUDGlassSurfaceView: NSView {
         if changed { onFallbackChange?() }
     }
 
-    func show(image: CGImage, scale: CGFloat) {
+    func show(image: CGImage, scale: CGFloat, style: PerformanceHUDGlassStyle? = nil) {
+        holdTask?.cancel()
+        holdTask = nil
+        lastFrame = image
+        lastFrameScale = scale
+        lastFrameVisibleSize = visibleSize
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        heldFrameLayer.contents = nil
+        heldFrameLayer.isHidden = true
         layer?.contents = image
         layer?.contentsScale = scale
         checkerboard.isHidden = true
         CATransaction.commit()
-        let changed = isShowingFallback
+        let changed = isShowingFallback || displayedStyle != style
+        displayedStyle = style
         isShowingFallback = false
         if changed { onFallbackChange?() }
     }
@@ -373,14 +546,17 @@ private final class HUDGlassSurfaceView: NSView {
 
 @MainActor
 private final class HUDCaptureCheckerboardView: NSView {
+    var cornerRadius = PerformanceHUDGlassAppearance.baseCornerRadius {
+        didSet { if oldValue != cornerRadius { needsDisplay = true } }
+    }
     override func draw(_ dirtyRect: NSRect) {
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
-        NSBezierPath(roundedRect: bounds, xRadius: 10, yRadius: 10).addClip()
+        NSBezierPath(cgPath: HUDCornerShape.path(in: bounds, radius: cornerRadius)).addClip()
         NSColor(white: 0.07, alpha: 1).setFill()
         bounds.fill()
         NSColor(white: 0.19, alpha: 1).setFill()
-        let cell: CGFloat = 8
+        let cell: CGFloat = 10
         for row in 0..<Int(ceil(bounds.height / cell)) {
             for column in 0..<Int(ceil(bounds.width / cell)) where (row + column).isMultiple(of: 2) {
                 NSRect(x: CGFloat(column) * cell, y: CGFloat(row) * cell, width: cell, height: cell).fill()
@@ -518,7 +694,7 @@ private final class HUDGlassViewport: @unchecked Sendable {
                     self.processingTotal += milliseconds
                     if let age { self.sourceAgeTotal += age; self.sourceAgeCount += 1 }
                     if let image, let view {
-                        (view as? HUDGlassSurfaceView)?.show(image: image, scale: geometry.scale)
+                        (view as? HUDGlassSurfaceView)?.show(image: image, scale: geometry.scale, style: appearance.theme)
                         self.firstFrameTask?.cancel()
                         self.firstFrameTask = nil
                         self.state = .active
@@ -756,8 +932,17 @@ private final class HUDGlassRenderer {
         out.write(sum/weights,id);
     }
     float sdf(float2 v, float2 halfSize, float r) {
-        float2 q=abs(v)-halfSize+r;
-        return length(max(q,0.0))+min(max(q.x,q.y),0.0)-r;
+        // Same quartic corner as HUDCornerShape. Gradient correction keeps
+        // the edge antialiasing and glass rim uniform around the softer curve.
+        float reach=min(r*\(Float(HUDCornerShape.reach)),min(halfSize.x,halfSize.y));
+        float2 q=abs(v)-halfSize+reach;
+        if(min(q.x,q.y)<=0.0 || reach<=0.0001)
+            return length(max(q,0.0))+min(max(q.x,q.y),0.0)-reach;
+        float2 q2=q*q;
+        float norm=sqrt(sqrt(dot(q2,q2)));
+        float2 unit=q/max(norm,0.0001);
+        float gradient=length(unit*unit*unit);
+        return (norm-reach)/max(gradient,0.0001);
     }
     kernel void compose(texture2d<float, access::sample> input [[texture(0)]], texture2d<float, access::write> out [[texture(1)]],
                         constant Params& p [[buffer(0)]], uint2 id [[thread_position_in_grid]]) {
@@ -767,8 +952,8 @@ private final class HUDGlassRenderer {
         }
         float2 pixel=float2(id)+0.5;
         float2 local=(pixel-p.outputSize*0.5)/p.scale;
-        float2 halfSize=p.outputSize*0.5/p.scale-0.5;
-        float radius=min(p.optics.x,min(halfSize.x,halfSize.y)*0.9);
+        float2 halfSize=max(p.outputSize*0.5/p.scale-0.5,0.0);
+        float radius=p.optics.x;
         float d=sdf(local,halfSize,radius);
         float alpha=1.0-smoothstep(-0.6/p.scale,0.6/p.scale,d);
         if(alpha<=0) { out.write(float4(0),id); return; }

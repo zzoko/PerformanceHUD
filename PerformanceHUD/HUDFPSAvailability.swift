@@ -2,6 +2,8 @@ import Foundation
 
 struct HUDFPSAvailability {
     static let collapseDelay: TimeInterval = 3
+    // Both FPS-only and whole-HUD reveals share the same pace.
+    static let animationDuration: TimeInterval = 0.4
     private(set) var hasReading = false
     private(set) var unavailableSince: TimeInterval?
     private(set) var expanded = false

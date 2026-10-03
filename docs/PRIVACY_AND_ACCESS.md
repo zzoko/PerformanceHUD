@@ -18,7 +18,7 @@ PerformanceHUD does not modify game files or inject code into games. Some readin
 
 All appearance modes—Clear, Light, Dark, and Follow system—use ScreenCaptureKit for the custom glass effect. macOS lists this permission under **Screen & System Audio Recording**, but PerformanceHUD captures neither system audio nor microphone audio.
 
-The capture stream is cropped to the area around the HUD, including a small margin for the effect, and excludes PerformanceHUD itself. With Dynamic FPS, the full expanded HUD area remains reserved for capture while the visible overlay collapses. Captured pixels may include whatever other apps display in that area. Frames stay in memory and are not saved as screenshots, video recordings, or uploaded.
+The capture stream is cropped to the area around the HUD, including a small margin for the effect, and excludes PerformanceHUD itself. With Auto hide set to FPS or All options, the full expanded HUD area remains reserved for capture during collapse and reveal animations. In All options mode, glass capture stops once the whole HUD is hidden; FPS detection continues so the HUD can reappear when readings return. Captured pixels may include whatever other apps display in that area. Frames stay in memory and are not saved as screenshots, video recordings, or uploaded.
 
 macOS may also ask to allow capture without its private window picker. PerformanceHUD selects the display behind the HUD directly and crops the capture to the area described above.
 
@@ -28,7 +28,7 @@ Screen capture supplies the glass effect, not the performance statistics. Withou
 
 CPU, GPU, and ANE Power are enabled by default, and first launch offers helper setup. The helper runs with administrator privileges after macOS approval through **Background App Activity**. It runs a fixed `powermetrics` command; the app cannot send it arbitrary commands, file paths, or sampling arguments. App and helper connections are checked against their signing identities and matching developer team.
 
-Power sampling runs only while the HUD is enabled and a visible power option needs readings. SoC Power can request readings independently of the individual CPU, GPU, and ANE options. Otherwise, the installed helper is idle. Quitting the app stops sampling; normal system sleep remains allowed.
+Power sampling runs only while the HUD is enabled and a visible power option needs readings. It also pauses once Auto hide → All options has fully hidden the HUD. SoC Power can request readings independently of the individual CPU, GPU, and ANE options. Otherwise, the installed helper is idle. Quitting the app stops sampling; normal system sleep remains allowed.
 
 Brief gaps can retain the last valid power value for up to five seconds from its sample timestamp. Longer gaps clear it, as do stopping the HUD, sleep, or a helper disconnect. Other metrics remain usable if power setup is declined or unavailable.
 

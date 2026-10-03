@@ -61,6 +61,11 @@ final class HUDSizeMenuView: NSView {
         onScaleSelected?(scale)
     }
 
+    func select(_ scale: HUDScale) {
+        selectedScale = scale
+        updateSelection()
+    }
+
     private func updateSelection() {
         slider.doubleValue = selectedScale.rawValue
         valueLabel.stringValue = selectedScale.menuTitle

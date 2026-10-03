@@ -6,6 +6,7 @@ trap 'rm -rf "$OUT"' EXIT
 xcrun swiftc -swift-version 5 -parse-as-library \
   "$ROOT/PowerHelperShared/PowerHelperProtocol.swift" \
   "$ROOT/PowerHelper/PowerSampler.swift" \
+  "$ROOT/PowerHelper/PowerSamplerChild.swift" \
   "$ROOT/PerformanceHUD/PowerHelperState.swift" \
   "$ROOT/PerformanceHUD/HUDMetric.swift" \
   "$ROOT/PerformanceHUD/HUDAlignment.swift" \

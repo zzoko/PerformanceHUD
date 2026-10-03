@@ -65,6 +65,8 @@ final class AppDelegate:
     private var hudVisibilityMenuItem:
         NSMenuItem?
 
+    private var autoHideMenuView: HUDAutoHideMenuView?
+
     private var metricMenuItems:
         [HUDMetric: NSMenuItem] = [:]
 
@@ -208,6 +210,10 @@ final class AppDelegate:
 
         self.hudWindow =
             hud
+        hud.onAutoHideVisibilityChange = { [weak self] in
+            // Let the reveal finish setting up before starting/stopping monitors.
+            DispatchQueue.main.async { [weak self] in self?.reconcileMonitoring() }
+        }
     }
 
     // MARK: - FPS Setup
@@ -503,6 +509,12 @@ final class AppDelegate:
 
         self.hudVisibilityMenuItem =
             hudVisibilityItem
+        let autoHideView = HUDAutoHideMenuView(selected: HUDPreferences.autoHideMode)
+        autoHideView.onChange = { [weak self] mode in self?.selectAutoHideMode(mode) }
+        let autoHideItem = NSMenuItem()
+        autoHideItem.view = autoHideView
+        menu.addItem(autoHideItem)
+        autoHideMenuView = autoHideView
 
         // MARK: HUD Size
 
@@ -540,6 +552,7 @@ final class AppDelegate:
         positionView.onReset = { [weak self] in
             self?.hudWindow?.resetPosition()
         }
+        positionView.onResetSize = { [weak self] in self?.setHUDScale(.normal) }
         positionView.onResetOptions = { [weak self] in self?.confirmResetOptions() }
         let positionItem = NSMenuItem()
         positionItem.view = positionView
@@ -600,6 +613,7 @@ final class AppDelegate:
             let item = NSMenuItem(title: metric.menuTitle, action: #selector(toggleMetric(_:)), keyEquivalent: "")
             item.target = self
             item.tag = metric.rawValue
+            HUDMenuLayout.reserveStateColumn(for: item)
             item.state = enabledMetrics.contains(metric) ? .on : .off
             item.isEnabled = HUDPreferences.alignment.allows(metric)
             menu.addItem(item)
@@ -618,10 +632,6 @@ final class AppDelegate:
         let fpsItem = NSMenuItem()
         fpsItem.view = fpsView
         menu.addItem(fpsItem)
-        fpsView.onDynamicChange = { [weak self] dynamic in
-            HUDPreferences.dynamicFPS = dynamic
-            self?.hudWindow?.setDynamicFPS(dynamic)
-        }
         var powerRows: [HUDResourceMenuView] = []
         for group in HUDResourceGroup.allCases {
             let view = HUDResourceMenuView(group: group, options: HUDPreferences.resourceOptions(for: group))
@@ -759,7 +769,7 @@ final class AppDelegate:
 
     func menuWillOpen(_ menu: NSMenu) {
         let fan = HUDPreferences.fanOptions
-        fanMonitor.configure(readings: hudEnabled && fan.enabled && fan.usage)
+        fanMonitor.configure(readings: readingsActive && fan.enabled && fan.usage)
         powerMonitor.helper.refreshStatus()
         updatePowerHelperMenu()
     }
@@ -894,18 +904,56 @@ final class AppDelegate:
             : "Enable"
     }
 
-    private func confirmResetOptions() {
+    private func selectAutoHideMode(_ mode: HUDAutoHideMode) {
+        guard mode != HUDPreferences.autoHideMode else { return }
+        guard mode == .all && !HUDPreferences.autoHideExplanationDismissed else {
+            setAutoHideMode(mode)
+            return
+        }
         statusItem?.menu?.cancelTracking()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let alert = NSAlert()
-            alert.messageText = "Reset all HUD options to defaults?"
-            alert.informativeText = "This restores the default categories, readings, highlighting, usage modes, alignment, size, and background, and enables the HUD. Your position and permissions are kept."
-            alert.addButton(withTitle: "Reset Options")
+            alert.alertStyle = .informational
+            alert.messageText = "Automatically hide the HUD?"
+            alert.informativeText = "The HUD will appear when FPS readings are available and hide after three seconds without them. Games or apps without detectable FPS readings will keep it hidden. Enable/Disable and your shortcut still control whether the HUD is enabled."
+            alert.addButton(withTitle: "Use All options")
             alert.addButton(withTitle: "Cancel")
+            alert.showsSuppressionButton = true
+            alert.suppressionButton?.title = "Don’t show this again"
             NSApp.activate(ignoringOtherApps: true)
             guard alert.runModal() == .alertFirstButtonReturn else { return }
-            self.resetHUDOptions()
+            HUDPreferences.autoHideExplanationDismissed = alert.suppressionButton?.state == .on
+            setAutoHideMode(.all)
+        }
+    }
+
+    private func setAutoHideMode(_ mode: HUDAutoHideMode) {
+        HUDPreferences.autoHideMode = mode
+        autoHideMenuView?.select(mode)
+        hudWindow?.setAutoHideMode(mode)
+        reconcileMonitoring()
+    }
+
+    private func confirmResetOptions() {
+        statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if HUDPreferences.resetOptionsConfirmationDismissed {
+                resetHUDOptions()
+                return
+            }
+            let alert = NSAlert()
+            alert.messageText = "Reset all HUD options to defaults?"
+            alert.informativeText = "This restores the default categories, readings, highlighting, usage modes, alignment, size, position, and appearance, and enables the HUD. Your permissions are kept."
+            alert.addButton(withTitle: "Reset All Options")
+            alert.addButton(withTitle: "Cancel")
+            alert.showsSuppressionButton = true
+            alert.suppressionButton?.title = "Don’t show this again"
+            NSApp.activate(ignoringOtherApps: true)
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            HUDPreferences.resetOptionsConfirmationDismissed = alert.suppressionButton?.state == .on
+            resetHUDOptions()
         }
     }
 
@@ -936,10 +984,11 @@ final class AppDelegate:
         hudWindow?.setBatteryOptions(HUDPreferences.batteryOptions)
         hudWindow?.setFanOptions(HUDPreferences.fanOptions)
         hudWindow?.setPackagePowerOptions(HUDPreferences.packagePowerOptions)
-        hudWindow?.setDynamicFPS(HUDPreferences.dynamicFPS)
+        hudWindow?.setAutoHideMode(HUDPreferences.autoHideMode)
         hudWindow?.setAlignment(HUDPreferences.alignment)
         hudWindow?.setHUDScale(hudScale)
         hudWindow?.setBackground(hudBackground)
+        hudWindow?.resetPosition()
         hudWindow?.setHUDEnabled(hudEnabled)
         reconcileMonitoring()
 
@@ -981,6 +1030,7 @@ final class AppDelegate:
         // Save preference.
         HUDPreferences.hudScale =
             newScale
+        sizeMenuView?.select(newScale)
 
         // Resize immediately.
         hudWindow?
@@ -1154,26 +1204,30 @@ final class AppDelegate:
 
     // Collect only visible metrics. Each monitor's start is idempotent for its
     // current session, so changing an unrelated toggle does not reset baselines.
+    private var readingsActive: Bool {
+        hudEnabled && !(hudWindow?.isAutomaticallyHidden ?? false)
+    }
+
     private func reconcileMonitoring() {
-        var metrics = hudEnabled ? enabledMetrics : []
+        var metrics = readingsActive ? enabledMetrics : []
         // CPU/GPU rows can stay visible without utilization. Memory sampling also
         // supplies Details, so it remains active for a Details-only row.
         for group in HUDResourceGroup.allCases where group != .ram && !HUDPreferences.resourceOptions(for: group).totalUse {
             metrics.remove(group.totalMetric)
         }
         let fan = HUDPreferences.fanOptions
-        fanMonitor.configure(readings: hudEnabled && fan.enabled && fan.usage)
+        fanMonitor.configure(readings: readingsActive && fan.enabled && fan.usage)
         let cpu = HUDPreferences.resourceOptions(for: .cpu)
         let gpu = HUDPreferences.resourceOptions(for: .gpu)
         let resources = Dictionary(uniqueKeysWithValues: HUDResourceGroup.allCases.map {
             ($0, HUDPreferences.resourceOptions(for: $0))
         })
-        let powerEnabled = HUDPowerDemand.isNeeded(hudEnabled: hudEnabled,
+        let powerEnabled = HUDPowerDemand.isNeeded(hudEnabled: readingsActive,
             resources: resources, package: HUDPreferences.packagePowerOptions)
         powerMonitor.configure(enabled: powerEnabled)
         if !powerEnabled { hudWindow?.updatePower(.unavailable) }
-        temperatureMonitor.configure(cpu: hudEnabled && cpu.enabled && cpu.temperature,
-                                     gpu: hudEnabled && gpu.enabled && gpu.temperature)
+        temperatureMonitor.configure(cpu: readingsActive && cpu.enabled && cpu.temperature,
+                                     gpu: readingsActive && gpu.enabled && gpu.temperature)
         if metrics.contains(.gpuTotal) { totalGPUUsageMonitor?.start() }
         else { totalGPUUsageMonitor?.stop(); hudWindow?.updateMetric(.gpuTotal, value: "") }
         if metrics.contains(.cpuTotal) { totalCPUUsageMonitor?.start() }
@@ -1191,7 +1245,9 @@ final class AppDelegate:
         else { cpuUsageMonitor?.stop(); hudWindow?.updateMetric(.cpu, value: "") }
         if metrics.contains(.ram), let pid = currentPID { ramUsageMonitor?.start(pid: pid) }
         else { ramUsageMonitor?.stop(); hudWindow?.updateRAM(.ram, usage: nil) }
-        if (metrics.contains(.fps) || metrics.contains(.fpsGraph)), let pid = currentPID {
+        // Auto hide must keep detecting FPS even with the FPS category unchecked
+        // and all other readings paused, otherwise the HUD could never reappear.
+        if hudEnabled && (HUDPreferences.autoHideMode == .all || metrics.contains(.fps) || metrics.contains(.fpsGraph)), let pid = currentPID {
             do { try fpsMonitor?.start(pid: pid) }
             catch { hudWindow?.markFPSUnavailable() }
         } else {

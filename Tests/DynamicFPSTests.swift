@@ -24,17 +24,10 @@ import AppKit
         availability.advance(to: 30)
         check(availability.expanded, "A recovered sample cancels collapse")
 
-        let domain: [String: Any] = ["hud.enabled": false, "hud.background": "dark", "hud.alignment": "vertical",
+        let domain: [String: Any] = ["hud.enabled": false, "hud.autoHide.mode": "off", "hud.background": "dark", "hud.alignment": "vertical",
             "hud.fps.dynamic": false]
         UserDefaults.standard.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
-        check(!HUDPreferences.dynamicFPS, "Saved Static remains selected")
-        let menu = HUDFPSMenuView(options: .init(enabled: true, mode: .both), alignment: .vertical, dynamic: true)
-        let control: NSSegmentedControl = member(menu, "presentation")
-        check(control.selectedSegment == 1 && control.isEnabled, "Dynamic is selectable vertically")
-        menu.update(options: .init(enabled: true, mode: .both), alignment: .horizontal, dynamic: true)
-        check(control.selectedSegment == 1 && control.isEnabled, "Horizontal supports Dynamic")
-        menu.update(options: .init(enabled: true, mode: .both), alignment: .vertical, dynamic: true)
-        check(control.selectedSegment == 1 && control.isEnabled, "Vertical restores saved choice")
+        check(HUDPreferences.autoHideMode == .off, "Off preserves static FPS")
         let suiteName = "DynamicFPS.tests.\(UUID().uuidString)"
         let suite = UserDefaults(suiteName: suiteName)!
         suite.set(true, forKey: "hud.fps.dynamic")
@@ -99,7 +92,8 @@ import AppKit
             try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-fps-selector-preview.png"))
         }
 
-        for scale in [HUDScale(rawValue: 0.75), .normal, HUDScale(rawValue: 1.25)] {
+        for scale in [HUDScale.small, HUDScale(rawValue: 0.51), HUDScale(rawValue: 0.75), .normal,
+                      HUDScale(rawValue: 1.01), HUDScale(rawValue: 1.25), HUDScale.large] {
             for fpsMetrics: Set<HUDMetric> in [[.fps], [.fpsGraph], [.fps, .fpsGraph]] {
                 for body: Set<HUDMetric> in [[], [.cpuTotal], [.ramTotal], [.fans], [.battery], [.deviceInfo], [.cpuTotal, .ramTotal, .battery]] {
                     let hud = HUDWindowController()
@@ -113,7 +107,7 @@ import AppKit
                     let expandedFrame = panel.frame
                     func captureRect() -> NSRect { panel.convertToScreen(glass.convert(glass.captureBounds, to: nil)) }
                     let originalRect = captureRect()
-                    hud.setDynamicFPS(true)
+                    hud.setAutoHideMode(.fps)
                     check(container.frame.height < expandedSize.height, "Unavailable FPS collapses")
                     check(panel.frame == expandedFrame, "Collapse must not resize or move the capture window")
                     check(captureRect() == originalRect, "Capture mismatch scale=\(scale) fps=\(fpsMetrics) body=\(body), old=\(originalRect) new=\(captureRect()), container=\(container.frame), glass=\(glass.frame)")
@@ -163,22 +157,23 @@ import AppKit
                     check(panel.frame == expandedFrame && captureRect() == originalRect, "Samples do not move capture")
                     hud.markFPSUnavailable()
                     check(container.frame.size == expandedSize, "A single missing reading must not collapse")
-                    hud.setDynamicFPS(false)
+                    hud.setAutoHideMode(.off)
                     check(header.isHidden, "Static does not show the compact reminder")
                     check(container.frame.size == expandedSize && glass.reservedCaptureSize == nil, "Static restores original geometry")
                     hud.setAlignment(.horizontal)
-                    hud.setDynamicFPS(true)
+                    hud.setAutoHideMode(.fps)
                     check(glass.reservedCaptureSize != nil && header.isHidden, "Horizontal reserves capture while valid FPS remains expanded")
                     hud.shutdown()
                 }
             }
         }
 
-        for scale in [HUDScale(rawValue: 0.75), .normal, HUDScale(rawValue: 1.25)] {
+        for scale in [HUDScale.small, HUDScale(rawValue: 0.51), HUDScale(rawValue: 0.75), .normal,
+                      HUDScale(rawValue: 1.01), HUDScale(rawValue: 1.25), HUDScale.large] {
             for background in [HUDBackground.dark, .light, .transparent, .off] {
                 for body: Set<HUDMetric> in [[], [.cpuTotal], [.ramTotal, .battery], [.fans]] {
                     let hud = HUDWindowController()
-                    hud.setDynamicFPS(false)
+                    hud.setAutoHideMode(.off)
                     hud.setAlignment(.horizontal)
                     hud.setBackground(background)
                     hud.setPackagePowerOptions(.init(enabled: false))
@@ -193,7 +188,7 @@ import AppKit
                     let expandedFrame = panel.frame
                     func captureRect() -> NSRect { panel.convertToScreen(glass.convert(glass.captureBounds, to: nil)) }
                     let originalCapture = captureRect()
-                    hud.setDynamicFPS(true)
+                    hud.setAutoHideMode(.fps)
                     let collapsedSize = container.frame.size
                     check(collapsedSize.width < expandedSize.width && collapsedSize.height == expandedSize.height,
                           "Horizontal collapses width only")
@@ -217,7 +212,7 @@ import AppKit
                     check(container.frame.size == expandedSize && arrow.isHidden, "Horizontal FPS recovery restores full width")
                     check(horizontal.frame.minX == HUDStyle.horizontalPadding(scale: scale), "Expanded FPS keeps its original alignment")
                     check(panel.frame == expandedFrame && captureRect() == originalCapture, "Recovery keeps capture fixed")
-                    hud.setDynamicFPS(false)
+                    hud.setAutoHideMode(.off)
                     check(glass.reservedCaptureSize == nil && container.frame.size == expandedSize, "Static clears horizontal reservation")
                     hud.shutdown()
                 }
@@ -226,7 +221,7 @@ import AppKit
 
         // Exercise real asynchronous collapse/recovery, including a cancelled deadline.
         let hud = HUDWindowController()
-        hud.setDynamicFPS(true)
+        hud.setAutoHideMode(.fps)
         let container: NSView = member(hud, "container")
         let panel: HUDPanel = member(hud, "panel")
         let glass: PerformanceHUDGlassBackground = member(hud, "backgroundView")
@@ -251,7 +246,7 @@ import AppKit
         check(container.frame.height == compact, "Invalid readings do not reopen FPS")
         hud.updateFPS(50)
         check(container.frame.height == expanded, "Next valid reading reopens")
-        hud.setDynamicFPS(false)
+        hud.setAutoHideMode(.off)
         let staticSize = container.frame.size
         hud.markFPSUnavailable()
         try? await Task.sleep(for: .seconds(3.1))
@@ -259,7 +254,7 @@ import AppKit
         // Animate a visible native window with capture deliberately off. This
         // exercises the real timer without prompting for screen-recording access.
         hud.setBackground(.off)
-        hud.setDynamicFPS(true)
+        hud.setAutoHideMode(.fps)
         hud.setHUDEnabled(true)
         let animationStart = container.frame.height
         let animationWindow = panel.frame
@@ -285,7 +280,7 @@ import AppKit
         let sideways = HUDWindowController()
         sideways.setAlignment(.horizontal)
         sideways.setBackground(.off)
-        sideways.setDynamicFPS(true)
+        sideways.setAutoHideMode(.fps)
         sideways.setHUDEnabled(true)
         let sidewaysContainer: NSView = member(sideways, "container")
         let sidewaysPanel: HUDPanel = member(sideways, "panel")

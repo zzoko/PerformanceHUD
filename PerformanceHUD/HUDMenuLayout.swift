@@ -2,6 +2,14 @@ import AppKit
 
 @MainActor
 enum HUDMenuLayout {
+    // AppKit drops the native state column when its last checkmark turns off.
+    // Custom category buttons do not count, so Chip & OS must reserve its empty
+    // state too (including while unavailable in Horizontal alignment).
+    static func reserveStateColumn(for item: NSMenuItem) {
+        let side = NSFont.menuFont(ofSize: 0).pointSize
+        item.offStateImage = NSImage(size: NSSize(width: side, height: side), flipped: false) { _ in true }
+    }
+
     static let labelLeading: CGFloat = 30
     static let spacing: CGFloat = 10
 

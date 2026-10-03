@@ -245,7 +245,7 @@ import Foundation
         check(sample()?.cpu == 4.251, "latest complete sample parsed without waiting for next separator")
         for _ in 0..<5 { Thread.sleep(forTimeInterval: 1); check(sample() != nil, "readings remain present across child restarts"); check(live() <= 1, "only one sampler child") }
         lock.lock(); let launches = children.count; lock.unlock()
-        check(launches >= 2, "bounded child restarts during active sampling")
+        check(launches >= 2, "exited child restarts during active sampling")
         let stopped = DispatchSemaphore(value: 0)
         sampler.stop(client: id) { stopped.signal() }
         check(stopped.wait(timeout: .now() + 2) == .success, "stop callback")
@@ -256,6 +256,6 @@ import Foundation
         check(sample()?.gpu == 1.5, "sampling resumes after toggle")
         Thread.sleep(forTimeInterval: 6.3)
         check(live() == 0, "lost heartbeat expires lease")
-        print("PASS: ANE options/power/IPC, helper health/availability, power parser, stale/malformed data, streaming, bounded restarts, stop/resume, and lease expiry")
+        print("PASS: ANE options/power/IPC, helper health/availability, power parser, stale/malformed data, streaming, child exit recovery, stop/resume, and lease expiry")
     }
 }

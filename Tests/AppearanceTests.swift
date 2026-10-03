@@ -11,13 +11,13 @@ import AppKit
         let app = NSApplication.shared
         let originalAppearance = app.appearance
         defer { app.appearance = originalAppearance }
-        UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.background": ""], forName: UserDefaults.argumentDomain)
+        UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "fps", "hud.background": ""], forName: UserDefaults.argumentDomain)
         check(HUDPreferences.background == .system, "Unconfigured appearance defaults to Follow system")
         for fixed in HUDBackground.menuOptions {
-            UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.background": fixed.rawValue], forName: UserDefaults.argumentDomain)
+            UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "fps", "hud.background": fixed.rawValue], forName: UserDefaults.argumentDomain)
             check(HUDPreferences.background == fixed, "Existing manual appearance choices are preserved")
         }
-        UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.background": "system"], forName: UserDefaults.argumentDomain)
+        UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "fps", "hud.background": "system"], forName: UserDefaults.argumentDomain)
         check(HUDPreferences.background == .system, "Saved Follow system choice is restored")
         check(HUDBackground.system.resolved(isDark: false) == .light && HUDBackground.system.resolved(isDark: true) == .dark, "Follow system resolves only to Light/Dark")
         for fixed in HUDBackground.menuOptions {

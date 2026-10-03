@@ -11,7 +11,7 @@ It’s built around the experience of using an overlay while playing. Keep a few
 - **A wider view of your Mac.** See system usage alongside supported focused-app readings, plus CPU, GPU, and Neural Engine watts, temperatures, swap, memory pressure, fans, and battery state. These give you more context when adjusting settings or comparing how demanding different games are.
 - **A layout that fits your setup.** Choose a horizontal strip or vertical layout, show individual readings, and highlight the values that matter most. Adjust the size, position, and appearance, including the custom glass effect and automatic Light/Dark switching.
 - **Convenient controls while you play.** Turn the overlay on or off from the menu bar or with a keyboard shortcut, even after launching a game. Your choices stay saved as you move between apps, and supported focused-app readings follow the active app.
-- **Small details for everyday use.** A 60-second FPS history, optional automatic collapsing when FPS becomes unavailable, individual or averaged fan readings, and a battery icon that reflects your Mac’s power state.
+- **Small details for everyday use.** A 60-second FPS history, optional automatic hiding of the FPS area or the whole overlay when FPS becomes unavailable, individual or averaged fan readings, and a battery icon that reflects your Mac’s power state.
 
 ## Where MetalHUD goes further
 

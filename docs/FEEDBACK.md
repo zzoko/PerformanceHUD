@@ -4,10 +4,8 @@
 
 ## Known bugs
 
-- Power readings may rarely disappear briefly.
-- Some menu bar categories may shift when Horizontal alignment is selected.
-- The FPS history graph may sometimes shift position slightly.
+- No reported bugs currently.
 
 ## Suggestions
 
-- No major suggestions currently.
+- No planned suggestions currently.

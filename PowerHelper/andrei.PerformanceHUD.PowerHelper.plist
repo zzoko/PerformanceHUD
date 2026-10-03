@@ -15,6 +15,8 @@
 		<key>andrei.PerformanceHUD.PowerHelper</key>
 		<true/>
 	</dict>
+	<key>AbandonProcessGroup</key>
+	<false/>
 	<key>RunAtLoad</key>
 	<false/>
 </dict>

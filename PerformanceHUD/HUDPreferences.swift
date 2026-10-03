@@ -1,5 +1,9 @@
 import Foundation
 
+enum HUDAutoHideMode: String, CaseIterable {
+    case fps, off, all
+}
+
 enum HUDPreferences {
 
     // MARK: - Storage
@@ -16,9 +20,10 @@ enum HUDPreferences {
         "hud.scale"
 
     // Remove only display choices so the existing first-launch defaults stay
-    // authoritative. Position, helper registration/setup, and other app data stay.
+    // authoritative. The controller resets position separately; helper registration
+    // and the saved choice to skip reset confirmations stay.
     static func resetOptions(in store: UserDefaults = .standard) {
-        var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode",
+        var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.autoHide", "hud.autoHide.mode", "hud.autoHide.explanationDismissed",
                     "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
                     "hud.group.ram.details", "hud.fan.usage", "hud.fan.mode",
@@ -64,15 +69,41 @@ enum HUDPreferences {
         }
     }
 
+    static var autoHideMode: HUDAutoHideMode {
+        get { autoHideMode(in: defaults) }
+        set { setAutoHideMode(newValue, in: defaults) }
+    }
+
+    static func autoHideMode(in store: UserDefaults) -> HUDAutoHideMode {
+        if let saved = store.string(forKey: "hud.autoHide.mode").flatMap(HUDAutoHideMode.init(rawValue:)) {
+            return saved
+        }
+        // Preserve choices made with the previous FPS selector and Auto hide prototype.
+        if store.bool(forKey: "hud.autoHide") { return .all }
+        return (store.object(forKey: "hud.fps.dynamic") as? Bool ?? true) ? .fps : .off
+    }
+
+    static func setAutoHideMode(_ mode: HUDAutoHideMode, in store: UserDefaults) {
+        store.set(mode.rawValue, forKey: "hud.autoHide.mode")
+        store.removeObject(forKey: "hud.autoHide")
+        store.removeObject(forKey: "hud.fps.dynamic")
+    }
+
+    static var autoHideExplanationDismissed: Bool {
+        get { defaults.bool(forKey: "hud.autoHide.explanationDismissed") }
+        set { defaults.set(newValue, forKey: "hud.autoHide.explanationDismissed") }
+    }
+
+    // Keep this outside resetOptions: resetting must not undo the user's choice
+    // to skip that same confirmation on subsequent resets.
+    static var resetOptionsConfirmationDismissed: Bool {
+        get { defaults.bool(forKey: "hud.resetOptions.confirmationDismissed") }
+        set { defaults.set(newValue, forKey: "hud.resetOptions.confirmationDismissed") }
+    }
+
     static var alignment: HUDAlignment {
         get { HUDAlignment(rawValue: defaults.string(forKey: "hud.alignment") ?? "") ?? .vertical }
         set { defaults.set(newValue.rawValue, forKey: "hud.alignment") }
-    }
-
-    // One presentation choice applies to both HUD alignments.
-    static var dynamicFPS: Bool {
-        get { defaults.object(forKey: "hud.fps.dynamic") as? Bool ?? true }
-        set { defaults.set(newValue, forKey: "hud.fps.dynamic") }
     }
 
     static var fpsOptions: HUDFPSOptions {
