@@ -8,4 +8,4 @@
 
 ## Suggestions
 
-- Consider optional session logging: a start/stop button in the menu bar controls that records the latest available values of enabled HUD readings once per second, with timestamps and a local CSV export for later review.
+- Consider optional logging of enabled HUD readings.
