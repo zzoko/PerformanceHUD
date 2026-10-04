@@ -121,7 +121,10 @@ import AppKit
         check(averageMode.frame.width >= averageMode.intrinsicContentSize.width, "Layout selector fits its labels")
         mode.layoutSubtreeIfNeeded()
         check(abs(mode.alignmentRect(forFrame: mode.frame).width - 145) < 0.01, "Underline does not widen native selector")
-        check(rpmHighlight.frame.minX > mode.frame.minX && rpmHighlight.frame.maxX <= mode.frame.maxX, "Underline spans RPM and Both within selector width")
+        check(rpmHighlight.frame.minX > mode.frame.minX + mode.frame.width / 3
+              && rpmHighlight.frame.maxX <= mode.frame.minX + mode.frame.width * 2 / 3
+              && rpmHighlight.frame.width > mode.frame.width / 4,
+              "Underline spans only RPM, clear of Total and Both")
         check(rpmHighlight.frame.maxY < mode.frame.midY && rpmHighlight.frame.minY >= 0, "Underline stays beneath labels inside the menu row: line=\(rpmHighlight.frame), selector=\(mode.frame), row=\(menu.frame)")
         check(menu.hitTest(NSPoint(x: rpmHighlight.frame.midX, y: rpmHighlight.frame.midY)) === rpmHighlight, "Underline is independently clickable")
 
@@ -132,6 +135,64 @@ import AppKit
         let panel: HUDPanel = member(hud, "panel")
         let fanView: HUDFanView = member(hud, "fanView")
         let horizontal: HUDHorizontalView = member(hud, "horizontalView")
+        if CommandLine.arguments.contains("--controls-only") {
+            hud.setBackground(.dark)
+            hud.setAlignment(.horizontal)
+            hud.setHUDScale(.normal)
+            hud.setFanOptions(.init(average: false))
+            for sample in [FanSample.noFans, .checking, .unavailable] {
+                hud.updateFans(sample)
+                let labels: [String: NSTextField] = member(horizontal, "labels")
+                let status = labels["fan.status"]!
+                check(status.font == HUDStyle.smallLabelFont(scale: .normal)
+                      && status.textColor == HUDStyle.TextStyle.label.color(background: .dark),
+                      "Fan status messages use Label style")
+            }
+            hud.updateFans(two)
+            for highlighted in [false, true, false] {
+                for mode in [HUDFanMode.rpm, .both] {
+                    hud.setFanOptions(.init(mode: mode, average: false, rpmHighlighted: highlighted))
+                    let labels: [String: NSTextField] = member(horizontal, "labels")
+                    let rpm = labels["fan.0.rpm"]!
+                    let style: HUDStyle.TextStyle = highlighted ? .emphasizedReading : .reading
+                    check(rpm.font == style.font(ofSize: 12) && rpm.textColor == style.color(background: .dark),
+                          "RPM uses Reading or Emphasized Reading in RPM and Both modes")
+                }
+            }
+            if let index = CommandLine.arguments.firstIndex(of: "--preview"), CommandLine.arguments.indices.contains(index + 1) {
+                let prefix = CommandLine.arguments[index + 1]
+                func render(_ view: NSView, name: String, light: Bool = false) {
+                    view.wantsLayer = true
+                    view.layer?.backgroundColor = NSColor(white: light ? 0.90 : 0.12, alpha: 1).cgColor
+                    let window = NSWindow(contentRect: view.frame, styleMask: [], backing: .buffered, defer: false)
+                    window.contentView = view
+                    window.appearance = NSAppearance(named: light ? .aqua : .darkAqua)
+                    view.layoutSubtreeIfNeeded()
+                    let image = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+                    view.cacheDisplay(in: view.bounds, to: image)
+                    try! image.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: prefix + name + ".png"))
+                }
+                menu.update(sample: two, options: .init(rpmHighlighted: true))
+                render(menuCanvas, name: "-menu")
+                let fps = HUDFPSMenuView(options: .init(enabled: true, mode: .both), alignment: .vertical)
+                render(fps, name: "-fps-menu")
+                let view = HUDFanView(frame: NSRect(x: 0, y: 0, width: 254, height: 21))
+                for light in [false, true] {
+                    let suffix = light ? "-light" : "-dark"
+                    let background: HUDBackground = light ? .light : .dark
+                    view.update(sample: .noFans, options: .init(), scale: .normal, background: background)
+                    render(view, name: "-status" + suffix, light: light)
+                    for highlighted in [false, true] {
+                        view.update(sample: single, options: .init(rpmHighlighted: highlighted), scale: .normal, background: background)
+                        render(view, name: (highlighted ? "-emphasized" : "-reading") + suffix, light: light)
+                    }
+                }
+            }
+            hud.shutdown()
+            print("PASS: fan menu states, RPM-only underline placement/clicks, status Label style, RPM Reading/Emphasized Reading in both display modes")
+            return
+        }
+
         for alignment in HUDAlignment.allCases {
             hud.setAlignment(alignment)
             for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
@@ -162,7 +223,7 @@ import AppKit
                                         && $0.frame.height == HUDFanIcon.side * scale.rawValue }, "Icons retain their compact square size")
                                     if count == 1 { check(icons.values.first?.accessibilityLabel() == "FAN 1", "Single fan keeps an accessible label") }
                                     if count == 0, let status = labels["fan.status"] {
-                                        check(status.font == HUDStyle.readingFont(scale: scale, highlighted: false), "No fan status stays regular faint text")
+                                        check(status.font == HUDStyle.smallLabelFont(scale: scale), "No fan status uses the small Label font")
                                     }
                                     let dividers: [NSView] = member(horizontal, "dividers")
                                     let visible = dividers.filter { !$0.isHidden }

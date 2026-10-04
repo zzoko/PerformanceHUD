@@ -18,10 +18,35 @@ import AppKit
             precondition(HUDPreferences.autoHideMode(in: suite) == mode)
             precondition(suite.object(forKey: "hud.autoHide") == nil && suite.object(forKey: "hud.fps.dynamic") == nil)
         }
-        suite.set(true, forKey: "hud.autoHide.explanationDismissed")
-        HUDPreferences.resetOptions(in: suite)
-        precondition(HUDPreferences.autoHideMode(in: suite) == .fps && !suite.bool(forKey: "hud.autoHide.explanationDismissed"))
+        // Reset display choices without changing either dialog's independent consent.
+        let autoHideDismissedKey = "hud.autoHide.explanationDismissed"
+        let resetDismissedKey = "hud.resetOptions.confirmationDismissed"
+        for autoHideDismissed: Bool? in [nil, false, true] {
+            for resetDismissed: Bool? in [nil, false, true] {
+                suite.set(autoHideDismissed, forKey: autoHideDismissedKey)
+                suite.set(resetDismissed, forKey: resetDismissedKey)
+                for _ in 0..<2 {
+                    HUDPreferences.setAutoHideMode(.all, in: suite)
+                    suite.set(1.75, forKey: "hud.scale")
+                    HUDPreferences.resetOptions(in: suite)
+                    precondition(HUDPreferences.autoHideMode(in: suite) == .fps,
+                                 "Reset still restores the default Auto hide mode")
+                    precondition(suite.object(forKey: "hud.scale") == nil,
+                                 "Reset still restores the default size")
+                    // Reopen the saved preferences as on a later launch.
+                    let reopened = UserDefaults(suiteName: suiteName)!
+                    precondition((reopened.object(forKey: autoHideDismissedKey) as? Bool) == autoHideDismissed,
+                                 "Auto hide remembers its own choice across resets and launches")
+                    precondition((reopened.object(forKey: resetDismissedKey) as? Bool) == resetDismissed,
+                                 "Reset confirmation remembers its own choice independently")
+                }
+            }
+        }
         suite.removePersistentDomain(forName: suiteName)
+        if CommandLine.arguments.contains("--preferences-only") {
+            print("PASS: Auto hide migration/defaults; independent dialog choices survive repeated resets and preference reloads")
+            return
+        }
 
         UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "fps",
             "hud.alignment": "vertical"], forName: UserDefaults.argumentDomain)

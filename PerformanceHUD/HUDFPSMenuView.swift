@@ -8,6 +8,7 @@ enum HUDFPSDisplayMode: String, CaseIterable {
 struct HUDFPSOptions {
     var enabled: Bool
     var mode: HUDFPSDisplayMode
+    var valueHighlighted = true
 
     func visibleMetrics(alignment: HUDAlignment) -> Set<HUDMetric> {
         guard enabled else { return [] }
@@ -30,6 +31,8 @@ final class HUDFPSMenuView: NSView {
     private let control = NSSegmentedControl(labels: HUDFPSDisplayMode.allCases.map(\.title),
         trackingMode: .selectOne, target: nil, action: nil)
 
+    private let valueHighlight = HUDHighlightLine()
+
     init(options: HUDFPSOptions, alignment: HUDAlignment) {
         self.options = options
         self.alignment = alignment
@@ -43,7 +46,13 @@ final class HUDFPSMenuView: NSView {
         control.target = self
         control.action = #selector(modeChanged)
         control.setAccessibilityLabel("FPS display mode")
-        for view in [master, control] {
+        valueHighlight.setButtonType(.toggle)
+        valueHighlight.isBordered = false
+        valueHighlight.target = self
+        valueHighlight.action = #selector(toggleValueHighlight)
+        valueHighlight.setAccessibilityRole(.checkBox)
+        valueHighlight.setAccessibilityLabel("Emphasize FPS number")
+        for view in [master, control, valueHighlight] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
@@ -52,6 +61,10 @@ final class HUDFPSMenuView: NSView {
             master.widthAnchor.constraint(equalToConstant: HUDResourceMenuView.masterWidth),
             master.topAnchor.constraint(equalTo: topAnchor),
             master.bottomAnchor.constraint(equalTo: bottomAnchor),
+            valueHighlight.leadingAnchor.constraint(equalTo: control.leadingAnchor, constant: 2),
+            valueHighlight.widthAnchor.constraint(equalTo: control.widthAnchor, multiplier: 1.0 / 3.0, constant: -4),
+            valueHighlight.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+            valueHighlight.heightAnchor.constraint(equalToConstant: 6),
             control.leadingAnchor.constraint(equalTo: master.trailingAnchor, constant: 8),
             control.centerYAnchor.constraint(equalTo: centerYAnchor),
             control.widthAnchor.constraint(equalToConstant: HUDResourceMenuView.readingsChoicesWidth),
@@ -74,9 +87,19 @@ final class HUDFPSMenuView: NSView {
         master.state = options.enabled ? .on : .off
         control.selectedSegment = alignment == .horizontal ? 0
             : HUDFPSDisplayMode.allCases.firstIndex(of: options.mode)!
+        valueHighlight.state = options.valueHighlighted ? .on : .off
+        valueHighlight.isEnabled = options.visibleMetrics(alignment: alignment).contains(.fps)
+        valueHighlight.needsDisplay = true
         control.isEnabled = options.enabled
         control.setEnabled(options.enabled, forSegment: 0)
         for index in [1, 2] { control.setEnabled(options.enabled && alignment == .vertical, forSegment: index) }
+    }
+
+    @objc private func toggleValueHighlight() {
+        guard valueHighlight.isEnabled else { return }
+        options.valueHighlighted = valueHighlight.state == .on
+        refresh()
+        onChange?(options)
     }
 
     @objc private func toggleCategory() {

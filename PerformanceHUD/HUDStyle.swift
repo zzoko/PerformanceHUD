@@ -2,6 +2,24 @@ import AppKit
 
 enum HUDStyle {
 
+    // Keep these names stable when discussing or refining the HUD typography.
+    // Font size belongs to the existing layout; each style changes only weight/color.
+    enum TextStyle: String {
+        case label = "Label"
+        case reading = "Reading"
+        case emphasizedReading = "Emphasized Reading"
+
+        func font(ofSize size: CGFloat) -> NSFont {
+            NSFont.systemFont(ofSize: size, weight: self == .emphasizedReading ? .semibold : .regular)
+        }
+
+        func color(background: HUDBackground) -> NSColor {
+            let isLight = background == .light
+            return NSColor(white: self == .label ? (isLight ? 0.31 : 0.76)
+                : (isLight ? 0.10 : 0.96), alpha: 1)
+        }
+    }
+
     // MARK: - Base Sizes
 
     private static let baseValueColumnRight: CGFloat = 148
@@ -70,6 +88,7 @@ enum HUDStyle {
         * CGFloat(scale.rawValue)
     }
 
+    static let memoryLabelValueSpacing: CGFloat = 4
     static let fpsHistoryFadeExtension: CGFloat = 16
 
     static func rowHeight(for metric: HUDMetric, scale: HUDScale) -> CGFloat {
@@ -80,7 +99,7 @@ enum HUDStyle {
         if metric == .deviceInfo { return ramDetailHeight(scale: scale) }
         if metric == .battery { return rowHeight(scale: scale) + ramDetailHeight(scale: scale) }
         let detailLines = metric == .ramTotal ? 3 : metric == .ram ? 1 : 0
-        let detailGroupSpacing = detailLines > 0 ? rowSpacing(scale: scale) : 0
+        let detailGroupSpacing: CGFloat = 0
         return rowHeight(scale: scale) + detailGroupSpacing + CGFloat(detailLines) * ramDetailHeight(scale: scale)
     }
 
@@ -88,12 +107,16 @@ enum HUDStyle {
         18 * CGFloat(scale.rawValue)
     }
 
+    static func smallLabelFont(scale: HUDScale) -> NSFont {
+        TextStyle.label.font(ofSize: baseReadingFontSize * CGFloat(scale.rawValue))
+    }
+
     static func ramDetailFont(scale: HUDScale) -> NSFont {
-        NSFont.systemFont(ofSize: 12 * CGFloat(scale.rawValue), weight: .regular)
+        TextStyle.reading.font(ofSize: baseReadingFontSize * CGFloat(scale.rawValue))
     }
 
     static func readingFont(scale: HUDScale, highlighted: Bool) -> NSFont {
-        NSFont.systemFont(ofSize: 12 * CGFloat(scale.rawValue), weight: highlighted ? .semibold : .regular)
+        (highlighted ? TextStyle.emphasizedReading : .reading).font(ofSize: baseReadingFontSize * CGFloat(scale.rawValue))
     }
 
     static func rowSpacing(
@@ -137,26 +160,30 @@ enum HUDStyle {
 
     // MARK: - Fonts
 
-    // Match PerformanceHUDSampleTextView's 1× typography; scale only by the HUD size.
+    // Text sizes at 1×; the FPS value matches its label size.
     private static let baseFontSize: CGFloat = 14
+    private static let baseReadingFontSize: CGFloat = 12
 
+    static func fpsValueFont(scale: HUDScale, highlighted: Bool) -> NSFont {
+        (highlighted ? TextStyle.emphasizedReading : .reading).font(ofSize: baseFontSize * CGFloat(scale.rawValue))
+    }
+
+    // Keep the FPS sizing reference at its widest weight so emphasis does not
+    // resize the HUD or its capture area. Visible FPS uses fpsValueFont instead.
     static func valueFont(for metric: HUDMetric, scale: HUDScale) -> NSFont {
-        NSFont.systemFont(ofSize: baseFontSize * CGFloat(scale.rawValue),
-                          weight: metric == .fps ? .semibold : .regular)
+        if metric == .fps { return fpsValueFont(scale: scale, highlighted: true) }
+        return TextStyle.reading.font(ofSize: baseFontSize * CGFloat(scale.rawValue))
     }
 
     static func primaryLabelHeight(for metric: HUDMetric, scale: HUDScale) -> CGFloat {
         guard metric == .fps else { return rowHeight(scale: scale) }
         let label = NSTextField(labelWithString: "FPS")
-        label.font = valueFont(for: .fps, scale: scale)
+        label.font = titleFont(for: .fps, scale: scale)
         return ceil(label.intrinsicContentSize.height)
     }
 
     static func titleFont(for metric: HUDMetric, scale: HUDScale) -> NSFont {
-        if [.gpu, .gpuTotal, .cpu, .cpuTotal, .aneTotal, .ram, .ramTotal, .fans, .battery].contains(metric) {
-            return NSFont.systemFont(ofSize: baseFontSize * CGFloat(scale.rawValue), weight: .medium)
-        }
-        return valueFont(for: metric, scale: scale)
+        TextStyle.label.font(ofSize: baseFontSize * CGFloat(scale.rawValue))
     }
 
     // Together with the 6pt stack spacing, match the sample's section positions.
@@ -167,17 +194,22 @@ enum HUDStyle {
     // MARK: - Text Colors
 
     static func valueColor(background: HUDBackground) -> NSColor {
-        NSColor(white: background == .light ? 0.10 : 0.96, alpha: 1)
+        TextStyle.reading.color(background: background)
     }
 
+    static func readingColor(background: HUDBackground) -> NSColor {
+        TextStyle.reading.color(background: background)
+    }
+
+    // Retain the quieter tint for non-text elements such as the FPS graph,
+    // collapsed arrow, fan icons and bars, independently of reading contrast.
     static func titleColor(for metric: HUDMetric, background: HUDBackground) -> NSColor {
         metric == .fps ? valueColor(background: background)
             : NSColor(white: background == .light ? 0.31 : 0.76, alpha: 1)
     }
 
     static func primaryTitleColor(for metric: HUDMetric, background: HUDBackground) -> NSColor {
-        if metric == .fps { return valueColor(background: background) }
-        return NSColor(white: background == .light ? 0.21 : 0.86, alpha: 1)
+        TextStyle.label.color(background: background)
     }
 
     static func separatorColor(background: HUDBackground) -> NSColor {

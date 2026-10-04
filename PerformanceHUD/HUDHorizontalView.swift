@@ -32,6 +32,16 @@ final class HUDHorizontalView: NSView {
         fpsLabels.forEach { $0.alphaValue = opacity }
     }
 
+    // Auto Layout pixel-aligns the vertical FPS row. Match that placement after
+    // the horizontal host has its final frame, including rounded outer height.
+    func alignFPSVertically(heightRounding: CGFloat) {
+        for label in fpsLabels {
+            let frame = label.frame.offsetBy(dx: 0, dy: heightRounding)
+            let aligned = backingAlignedRect(frame, options: .alignAllEdgesNearest)
+            label.setFrameOrigin(NSPoint(x: frame.minX, y: aligned.minY))
+        }
+    }
+
     private var labels: [String: NSTextField] = [:]
     private var dividers: [NSView] = []
     private var symbols: [String: NSImageView] = [:]
@@ -50,7 +60,7 @@ final class HUDHorizontalView: NSView {
         fpsLabels.removeAll()
         let factor = CGFloat(scale.rawValue)
         let reference = NSTextField(labelWithString: "FPS")
-        reference.font = HUDStyle.valueFont(for: .fps, scale: scale)
+        reference.font = HUDStyle.titleFont(for: .fps, scale: scale)
         let height = HUDStyle.rowHeight(scale: scale)
         let gap = HUDStyle.metricColumnSpacing(scale: scale)
         let referenceHeight = reference.intrinsicContentSize.height
@@ -103,7 +113,7 @@ final class HUDHorizontalView: NSView {
                         let bordersSymbol = reading.symbolName != nil || section[index - 1].symbolName != nil
                         // A compact fixed slot: the triangle fits between the
                         // readings without adding space when pressure changes.
-                        x += reading.tightLeading ? 2 * factor : gap * (bordersSymbol ? 0.25 : followsLabel ? labelGap : 1)
+                        x += reading.tightLeading ? HUDStyle.memoryLabelValueSpacing * factor : gap * (bordersSymbol ? 0.25 : followsLabel ? labelGap : 1)
                     }
                 }
                 previousResource = reading.resourceGroup

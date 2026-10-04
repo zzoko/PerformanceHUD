@@ -20,7 +20,7 @@
             hud.updateFPS(60)
             for scale in [HUDScale.small, .normal, .large] {
                 hud.setHUDScale(scale)
-                let expected = 10 * CGFloat(scale.rawValue)
+                let expected = 14 * CGFloat(scale.rawValue)
                 precondition(glass.glassAppearance.cornerRadius == expected)
                 precondition(checker.cornerRadius == expected)
                 for layer in [content.layer!, held] {
@@ -72,9 +72,10 @@
                             }
                         }
                     }
-                    // These normalized points straddle the arc at every size.
-                    // A fixed 10-point radius fails this at both 0.5× and 2×.
-                    for (fraction, inside): (CGFloat, Bool) in [(0.22, false), (0.42, true)] {
+                    // These normalized points straddle the arc at every size, staying
+                    // clear of the antialiasing fringe even at 0.5× on a 1× display.
+                    // An unscaled radius fails this at both 0.5× and 2×.
+                    for (fraction, inside): (CGFloat, Bool) in [(0.18, false), (0.55, true)] {
                         let inset = Int((appearance.cornerRadius * fraction * backing).rounded(.down))
                         for x in [inset, image.width - 1 - inset] {
                             for y in [inset, image.height - 1 - inset] {

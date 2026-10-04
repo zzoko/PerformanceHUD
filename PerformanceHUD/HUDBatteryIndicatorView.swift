@@ -65,9 +65,9 @@ final class HUDBatteryIndicatorView: NSView {
         needsDisplay = true
     }
 
-    private var sourceFont: NSFont { NSFont.systemFont(ofSize: 14 * scale, weight: .medium) }
-    private var valueFont: NSFont { NSFont.systemFont(ofSize: 14 * scale, weight: .regular) }
-    private var detailFont: NSFont { NSFont.systemFont(ofSize: 12 * scale, weight: .regular) }
+    private var sourceFont: NSFont { HUDStyle.TextStyle.label.font(ofSize: 14 * scale) }
+    private var valueFont: NSFont { HUDStyle.TextStyle.reading.font(ofSize: 14 * scale) }
+    private var detailFont: NSFont { HUDStyle.TextStyle.label.font(ofSize: 12 * scale) }
     private var temperatureFont: NSFont {
         HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: options.temperatureHighlighted)
     }
@@ -117,7 +117,7 @@ final class HUDBatteryIndicatorView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let rowMidY = horizontal ? bounds.midY : bounds.minY + 10.5 * scale
         let headingAttributes: [NSAttributedString.Key: Any] = [
-            .font: detailFont, .foregroundColor: HUDStyle.titleColor(for: .battery, background: background)
+            .font: detailFont, .foregroundColor: HUDStyle.TextStyle.label.color(background: background)
         ]
         let heading = "Power Source" as NSString
         let headingSize = heading.size(withAttributes: headingAttributes)
@@ -139,7 +139,7 @@ final class HUDBatteryIndicatorView: NSView {
             let text = "\(Int(temperature.rounded()))°C" as NSString
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: temperatureFont,
-                .foregroundColor: HUDStyle.titleColor(for: .battery, background: background)
+                .foregroundColor: HUDStyle.readingColor(background: background)
             ]
             let size = text.size(withAttributes: attributes)
             text.draw(at: NSPoint(x: bounds.maxX - temperatureTrailingInset - size.width,

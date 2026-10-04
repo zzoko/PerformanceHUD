@@ -435,3 +435,21 @@ private final class HUDHighlightButton: NSButton {
         }
     }
 }
+
+// Shared thin emphasis toggle for FPS and fan RPM.
+
+@MainActor
+final class HUDHighlightLine: NSButton {
+    // Native button bezel insets do not apply to this thin custom control.
+    override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0) }
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 6) }
+    override func draw(_ dirtyRect: NSRect) {
+        let line = NSRect(x: 0, y: (bounds.height - 4) / 2, width: bounds.width, height: 4)
+        NSColor.labelColor.withAlphaComponent(isEnabled ? (state == .on ? 0.9 : 0.22) : 0.08).setFill()
+        NSBezierPath(roundedRect: line, xRadius: 2, yRadius: 2).fill()
+        if window?.firstResponder === self {
+            NSFocusRingPlacement.only.set()
+            NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
+        }
+    }
+}

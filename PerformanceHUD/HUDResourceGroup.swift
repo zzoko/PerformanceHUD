@@ -2,7 +2,7 @@ import Foundation
 
 struct HUDPackagePowerOptions: Equatable {
     var enabled = true
-    var highlighted = true
+    var highlighted = false
 }
 
 /// Sampling is needed for any visible power reading, including Package by itself.

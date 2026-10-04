@@ -41,17 +41,18 @@ final class HUDFanView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let font = HUDStyle.readingFont(scale: scale, highlighted: false)
+        let statusFont = HUDStyle.smallLabelFont(scale: scale)
         let color = HUDStyle.titleColor(for: .fans, background: background)
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+        let statusAttributes: [NSAttributedString.Key: Any] = [.font: statusFont, .foregroundColor: HUDStyle.TextStyle.label.color(background: background)]
         let rpmFont = HUDStyle.readingFont(scale: scale, highlighted: options.rpmHighlighted)
-        let rpmAttributes: [NSAttributedString.Key: Any] = [.font: rpmFont, .foregroundColor: color]
+        let rpmStyle: HUDStyle.TextStyle = options.rpmHighlighted ? .emphasizedReading : .reading
+        let rpmAttributes: [NSAttributedString.Key: Any] = [.font: rpmFont, .foregroundColor: rpmStyle.color(background: background)]
         let rowHeight = HUDStyle.rowHeight(scale: scale)
         let factor = CGFloat(scale.rawValue)
-        let textHeight = ("FAN" as NSString).size(withAttributes: attributes).height
+        let textHeight = ("FAN" as NSString).size(withAttributes: statusAttributes).height
         if sample.fans.isEmpty {
             ((sample.message ?? "Fan readings unavailable") as NSString).draw(
-                at: NSPoint(x: 2 * factor, y: (rowHeight - textHeight) / 2), withAttributes: attributes)
+                at: NSPoint(x: 2 * factor, y: (rowHeight - textHeight) / 2), withAttributes: statusAttributes)
             return
         }
         let labelWidth = HUDFanIcon.side * factor

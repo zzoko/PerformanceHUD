@@ -62,8 +62,8 @@ nonisolated enum PerformanceHUDGlassStyle: Int, CaseIterable {
 
 // A continuous, squircle-like corner inspired by native macOS menus. This is
 // our own curve, not Finder's private geometry. Its curvature eases to zero at
-// the straight edges. The larger reach preserves the former 10-point corner's
-// apparent roundness while making that transition softer.
+// the straight edges. The reach extends the transition along each edge,
+// while the appearance radius controls the overall amount of rounding.
 nonisolated enum HUDCornerShape {
     static let reach: CGFloat = 1.8
 
@@ -147,7 +147,8 @@ nonisolated enum HUDCornerShape {
 }
 
 nonisolated struct PerformanceHUDGlassAppearance {
-    static let baseCornerRadius: CGFloat = 10
+    // Broader menu-inspired rounding, scaled with the rest of the HUD.
+    static let baseCornerRadius: CGFloat = 14
     let theme: PerformanceHUDGlassStyle
     let hudScale: CGFloat
     init(isDark: Bool, hudScale: CGFloat = 1) {

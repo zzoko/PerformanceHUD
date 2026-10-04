@@ -623,10 +623,13 @@ final class AppDelegate:
         let fpsView = HUDFPSMenuView(options: HUDPreferences.fpsOptions, alignment: HUDPreferences.alignment)
         fpsView.onChange = { [weak self] options in
             guard let self else { return }
+            let previousMetrics = HUDPreferences.fpsOptions.visibleMetrics(alignment: HUDPreferences.alignment)
             HUDPreferences.fpsOptions = options
             enabledMetrics = HUDPreferences.visibleMetrics
             hudWindow?.setFPSOptions(options)
-            reconcileMonitoring()
+            if previousMetrics != options.visibleMetrics(alignment: HUDPreferences.alignment) {
+                reconcileMonitoring()
+            }
         }
         fpsMenuView = fpsView
         let fpsItem = NSMenuItem()
@@ -986,6 +989,7 @@ final class AppDelegate:
         hudWindow?.setPackagePowerOptions(HUDPreferences.packagePowerOptions)
         hudWindow?.setAutoHideMode(HUDPreferences.autoHideMode)
         hudWindow?.setAlignment(HUDPreferences.alignment)
+        hudWindow?.setFPSOptions(HUDPreferences.fpsOptions)
         hudWindow?.setHUDScale(hudScale)
         hudWindow?.setBackground(hudBackground)
         hudWindow?.resetPosition()

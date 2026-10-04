@@ -21,9 +21,9 @@ enum HUDPreferences {
 
     // Remove only display choices so the existing first-launch defaults stay
     // authoritative. The controller resets position separately; helper registration
-    // and the saved choice to skip reset confirmations stay.
+    // and both independent “Don’t show this again” choices stay.
     static func resetOptions(in store: UserDefaults = .standard) {
-        var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.autoHide", "hud.autoHide.mode", "hud.autoHide.explanationDismissed",
+        var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.fps.valueHighlighted", "hud.autoHide", "hud.autoHide.mode",
                     "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
                     "hud.group.ram.details", "hud.fan.usage", "hud.fan.mode",
@@ -89,13 +89,13 @@ enum HUDPreferences {
         store.removeObject(forKey: "hud.fps.dynamic")
     }
 
+    // Dialog suppression choices are independent and survive display-option resets.
+    // Each is saved only after its own dialog is confirmed.
     static var autoHideExplanationDismissed: Bool {
         get { defaults.bool(forKey: "hud.autoHide.explanationDismissed") }
         set { defaults.set(newValue, forKey: "hud.autoHide.explanationDismissed") }
     }
 
-    // Keep this outside resetOptions: resetting must not undo the user's choice
-    // to skip that same confirmation on subsequent resets.
     static var resetOptionsConfirmationDismissed: Bool {
         get { defaults.bool(forKey: "hud.resetOptions.confirmationDismissed") }
         set { defaults.set(newValue, forKey: "hud.resetOptions.confirmationDismissed") }
@@ -116,11 +116,13 @@ enum HUDPreferences {
         let history = store.object(forKey: metricKey(.fpsGraph)) as? Bool ?? HUDMetric.fpsGraph.defaultEnabled
         let mode: HUDFPSDisplayMode = value && history ? .both : value ? .value : history ? .history
             : store.string(forKey: "hud.fps.displayMode").flatMap(HUDFPSDisplayMode.init(rawValue:)) ?? .both
-        return HUDFPSOptions(enabled: value || history, mode: mode)
+        return HUDFPSOptions(enabled: value || history, mode: mode,
+                             valueHighlighted: store.object(forKey: "hud.fps.valueHighlighted") as? Bool ?? true)
     }
 
     static func setFPSOptions(_ options: HUDFPSOptions, in store: UserDefaults) {
         store.set(options.mode.rawValue, forKey: "hud.fps.displayMode")
+        store.set(options.valueHighlighted, forKey: "hud.fps.valueHighlighted")
         let metrics = options.visibleMetrics(alignment: .vertical)
         store.set(metrics.contains(.fps), forKey: metricKey(.fps))
         store.set(metrics.contains(.fpsGraph), forKey: metricKey(.fpsGraph))
@@ -246,7 +248,7 @@ enum HUDPreferences {
     static var packagePowerOptions: HUDPackagePowerOptions {
         get {
             HUDPackagePowerOptions(enabled: defaults.object(forKey: "hud.package.power") as? Bool ?? true,
-                                   highlighted: defaults.object(forKey: "hud.package.highlighted") as? Bool ?? true)
+                                   highlighted: defaults.object(forKey: "hud.package.highlighted") as? Bool ?? false)
         }
         set {
             defaults.set(newValue.enabled, forKey: "hud.package.power")

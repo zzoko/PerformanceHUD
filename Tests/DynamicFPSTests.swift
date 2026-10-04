@@ -54,7 +54,19 @@ import AppKit
             check(HUDPreferences.fpsOptions(in: suite).mode == mode, "Re-enabling restores the mode")
             check(HUDPreferences.fpsOptions(in: suite).visibleMetrics(alignment: .horizontal) == [.fps], "Horizontal uses Value")
         }
+        check(HUDPreferences.fpsOptions(in: suite).valueHighlighted, "FPS emphasis defaults on")
+        for enabled in [false, true] {
+            for mode in HUDFPSDisplayMode.allCases {
+                HUDPreferences.setFPSOptions(.init(enabled: enabled, mode: mode, valueHighlighted: true), in: suite)
+                let saved = HUDPreferences.fpsOptions(in: suite)
+                check(saved.enabled == enabled && saved.mode == mode && saved.valueHighlighted,
+                      "FPS emphasis survives saving, History-only mode and category disabling")
+            }
+        }
+        HUDPreferences.setFPSOptions(.init(enabled: true, mode: .both, valueHighlighted: false), in: suite)
+        check(!HUDPreferences.fpsOptions(in: suite).valueHighlighted, "An explicit off preference survives the enabled default")
         HUDPreferences.resetOptions(in: suite)
+        check(HUDPreferences.fpsOptions(in: suite).valueHighlighted, "All options restores enabled FPS emphasis")
         check(HUDPreferences.fpsOptions(in: suite).enabled && HUDPreferences.fpsOptions(in: suite).mode == .both,
               "Reset restores FPS with Both")
         suite.removePersistentDomain(forName: suiteName)
@@ -62,6 +74,7 @@ import AppKit
         let fpsMenu = HUDFPSMenuView(options: .init(enabled: true, mode: .both), alignment: .vertical)
         let fpsSelector: NSSegmentedControl = member(fpsMenu, "control")
         let fpsMaster: NSButton = member(fpsMenu, "master")
+        let fpsHighlight: NSButton = member(fpsMenu, "valueHighlight")
         let fpsWindow = NSWindow(contentRect: fpsMenu.frame, styleMask: [], backing: .buffered, defer: false)
         fpsWindow.contentView = fpsMenu
         fpsMenu.layoutSubtreeIfNeeded()
@@ -70,10 +83,27 @@ import AppKit
         check(fpsSelector.frame.maxX <= fpsMenu.bounds.maxX, "FPS selector fits its row")
         var selected: HUDFPSOptions?
         fpsMenu.onChange = { selected = $0 }
+        check(fpsHighlight.isEnabled && fpsHighlight.state == .on, "FPS underline starts available and on")
+        check(fpsMenu.hitTest(NSPoint(x: fpsHighlight.frame.midX, y: fpsHighlight.frame.midY)) === fpsHighlight,
+              "FPS underline receives its own click instead of toggling the category")
+        check(fpsHighlight.frame.maxY < fpsSelector.frame.midY && fpsHighlight.frame.minY >= 0,
+              "FPS underline fits beneath the Value selector inside the existing row")
+        check(fpsHighlight.frame.minX > fpsSelector.frame.minX
+              && fpsHighlight.frame.maxX <= fpsSelector.frame.minX + fpsSelector.frame.width / 3
+              && fpsHighlight.frame.width > fpsSelector.frame.width / 4
+              && fpsHighlight.frame.minX > fpsMaster.frame.maxX,
+              "FPS underline spans Value, clear of the category checkmark and History/Both buttons")
+        fpsHighlight.performClick(nil)
+        check(selected?.valueHighlighted == false && selected?.enabled == true && selected?.mode == .both,
+              "Underline turns emphasis off independently of visibility and mode")
+        fpsHighlight.performClick(nil)
+        check(selected?.valueHighlighted == true, "Underline turns emphasis back on")
         fpsSelector.selectedSegment = 1
         _ = fpsSelector.sendAction(fpsSelector.action, to: fpsSelector.target)
         check(selected?.mode == .history, "History button updates options")
+        check(!fpsHighlight.isEnabled && fpsHighlight.state == .on, "History disables emphasis while remembering it")
         fpsMaster.performClick(nil)
+        check(!fpsHighlight.isEnabled && selected?.valueHighlighted == true, "Disabled category preserves emphasis")
         check(selected?.enabled == false && selected?.mode == .history && !fpsSelector.isEnabled,
               "Master hides FPS and remembers History")
         fpsMaster.performClick(nil)
@@ -83,6 +113,11 @@ import AppKit
               && !fpsSelector.isEnabled(forSegment: 2), "Horizontal disables History and Both")
         fpsMenu.update(options: .init(enabled: true, mode: .both), alignment: .vertical)
         check(fpsSelector.selectedSegment == 2 && fpsSelector.isEnabled(forSegment: 1), "Vertical restores Both")
+        fpsMenu.update(options: .init(enabled: true, mode: .history, valueHighlighted: true), alignment: .horizontal)
+        check(fpsHighlight.isEnabled && fpsHighlight.state == .on, "Horizontal allows emphasis despite saved History mode")
+        fpsHighlight.performClick(nil)
+        check(selected?.valueHighlighted == false && selected?.mode == .history, "Turning emphasis off preserves the saved vertical mode")
+        fpsMenu.update(options: .init(enabled: true, mode: .both), alignment: .vertical)
         if CommandLine.arguments.contains("--preview") {
             fpsMenu.appearance = NSAppearance(named: .darkAqua)
             fpsMenu.wantsLayer = true
@@ -90,6 +125,82 @@ import AppKit
             let bitmap = fpsMenu.bitmapImageRepForCachingDisplay(in: fpsMenu.bounds)!
             fpsMenu.cacheDisplay(in: fpsMenu.bounds, to: bitmap)
             try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-fps-selector-preview.png"))
+        }
+
+        let styledHUD = HUDWindowController()
+        styledHUD.setHUDEnabled(false)
+        styledHUD.setAutoHideMode(.off)
+        let styledPanel: HUDPanel = member(styledHUD, "panel")
+        let styledGlass: PerformanceHUDGlassBackground = member(styledHUD, "backgroundView")
+        let styledHorizontal: HUDHorizontalView = member(styledHUD, "horizontalView")
+        let styledGraph: HUDFPSGraphView = member(styledHUD, "fpsGraphView")
+        let styledContainer: NSView = member(styledHUD, "container")
+        var verticalFPSBaselines: [String: CGFloat] = [:]
+        for alignment in HUDAlignment.allCases {
+            styledHUD.setAlignment(alignment)
+            styledHUD.setResourceOptions(.init(enabled: true, temperature: false, totalUse: true, focusedApp: false), for: .gpu)
+            styledHUD.updateMetric(.gpuTotal, value: "97%")
+            styledHUD.setFPSOptions(.init(enabled: true, mode: .both))
+            for scale in [HUDScale.small, HUDScale(rawValue: 0.75), HUDScale(rawValue: 0.9), .normal,
+                          HUDScale(rawValue: 1.25), .large] {
+                styledHUD.setHUDScale(scale)
+                styledHUD.updateFPS(60)
+                styledGraph.append(60)
+                let storedHistory: FPSHistory = member(styledGraph, "history")
+                let frame = styledPanel.frame
+                let capture = styledGlass.captureBounds
+                let values: [HUDMetric: NSTextField] = member(styledHUD, "valueLabels")
+                let titles: [HUDMetric: NSTextField] = member(styledHUD, "titleLabels")
+                for highlighted in [false, true, false] {
+                    styledHUD.setFPSOptions(.init(enabled: true, mode: .both, valueHighlighted: highlighted))
+                    for value in [0.0, 8, 120, 9999] {
+                        styledHUD.updateFPS(value)
+                        let horizontalLabels: [String: NSTextField] = member(styledHorizontal, "labels")
+                        let valueLabel = alignment == .horizontal ? horizontalLabels["0.value"]! : values[.fps]!
+                        let expected = highlighted ? HUDStyle.TextStyle.emphasizedReading : .reading
+                        check(valueLabel.font == expected.font(ofSize: 14 * CGFloat(scale.rawValue)), "FPS uses the selected style at its label size")
+                        check(valueLabel.textColor == expected.color(background: .dark), "FPS color follows Reading or Emphasized Reading")
+                        styledPanel.contentView?.layoutSubtreeIfNeeded()
+                        let fpsTitle = alignment == .horizontal ? horizontalLabels["0.title"]! : titles[.fps]!
+                        for (role, field) in [("title", fpsTitle), ("value", valueLabel)] {
+                            let box = field.convert(field.bounds, to: styledContainer)
+                            let topToBaseline = styledContainer.bounds.maxY - box.maxY + field.firstBaselineOffsetFromTop
+                            let key = "\(scale.rawValue).\(highlighted).\(role)"
+                            if alignment == .vertical { verticalFPSBaselines[key] = topToBaseline }
+                            else {
+                                check(abs(topToBaseline - verticalFPSBaselines[key]!) < 0.01,
+                                      "Switching layout must not shift the FPS \(role) vertically at \(scale.rawValue)×")
+                            }
+                        }
+                        let valueRect = valueLabel.alignmentRect(forFrame: valueLabel.frame)
+                        check(valueRect.height + 0.5 >= valueLabel.intrinsicContentSize.height,
+                              "The FPS value must retain its full text height")
+                        check(valueRect.minY >= -0.5 && valueRect.maxY <= valueLabel.superview!.bounds.height + 0.5,
+                              "The FPS value must fit its row in both layouts")
+                        check(valueLabel.font?.pointSize == titles[.fps]?.font?.pointSize,
+                              "FPS number matches its label size")
+                        check(titles[.fps]?.font?.pointSize == titles[.gpuTotal]?.font?.pointSize,
+                              "FPS and GPU labels keep equal sizes")
+                        if alignment == .vertical {
+                            styledPanel.contentView?.layoutSubtreeIfNeeded()
+                            let gpu = values[.gpuTotal]!
+                            let fpsRight = valueLabel.convert(valueLabel.bounds, to: nil).maxX
+                            let gpuRight = gpu.convert(gpu.bounds, to: nil).maxX
+                            check(abs(fpsRight - gpuRight) <= 0.5, "FPS number aligns with the GPU percentage's right edge")
+                        }
+                        check(styledPanel.frame == frame && styledGlass.captureBounds == capture,
+                              "FPS emphasis and changing digits must not resize the window or capture")
+                    }
+                    let history: FPSHistory = member(styledGraph, "history")
+                    check(history.samples.count == storedHistory.samples.count, "Emphasis must retain FPS history")
+                    check(titles[.fps]?.font == HUDStyle.titleFont(for: .fps, scale: scale), "Emphasis affects only the FPS number")
+                }
+            }
+        }
+        styledHUD.shutdown()
+        if CommandLine.arguments.contains("--controls-only") {
+            print("PASS: FPS mode preferences, emphasis save/reset, independent underline clicks, History/Horizontal states, matching FPS baselines in both layouts at six scales from 0.5× to 2×, preserved history and stable capture geometry")
+            return
         }
 
         for scale in [HUDScale.small, HUDScale(rawValue: 0.51), HUDScale(rawValue: 0.75), .normal,

@@ -12,7 +12,7 @@ final class HUDFanMenuView: NSView {
                                                 trackingMode: .selectOne, target: nil, action: nil)
     private let mode = NSSegmentedControl(labels: HUDFanMode.allCases.map(\.title),
                                          trackingMode: .selectOne, target: nil, action: nil)
-    private let rpmHighlight = HUDFanHighlightLine()
+    private let rpmHighlight = HUDHighlightLine()
 
     init(options: HUDFanOptions, sample: FanSample) {
         self.options = options
@@ -74,7 +74,7 @@ final class HUDFanMenuView: NSView {
             mode.centerYAnchor.constraint(equalTo: centerYAnchor),
             mode.widthAnchor.constraint(equalToConstant: 145),
             rpmHighlight.leadingAnchor.constraint(equalTo: mode.leadingAnchor, constant: 145 / 3 + 2),
-            rpmHighlight.trailingAnchor.constraint(equalTo: mode.trailingAnchor, constant: -2),
+            rpmHighlight.widthAnchor.constraint(equalTo: mode.widthAnchor, multiplier: 1.0 / 3.0, constant: -4),
             rpmHighlight.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
             rpmHighlight.heightAnchor.constraint(equalToConstant: 6),
             bar.leadingAnchor.constraint(equalTo: usage.leadingAnchor, constant: -4),
@@ -133,20 +133,4 @@ final class HUDFanMenuView: NSView {
         options.averageMode = HUDFanAverageMode.allCases[averageMode.selectedSegment]; changed()
     }
     private func changed() { refresh(); onChange?(options) }
-}
-
-@MainActor
-private final class HUDFanHighlightLine: NSButton {
-    // Native button bezel insets do not apply to this thin custom control.
-    override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0) }
-    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 6) }
-    override func draw(_ dirtyRect: NSRect) {
-        let line = NSRect(x: 0, y: (bounds.height - 2) / 2, width: bounds.width, height: 2)
-        NSColor.labelColor.withAlphaComponent(isEnabled ? (state == .on ? 0.9 : 0.22) : 0.08).setFill()
-        NSBezierPath(roundedRect: line, xRadius: 1, yRadius: 1).fill()
-        if window?.firstResponder === self {
-            NSFocusRingPlacement.only.set()
-            NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
-        }
-    }
 }

@@ -2,6 +2,16 @@
 
 [← Back to README](../README.md)
 
+### v1.7
+
+- Refreshed HUD typography with consistent label, reading, and emphasized reading styles.
+- Refined the HUD’s rounded corners for a softer, macOS-inspired appearance.
+- Added an **FPS value emphasis** toggle beneath Value, enabled by default, and made the fan RPM emphasis control clearer.
+- SoC power emphasis now defaults to off.
+- Improved memory spacing in both layouts and fixed FPS text shifting vertically when switching layouts.
+- Made **Don’t show this again** choices for Auto hide and Reset all options independent and preserved across resets.
+- Updated the **Controls Guide**, refreshed all six HUD and menu screenshots, and updated the app version to **1.7**.
+
 ### v1.6
 
 - Added **Auto hide → FPS / Off / All options** near the top of the menu, replacing the FPS category’s Static / Dynamic selector. FPS is the default and collapses only the FPS area; Off keeps everything visible; All options hides the whole HUD after three seconds without FPS readings and reveals it when readings return. Existing Static / Dynamic choices are preserved. Enable / Disable remains the master switch.
