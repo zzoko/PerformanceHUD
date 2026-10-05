@@ -21,9 +21,9 @@ enum HUDPreferences {
 
     // Remove only display choices so the existing first-launch defaults stay
     // authoritative. The controller resets position separately; helper registration
-    // and both independent “Don’t show this again” choices stay.
+    // and independent “Don’t show this again” choices stay.
     static func resetOptions(in store: UserDefaults = .standard) {
-        var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.fps.valueHighlighted", "hud.autoHide", "hud.autoHide.mode",
+        var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.fps.valueHighlighted", "hud.autoHide", "hud.autoHide.mode", "hud.autoHide.animated",
                     "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
                     "hud.group.ram.details", "hud.fan.usage", "hud.fan.mode",
@@ -89,6 +89,19 @@ enum HUDPreferences {
         store.removeObject(forKey: "hud.fps.dynamic")
     }
 
+    static var autoHideAnimated: Bool {
+        get { autoHideAnimated(in: defaults) }
+        set { setAutoHideAnimated(newValue, in: defaults) }
+    }
+
+    static func autoHideAnimated(in store: UserDefaults) -> Bool {
+        store.object(forKey: "hud.autoHide.animated") as? Bool ?? true
+    }
+
+    static func setAutoHideAnimated(_ animated: Bool, in store: UserDefaults) {
+        store.set(animated, forKey: "hud.autoHide.animated")
+    }
+
     // Dialog suppression choices are independent and survive display-option resets.
     // Each is saved only after its own dialog is confirmed.
     static var autoHideExplanationDismissed: Bool {
@@ -99,6 +112,11 @@ enum HUDPreferences {
     static var resetOptionsConfirmationDismissed: Bool {
         get { defaults.bool(forKey: "hud.resetOptions.confirmationDismissed") }
         set { defaults.set(newValue, forKey: "hud.resetOptions.confirmationDismissed") }
+    }
+
+    static var loggingExplanationDismissed: Bool {
+        get { defaults.bool(forKey: "hud.logging.explanationDismissed") }
+        set { defaults.set(newValue, forKey: "hud.logging.explanationDismissed") }
     }
 
     static var alignment: HUDAlignment {
@@ -170,10 +188,8 @@ enum HUDPreferences {
 
     static var background: HUDBackground {
         get {
-            // Uncomment to force a background-free HUD without adding Off to the menu.
-            // return .off
             let saved = HUDBackground(rawValue: defaults.string(forKey: "hud.background") ?? "")
-            // Follow macOS for fresh/reset settings and migrate the hidden Off choice.
+            // Follow macOS for fresh/reset settings and migrate the retired Clear/Off choices.
             guard let saved, saved == .system || HUDBackground.menuOptions.contains(saved) else { return .system }
             return saved
         }

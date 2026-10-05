@@ -17,7 +17,7 @@ final class HUDBackgroundMenuView: NSView {
         control.font = .menuFont(ofSize: 0)
         control.target = self
         control.action = #selector(changed)
-        control.setAccessibilityLabel("HUD background")
+        control.setAccessibilityLabel("HUD appearance")
         systemControl.segmentStyle = .rounded
         systemControl.font = .menuFont(ofSize: 0)
         systemControl.target = self

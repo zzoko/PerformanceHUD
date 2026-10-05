@@ -107,7 +107,7 @@ import AppKit
         reveal.setEnabled(false, visible: false, animated: false)
         precondition(!reveal.isHidden && reveal.progress == 1)
 
-        // Exercise the actual glass geometry without requesting capture permission.
+        // Exercise native glass geometry at intermediate animation frames.
         // The whole HUD stays disabled while its presentation timer runs offscreen.
         for alignment in [HUDAlignment.vertical, .horizontal] {
             for scale in [HUDScale.small, .normal, .large] {
@@ -117,35 +117,27 @@ import AppKit
                 rounded.setHUDScale(scale)
                 rounded.setAutoHideMode(.all)
                 let animation: HUDAutoHidePresentation = member(rounded, "autoHidePresentation")
-                let glass: PerformanceHUDGlassBackground = member(rounded, "backgroundView")
-                let content: NSView = member(rounded, "backgroundContentView")
+                let glass: NativeGlassHUDBackground = member(rounded, "backgroundView")
                 let container: NSView = member(rounded, "container")
                 let panel: HUDPanel = member(rounded, "panel")
                 let fullSize: NSSize = member(rounded, "expandedHUDSize")
-                let frame = panel.frame
-                let captured = glass.convert(glass.captureBounds, to: nil)
-                precondition(glass.reservedCaptureSize == fullSize)
+                let anchor = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
                 animation.transition(visible: true, animated: true)
                 try? await Task.sleep(for: .milliseconds(160))
-                animation.stop() // Inspect one stable, intermediate animation frame.
+                animation.stop()
                 precondition(animation.progress > 0 && animation.progress < 1)
-                precondition(content.layer?.masksToBounds == true && (content.layer?.mask as? CAShapeLayer)?.path != nil)
-                precondition(glass.bounds.size == container.bounds.size)
-                precondition(alignment == .vertical ? glass.bounds.height < fullSize.height : glass.bounds.width < fullSize.width)
-                let surface: NSView = member(glass, "surface")
-                let path = (surface.layer?.mask as? CAShapeLayer)?.path
-                precondition(path != nil, "The glass surface must have a rounded moving viewport")
-                let visible = path!.boundingBoxOfPath
-                precondition(path!.contains(NSPoint(x: visible.midX, y: visible.midY)))
-                for x in [visible.minX + 0.1, visible.maxX - 0.1] {
-                    for y in [visible.minY + 0.1, visible.maxY - 0.1] {
-                        precondition(!path!.contains(NSPoint(x: x, y: y)), "All four corners must remain rounded")
-                    }
-                }
-                precondition(panel.frame == frame && glass.convert(glass.captureBounds, to: nil) == captured,
-                             "The rounded reveal must leave window and capture coordinates unchanged")
-                precondition(glass.layer?.shadowPath?.boundingBoxOfPath == glass.bounds,
-                             "The shadow must follow the rounded visible surface")
+                precondition(container.layer?.masksToBounds == true && container.layer?.cornerCurve == .continuous)
+                precondition(glass.bodyFrame.size == container.bounds.size)
+                precondition(alignment == .vertical ? container.bounds.height < fullSize.height : container.bounds.width < fullSize.width)
+                let native: NSGlassEffectView = member(glass, "glass")
+                precondition(native.cornerRadius == min(16 * CGFloat(scale.rawValue), min(container.bounds.width, container.bounds.height) / 2))
+                precondition(panel.frame.minX == anchor.x && panel.frame.maxY == anchor.y,
+                             "Native reveal must preserve its top-left anchor")
+                precondition(abs(panel.frame.width - container.bounds.width - 48) < 1 && abs(panel.frame.height - container.bounds.height - 48) < 1,
+                             "Window follows the visible native glass, without a reserved capture area")
+                let shadow: CALayer = member(glass, "outsideShadow")
+                precondition(shadow.shadowPath?.boundingBoxOfPath == glass.bodyFrame,
+                             "Shadow follows the moving body")
                 if CommandLine.arguments.contains("--preview") && scale == .normal {
                     let root: NSView = member(rounded, "windowContentView")
                     let bitmap = root.bitmapImageRepForCachingDisplay(in: root.bounds)!
@@ -153,12 +145,12 @@ import AppKit
                     try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-rounded-hide-\(alignment.rawValue).png"))
                 }
                 animation.transition(visible: true, animated: false)
-                precondition(surface.layer?.mask == nil && glass.bounds.size == fullSize)
+                precondition(glass.bodyFrame.size == fullSize, "Full native body mismatch: layout=\(alignment), scale=\(scale), expected=\(fullSize), actual=\(glass.bodyFrame.size), progress=\(animation.progress), window=\(panel.frame)")
                 if alignment == .horizontal {
                     animation.transition(visible: false, animated: false)
                     precondition(container.bounds.width == 0)
-                    // Changing appearance reattaches the stack while collapsed.
-                    for appearance in [HUDBackground.off, .light, .dark] {
+                    // Appearance changes must preserve a collapsed horizontal layout.
+                    for appearance in [HUDBackground.light, .dark] {
                         rounded.setBackground(appearance)
                         let trailing: NSLayoutConstraint? = member(rounded, "stackTrailingConstraint")
                         precondition(trailing?.isActive == false,
@@ -176,29 +168,29 @@ import AppKit
         }
 
         let hud = HUDWindowController()
-        hud.setBackground(.off) // Exercise presentation without screen capture or permissions.
+        hud.setBackground(.dark)
         hud.setHUDEnabled(true)
         hud.setAutoHideMode(.all)
         let panel: HUDPanel = member(hud, "panel")
         let root: NSView = member(hud, "windowContentView")
         let container: NSView = member(hud, "container")
         let presentation: HUDAutoHidePresentation = member(hud, "autoHidePresentation")
+        let session: NativeGlassSession = member(hud, "glassSession")
         try? await Task.sleep(for: .milliseconds(650))
-        precondition(hud.isAutomaticallyHidden && !panel.isVisible)
+        precondition(hud.isAutomaticallyHidden && !panel.isVisible && !session.isActive)
         for alignment in [HUDAlignment.vertical, .horizontal] {
             hud.setAlignment(alignment)
             hud.setFPSOptions(.init(enabled: false, mode: .both))
             let frame = panel.frame
-            let content = root.bounds
             hud.updateFPS(60)
-            precondition(panel.isVisible, "FPS must reveal the HUD even when its category is unchecked")
+            precondition(panel.isVisible && (session.isActive || session.failure != nil), "FPS must reveal the HUD and attempt its listener even when its category is unchecked")
             try? await Task.sleep(for: .milliseconds(150))
             if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 precondition(root.layer?.mask == nil && presentation.progress > 0 && presentation.progress < 1)
-                precondition(container.layer?.masksToBounds == true && (container.layer?.mask as? CAShapeLayer)?.path != nil,
+                precondition(container.layer?.masksToBounds == true && container.layer?.cornerCurve == .continuous,
                              "The moving visible edge must stay rounded, without clipping the entire window")
             }
-            precondition(panel.frame == frame && root.bounds == content, "Reveal must not resize or reposition the capture window")
+            precondition(panel.frame.maxY == frame.maxY && panel.frame.minX == frame.minX, "Reveal preserves the top-left anchor")
             try? await Task.sleep(for: .milliseconds(500))
             precondition(presentation.progress == 1 && root.layer?.mask == nil)
             hud.markFPSUnavailable()
@@ -209,11 +201,11 @@ import AppKit
             let state: HUDFPSAvailability = member(hud, "fpsAvailability")
             precondition(hud.isAutomaticallyHidden && !panel.isVisible,
                          "Hide incomplete: layout=\(alignment) progress=\(presentation.progress) hidden=\(hud.isAutomaticallyHidden) visible=\(panel.isVisible) availability=\(state)")
-            precondition(panel.frame == frame, "Hiding must not change the reserved window footprint")
+            precondition(panel.frame == frame, "Hiding returns the native window to its collapsed size")
         }
         hud.setHUDEnabled(false)
         hud.updateFPS(60)
-        precondition(!panel.isVisible, "Master disable wins over automatic FPS availability")
+        precondition(!panel.isVisible && !session.isActive, "Master disable stops the listener and wins over automatic FPS availability")
         hud.setHUDEnabled(true)
         precondition(panel.isVisible)
         hud.setFPSOptions(.init(enabled: true, mode: .both))
@@ -238,6 +230,7 @@ import AppKit
         hud.setAutoHideMode(.off)
         precondition(panel.isVisible && root.layer?.mask == nil, "Off must also restore a fully hidden HUD")
         hud.shutdown()
-        print("PASS: three-mode defaults/migration/reset, selector/cancel behavior, three-second grace, rounded glass/shadows at 0.5×–2× with fixed capture geometry, both fixed-window reveals, FPS category off, reversal, master disable, FPS-only collapse, and static Off")
+        precondition(!session.isActive, "HUD shutdown must synchronously unregister its listener")
+        print("PASS: three-mode defaults/migration/reset, selector/cancel behavior, three-second grace, rounded glass/shadows at 0.5×–2× with native window resizing, both reveal directions, FPS category off, reversal, master disable, FPS-only collapse, and static Off")
     }
 }

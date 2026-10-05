@@ -2,6 +2,18 @@
 
 [← Back to README](../README.md)
 
+### v1.8
+
+- Added **Start / Stop logging** for selected HUD readings, sampled once per second into a CSV for spreadsheets and graphs. Logs save to the Desktop when stopped, when the HUD is disabled, or when the app quits; unavailable values stay blank. Includes an independent first-use explanation and recovery files if saving fails.
+- Added an independent **Animated** checkbox for Auto hide, enabled by default. FPS and All options can now hide/show instantly while retaining their automatic behavior; Off keeps everything visible.
+- Fixed switching from collapsed FPS to All options briefly expanding the FPS category before hiding the HUD. Hiding now continues from the visible compact layout.
+- Replaced the custom captured glass with Apple’s regular **Liquid Glass** and a softer exterior shadow. Appearance now offers **Light**, **Dark**, and **Follow system**.
+- Improved glass reliability during resizing, layout changes, and show/hide transitions by removing capture restarts, held frames, and the checkerboard fallback. Native glass and shadows follow the HUD directly.
+- Significantly reduced PerformanceHUD’s own glass-processing overhead by eliminating continuous screen capture and custom per-frame rendering. macOS now renders the glass directly.
+- **Screen Capture permission is no longer required** for the HUD’s glass effect.
+- Added a display-refresh compatibility workaround for the observed game FPS cap with native glass. Kept the own-window capture alternative disabled and outside the app build.
+- Updated the **Controls Guide** for logging and macOS Liquid Glass settings, and refreshed all six HUD and menu screenshots.
+
 ### v1.7
 
 - Refreshed HUD typography with consistent label, reading, and emphasized reading styles.

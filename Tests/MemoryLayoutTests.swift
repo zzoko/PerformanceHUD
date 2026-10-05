@@ -13,9 +13,9 @@ import AppKit
         let panel: HUDPanel = member(hud, "panel")
         let container: NSView = member(hud, "container")
         let horizontal: HUDHorizontalView = member(hud, "horizontalView")
-        let glass: PerformanceHUDGlassBackground = member(hud, "backgroundView")
-        let surface: NSView = member(glass, "surface")
-        surface.isHidden = true // Offscreen preview uses a plain surface; no capture permission.
+        let glass: NativeGlassHUDBackground = member(hud, "backgroundView")
+        let surface: NSView = member(glass, "glass")
+        surface.isHidden = true // Offscreen preview uses a plain surface.
         let titles: [HUDMetric: NSTextField] = member(hud, "titleLabels")
         let usage: [HUDMetric: NSTextField] = member(hud, "valueLabels")
         let physical: [HUDMetric: NSTextField] = member(hud, "ramDetailLabels")

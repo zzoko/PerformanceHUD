@@ -1,15 +1,14 @@
 import AppKit
 
 // Drives the All options reveal. The host changes only its rounded visible
-// surface, leaving the window and capture footprint fixed.
+// surface and resizes the native glass and window together.
 @MainActor final class HUDAutoHidePresentation {
     private(set) var enabled: Bool
     private(set) var progress: CGFloat
     private var target: CGFloat
     private var timer: Timer?
-    private var revealSuspended = false
-    private var revealAnimated = false
     var onChange: (() -> Void)?
+    var targetsVisible: Bool { target == 1 }
     var isHidden: Bool { enabled && progress <= 0 && target == 0 }
 
     init(enabled: Bool) {
@@ -18,10 +17,13 @@ import AppKit
         target = progress
     }
 
-    func setEnabled(_ enabled: Bool, visible: Bool, animated: Bool) {
+    func setEnabled(_ enabled: Bool, visible: Bool, animated: Bool, initialProgress: CGFloat? = nil) {
         guard self.enabled != enabled else { return }
         self.enabled = enabled
-        if enabled { transition(visible: visible, animated: animated) }
+        if enabled {
+            if let initialProgress { progress = min(1, max(0, initialProgress)) }
+            transition(visible: visible, animated: animated)
+        }
         else {
             stop()
             progress = 1; target = 1
@@ -32,16 +34,11 @@ import AppKit
     func transition(visible: Bool, animated: Bool) {
         guard enabled else { return }
         let next: CGFloat = visible ? 1 : 0
-        if animated && target == next && (timer != nil || (visible && revealSuspended)) { return }
+        if animated && target == next && timer != nil { return }
         stop()
         target = next
-        if visible { revealAnimated = animated }
-        // Announce an expansion before its first frame so the hidden panel and
-        // its capture can start again while the reveal is still at zero.
+        // Order the hidden panel in before the first frame of expansion.
         onChange?()
-        // Ordering the window in can start a first-frame wait synchronously.
-        // Hold the animation at its starting point until the glass is usable.
-        if visible && revealSuspended { return }
         guard animated, progress != target else {
             progress = target
             onChange?()
@@ -62,15 +59,6 @@ import AppKit
         }
         self.timer = timer
         RunLoop.main.add(timer, forMode: .common)
-    }
-
-    func setRevealSuspended(_ suspended: Bool, resume: Bool = true) {
-        guard revealSuspended != suspended else { return }
-        revealSuspended = suspended
-        if suspended && target == 1 { stop() }
-        else if !suspended && resume && enabled && target == 1 {
-            transition(visible: true, animated: revealAnimated)
-        }
     }
 
     func stop() { timer?.invalidate(); timer = nil }

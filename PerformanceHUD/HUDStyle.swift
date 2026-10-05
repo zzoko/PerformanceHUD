@@ -169,7 +169,7 @@ enum HUDStyle {
     }
 
     // Keep the FPS sizing reference at its widest weight so emphasis does not
-    // resize the HUD or its capture area. Visible FPS uses fpsValueFont instead.
+    // resize the HUD. Visible FPS uses fpsValueFont instead.
     static func valueFont(for metric: HUDMetric, scale: HUDScale) -> NSFont {
         if metric == .fps { return fpsValueFont(scale: scale, highlighted: true) }
         return TextStyle.reading.font(ofSize: baseFontSize * CGFloat(scale.rawValue))

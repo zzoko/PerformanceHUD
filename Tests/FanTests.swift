@@ -232,17 +232,17 @@ import AppKit
                                 if count == 0 {
                                     for status in [FanSample.checking, .noFans, .unavailable] {
                                         hud.updateFans(status)
-                                        check(panel.frame.size == size, "Status message changes do not resize capture")
+                                        check(panel.frame.size == size, "Status message changes do not resize the window")
                                     }
                                     continue
                                 }
                                 for rpm: Double? in [0, 1, 2720, 9999, 99_999, nil] {
                                     let update = FanSample(status: .ready, fans: sample.fans.map { FanReading(id: $0.id, rpm: rpm, maximumRPM: 6000) })
                                     hud.updateFans(update)
-                                    check(panel.frame.size == size, "RPM changes never resize capture")
+                                    check(panel.frame.size == size, "RPM changes never resize the window")
                                 }
                                 hud.updateFans(.unavailable.preservingTopology(from: sample))
-                                check(panel.frame.size == size, "Read failures never resize capture")
+                                check(panel.frame.size == size, "Read failures never resize the window")
                             }
                         }
                     }
@@ -290,7 +290,7 @@ import AppKit
         }
         hud.setAlignment(.horizontal)
         hud.shutdown()
-        print("PASS: fan formats/discovery, missing/zero/invalid readings, menu states, averages and defaults, aligned menu controls, both layouts at all scales and modes, stable capture geometry")
+        print("PASS: fan formats/discovery, missing/zero/invalid readings, menu states, averages and defaults, aligned menu controls, both layouts at all scales and modes, stable window geometry")
         if CommandLine.arguments.contains("--probe") {
             let actual = SMCTemperatureReader().readFans()
             print("Actual hardware:", actual.status, "fans:", actual.fans.count)

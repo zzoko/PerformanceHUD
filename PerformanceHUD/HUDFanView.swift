@@ -1,14 +1,14 @@
 import AppKit
 
 /// Fixed columns and a fixed row per detected fan keep RPM updates from changing
-/// the panel/capture size. Only discovery, user options or scale affect geometry.
+/// the panel size. Only discovery, user options or scale affect geometry.
 @MainActor
 final class HUDFanView: NSView {
     override var isFlipped: Bool { true }
     private(set) var sample = FanSample.checking
     private var options = HUDFanOptions()
     private var scale = HUDScale.normal
-    private var background = HUDBackground.transparent
+    private var background = HUDBackground.dark
 
     private var readings: [FanDisplayReading] { sample.displayReadings(averaged: options.averages(in: .vertical)) }
     var rowCount: Int { max(1, readings.count) }

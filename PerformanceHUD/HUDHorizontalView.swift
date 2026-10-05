@@ -195,7 +195,7 @@ final class HUDHorizontalView: NSView {
                    let title = labels[section[index - 1].id] {
                     // Reserve a stable value column, but move its short label with
                     // the right-aligned value to retain the tight label/value gap.
-                    // This never changes the row width or screen-capture geometry.
+                    // This never changes the row width or window geometry.
                     let unusedWidth = width - label.intrinsicContentSize.width
                     title.frame.origin.x += unusedWidth
                     label.alignment = .right
@@ -204,7 +204,7 @@ final class HUDHorizontalView: NSView {
                    let bar = bars[section[index - 1].id], !bar.isHidden {
                     // RPM ends at the same trailing column as other readings.
                     // Split its unused reserved width around the bar so both
-                    // visible gaps remain equal without resizing the capture.
+                    // visible gaps remain equal without resizing the window.
                     let unusedWidth = max(0, width - label.intrinsicContentSize.width)
                     bar.frame.origin.x += unusedWidth / 2
                 }

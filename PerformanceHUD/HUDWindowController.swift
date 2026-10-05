@@ -3,18 +3,6 @@ import AppKit
 @MainActor
 final class HUDWindowController {
 
-    // MARK: - Background Preset
-
-    private enum BackgroundPreset {
-        case customGlass
-        case clearGlass
-    }
-
-    // Keep exactly one preset line uncommented, then rebuild the app.
-    private static let backgroundPreset: BackgroundPreset = .customGlass
-    // Disabled: Liquid Glass capped game FPS at 60 in testing.
-    // private static let backgroundPreset: BackgroundPreset = .clearGlass
-
     // MARK: - Window
 
     private let panel: HUDPanel
@@ -26,12 +14,8 @@ final class HUDWindowController {
         NSStackView
 
     private let windowContentView = NSView()
-    private let backgroundView: NSView = {
-        switch HUDWindowController.backgroundPreset {
-        case .customGlass: return PerformanceHUDGlassBackground(frame: .zero, style: .transparent)
-        case .clearGlass: return NSGlassEffectView()
-        }
-    }()
+    private let backgroundView = NativeGlassHUDBackground(frame: .zero)
+    private let glassSession: NativeGlassSession
     private let backgroundContentView = NSView()
     private var backgroundSelection = HUDPreferences.background
     private var hudBackground = HUDPreferences.background.resolved(isDark: HUDWindowController.systemIsDark)
@@ -152,18 +136,24 @@ final class HUDWindowController {
     private var customTopLeft = HUDPreferences.hudPosition
     private var screenObserver: NSObjectProtocol?
     private var geometryObservers: [NSObjectProtocol] = []
-    private var captureRefreshTask: Task<Void, Never>?
-    private let glassRevealGate = HUDGlassRevealGate()
     private var windowGeometryTask: Task<Void, Never>?
     private var displayLayoutPending = false
     private var resizingHUD = false
 
-    // Dynamic FPS changes the visible surface, never the reserved window/capture area.
+    // Keep expanded layout measurements separate from the animated native surface.
     private let autoHidePresentation = HUDAutoHidePresentation(enabled: HUDPreferences.autoHideMode == .all)
     private var lastAutoHideHidden = HUDPreferences.autoHideMode == .all
     var onAutoHideVisibilityChange: (() -> Void)?
     var isAutomaticallyHidden: Bool { autoHidePresentation.isHidden }
     private var autoHideMode = HUDPreferences.autoHideMode
+    private var autoHideAnimated = HUDPreferences.autoHideAnimated
+    // Carry the compact FPS content into a whole-HUD hide. Its rows and arrow
+    // stay where they were, even though the whole native surface now shrinks.
+    private struct RetainedFPSPresentation {
+        var progress: CGFloat
+        var revealStart: CGFloat?
+    }
+    private var retainedFPSPresentation: RetainedFPSPresentation?
     private var fpsAvailability = HUDFPSAvailability()
     private var fpsAvailabilityTask: Task<Void, Never>?
     private var fpsAnimationTimer: Timer?
@@ -177,27 +167,28 @@ final class HUDWindowController {
         autoHideMode == .fps && !enabledMetrics.isDisjoint(with: [.fps, .fpsGraph])
     }
 
-    private var customGlass: PerformanceHUDGlassBackground? {
-        backgroundView as? PerformanceHUDGlassBackground
+    private var usesFPSPresentation: Bool {
+        (dynamicFPSActive || retainedFPSPresentation != nil)
+            && !enabledMetrics.isDisjoint(with: [.fps, .fpsGraph])
     }
 
-    private var textBackground: HUDBackground {
-        // Match a held frame's appearance until its replacement arrives, and
-        // retain a legible light foreground over the dark fallback.
-        guard hudBackground != .off, let glass = customGlass else { return hudBackground }
-        if glass.isShowingFallback { return hudBackground == .light ? .dark : hudBackground }
-        switch glass.displayedStyle {
-        case .light: return .light
-        case .dark: return .dark
-        case .transparent: return .transparent
-        case nil: return hudBackground
-        }
+    private var presentedFPSProgress: CGFloat {
+        guard let retained = retainedFPSPresentation else { return dynamicFPSActive ? fpsProgress : 1 }
+        guard let start = retained.revealStart else { return retained.progress }
+        let fraction = min(1, max(0, (autoHidePresentation.progress - start) / max(0.0001, 1 - start)))
+        return retained.progress + (1 - retained.progress) * fraction
     }
+
+    private var shouldAnimateAutoHide: Bool {
+        autoHideAnimated && hudEnabled && hasVisibleContent
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    private var textBackground: HUDBackground { hudBackground }
 
     deinit {
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         for observer in geometryObservers { NotificationCenter.default.removeObserver(observer) }
-        captureRefreshTask?.cancel()
         windowGeometryTask?.cancel()
         fpsAvailabilityTask?.cancel()
         fpsAnimationTimer?.invalidate()
@@ -226,7 +217,8 @@ final class HUDWindowController {
             defer: false
         )
 
-        container = NSView(frame: panel.contentLayoutRect)
+        container = backgroundView.contentView
+        glassSession = NativeGlassSession(window: panel)
 
         stackView =
             NSStackView()
@@ -237,21 +229,6 @@ final class HUDWindowController {
         createMetricRows()
 
         autoHidePresentation.onChange = { [weak self] in self?.applyHUDPresentation() }
-        glassRevealGate.onWait = { [weak self] in
-            guard let self else { return }
-            setGlassRevealOpacity(0)
-            autoHidePresentation.setRevealSuspended(true)
-            fpsAnimationTimer?.invalidate()
-            fpsAnimationTimer = nil
-            customGlass?.preparingForReveal = true
-        }
-        glassRevealGate.onFinish = { [weak self] cancelled in
-            guard let self else { return }
-            customGlass?.preparingForReveal = false
-            setGlassRevealOpacity(1)
-            autoHidePresentation.setRevealSuspended(false, resume: !cancelled)
-            if !cancelled && dynamicFPSActive { animateFPS(to: fpsAvailability.expanded ? 1 : 0) }
-        }
         updateLayout()
         restorePosition()
         panel.onDragFinished = { [weak self] in
@@ -274,7 +251,6 @@ final class HUDWindowController {
                     } else if name == NSWindow.didResizeNotification && !self.resizingHUD {
                         self.scheduleWindowGeometryRefresh()
                     }
-                    self.scheduleCaptureRefresh()
                 }
             })
         }
@@ -345,42 +321,16 @@ final class HUDWindowController {
         // Leave transparent room inside the window for the layer-rendered shadow.
         windowContentView.wantsLayer = true
         panel.contentView = windowContentView
-        windowContentView.addSubview(container)
-        container.layer?.masksToBounds = false
-
-        backgroundView.wantsLayer = true
-        if let glassView = backgroundView as? NSGlassEffectView {
-            glassView.style = .clear
-            glassView.contentView = backgroundContentView
-        } else {
-            // Custom glass supplies its own rounded surface, rim, and layer shadow.
-            backgroundContentView.translatesAutoresizingMaskIntoConstraints = false
-            backgroundView.addSubview(backgroundContentView)
-            NSLayoutConstraint.activate([
-                backgroundContentView.leadingAnchor.constraint(equalTo: backgroundView.leadingAnchor),
-                backgroundContentView.trailingAnchor.constraint(equalTo: backgroundView.trailingAnchor),
-                backgroundContentView.topAnchor.constraint(equalTo: backgroundView.topAnchor),
-                backgroundContentView.bottomAnchor.constraint(equalTo: backgroundView.bottomAnchor)
-            ])
-        }
-        backgroundView.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(backgroundView)
+        windowContentView.addSubview(backgroundView)
+        backgroundContentView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(backgroundContentView)
         NSLayoutConstraint.activate([
-            backgroundView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            backgroundView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            backgroundView.topAnchor.constraint(equalTo: container.topAnchor),
-            backgroundView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+            backgroundContentView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            backgroundContentView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            backgroundContentView.topAnchor.constraint(equalTo: container.topAnchor),
+            backgroundContentView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         ])
-        customGlass?.onFallbackChange = { [weak self] in
-            self?.updateMetricColors()
-            _ = self?.updateDividers()
-            self?.updateGlassRevealReadiness()
-        }
-        customGlass?.onCaptureStateChange = { [weak self] state in
-            guard let self else { return }
-            updateGlassRevealReadiness()
-            onCaptureStateChange?(state)
-        }
+        glassSession.onStateChange = { [weak self] in self?.onGlassSessionChange?() }
         applyBackgroundAppearance()
     }
 
@@ -416,7 +366,7 @@ final class HUDWindowController {
     }
 
     private func attachStackView() {
-        let host: NSView = hudBackground == .off ? container : backgroundContentView
+        let host = backgroundContentView
         NSLayoutConstraint.deactivate(
             [stackLeadingConstraint, stackTrailingConstraint, stackTopConstraint].compactMap { $0 }
         )
@@ -538,8 +488,7 @@ final class HUDWindowController {
         }
 
         let fansAreLast = lastVisibleGroup.map { verticalMetricGroups[$0] == [.fans] } ?? false
-        let showBottomDivider = fansAreLast || (hudBackground == .off
-            && hasVisibleContent && visibleDividerCount == 0)
+        let showBottomDivider = fansAreLast
         bottomDivider?.isHidden = !showBottomDivider
         let bottomHeight = HUDStyle.dividerHeight(scale: hudScale, afterFPS: lastVisibleGroup == 0)
         bottomDividerHeightConstraint?.constant = bottomHeight
@@ -942,23 +891,46 @@ final class HUDWindowController {
 
     func setAutoHideMode(_ mode: HUDAutoHideMode) {
         guard autoHideMode != mode else { return }
-        let previousFPSProgress = autoHideMode == .fps ? fpsProgress : 1
+        let previousFPSProgress = dynamicFPSActive ? fpsProgress : 1
+        let previousSize = presentedHUDSize
+        let carryFPS = dynamicFPSActive && fpsProgress < 1 && mode == .all
+        let fullExtent = alignment == .horizontal ? expandedHUDSize.width : expandedHUDSize.height
+        let visibleExtent = alignment == .horizontal ? previousSize.width : previousSize.height
+        let initialProgress = fullExtent > 0 ? min(1, max(0, visibleExtent / fullExtent)) : 1
+        fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
+        retainedFPSPresentation = carryFPS
+            ? RetainedFPSPresentation(progress: previousFPSProgress,
+                revealStart: fpsAvailability.expanded ? initialProgress : nil)
+            : nil
         autoHideMode = mode
         fpsAnimationTimer?.invalidate()
         fpsAnimationTimer = nil
         fpsAnimationTarget = nil
-        fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
         autoHidePresentation.setEnabled(mode == .all, visible: fpsAvailability.expanded,
-            animated: hudEnabled && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+            animated: shouldAnimateAutoHide, initialProgress: mode == .all ? initialProgress : nil)
         updateLayout()
         updateVisibility()
         if dynamicFPSActive {
             let target = fpsProgress
-            fpsProgress = previousFPSProgress
+            if shouldAnimateAutoHide { fpsProgress = previousFPSProgress }
             applyHUDPresentation()
             animateFPS(to: target)
         }
         restorePosition()
+    }
+
+    func setAutoHideAnimated(_ animated: Bool) {
+        guard autoHideAnimated != animated else { return }
+        autoHideAnimated = animated
+        // Enabling animation affects the next transition. Disabling it finishes
+        // an in-flight transition immediately without changing the hide mode.
+        guard !animated else { return }
+        fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
+        if autoHidePresentation.enabled {
+            autoHidePresentation.transition(visible: fpsAvailability.expanded, animated: false)
+        } else {
+            animateFPS(to: fpsAvailability.expanded ? 1 : 0)
+        }
     }
 
     private func applyAutoHidePresentation() {
@@ -971,8 +943,11 @@ final class HUDWindowController {
     }
 
     private func animateAutoHide(visible: Bool) {
-        autoHidePresentation.transition(visible: visible,
-            animated: hudEnabled && hasVisibleContent && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        if retainedFPSPresentation != nil && autoHidePresentation.targetsVisible != visible {
+            retainedFPSPresentation = RetainedFPSPresentation(progress: presentedFPSProgress,
+                revealStart: visible ? autoHidePresentation.progress : nil)
+        }
+        autoHidePresentation.transition(visible: visible, animated: shouldAnimateAutoHide)
     }
 
     func setAlignment(_ alignment: HUDAlignment) {
@@ -995,7 +970,7 @@ final class HUDWindowController {
         let previousRows = fanView.rowCount
         fanSample = sample
         fanView.update(sample: sample, options: fanOptions, scale: hudScale, background: textBackground)
-        // RPM changes only redraw the existing view; do not restart capture.
+        // RPM changes only redraw the existing view; keep window geometry stable.
         if alignment == .horizontal { refreshHorizontalReadings() }
         else if fanView.rowCount != previousRows { updateLayout() }
     }
@@ -1071,7 +1046,7 @@ final class HUDWindowController {
         let visible = options.visibleMetrics(alignment: alignment)
         fpsValueHighlighted = options.valueHighlighted
         if enabledMetrics.intersection([.fps, .fpsGraph]) == visible {
-            // A text-only change preserves FPS history, animation and capture.
+            // A text-only change preserves FPS history, animation and window geometry.
             updateReadingAppearance()
             refreshHorizontalReadings()
             return
@@ -1082,7 +1057,7 @@ final class HUDWindowController {
             metricRows[metric]?.isHidden = !visible.contains(metric)
         }
         if !visible.contains(.fpsGraph) { fpsGraphView.reset() }
-        // Apply the pair together, avoiding an intermediate capture resize.
+        // Apply the pair together, avoiding an intermediate window resize.
         updateLayout()
         updateVisibility()
     }
@@ -1121,21 +1096,15 @@ final class HUDWindowController {
 
             restorePosition()
 
-            if !panel.isVisible, hudBackground != .off, let glass = customGlass {
-                // Keep a WindowServer-visible window for capture discovery, but
-                // do not show its contents before the first usable frame.
-                glassRevealGate.begin(hasFrame: !glass.isShowingFallback,
-                                      needsAttention: glass.captureState.needsAttention)
-            }
             panel.orderFrontRegardless()
             panel.startModifierTracking()
-            updateCaptureLifecycle()
+            glassSession.setVisible(true)
 
         } else {
 
             panel.stopModifierTracking()
+            glassSession.setVisible(false)
             panel.orderOut(nil)
-            stopCapture()
         }
     }
 
@@ -1235,89 +1204,17 @@ final class HUDWindowController {
         updateMetricColors()
         updateLayout()
         restorePosition()
-        updateCaptureLifecycle()
     }
 
     private func applyBackgroundAppearance() {
-        if hudBackground == .off { stopCapture() }
-        backgroundView.isHidden = hudBackground == .off
-        switch hudBackground {
-        case .light: container.appearance = NSAppearance(named: .aqua)
-        case .transparent, .dark, .off, .system: container.appearance = NSAppearance(named: .darkAqua)
-        }
-        if let customGlass {
-            switch hudBackground {
-            case .transparent: customGlass.style = .transparent
-            case .light: customGlass.style = .light
-            case .dark, .off, .system: customGlass.style = .dark
-            }
-        } else {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            switch hudBackground {
-            case .light: backgroundView.layer?.borderColor = NSColor.black.withAlphaComponent(0.12).cgColor
-            case .transparent, .dark, .system: backgroundView.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
-            case .off: backgroundView.layer?.borderColor = NSColor.clear.cgColor
-            }
-            backgroundView.layer?.borderWidth = 0.5
-            CATransaction.commit()
-        }
+        backgroundView.isDark = hudBackground == .dark
         panel.hasShadow = false
-        if stackView.superview != nil { attachStackView() }
     }
 
-    var onCaptureStateChange: ((HUDGlassCaptureState) -> Void)?
-    var captureState: HUDGlassCaptureState { customGlass?.captureState ?? .off }
+    var onGlassSessionChange: (() -> Void)?
+    var glassSessionFailure: String? { glassSession.failure }
 
-    func retryBackground() {
-        guard panel.isVisible, hudEnabled, hasVisibleContent, hudBackground != .off else { return }
-        customGlass?.retry()
-    }
-
-    // MARK: - Captured Glass Lifecycle
-
-    private func setGlassRevealOpacity(_ opacity: Float) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        windowContentView.layer?.opacity = opacity
-        CATransaction.commit()
-    }
-
-    private func updateGlassRevealReadiness() {
-        guard let glass = customGlass else { return }
-        glassRevealGate.update(hasFrame: !glass.isShowingFallback,
-                               needsAttention: glass.captureState.needsAttention)
-    }
-
-    private func updateCaptureLifecycle() {
-        if panel.isVisible && hudEnabled && hasVisibleContent && hudBackground != .off {
-            customGlass?.start()
-        } else {
-            stopCapture()
-        }
-    }
-
-    private func stopCapture() {
-        glassRevealGate.finish(cancelled: true)
-        captureRefreshTask?.cancel()
-        captureRefreshTask = nil
-        customGlass?.stop()
-    }
-
-    private func scheduleCaptureRefresh() {
-        guard customGlass != nil else { return }
-        customGlass?.prepareForGeometryChange()
-        captureRefreshTask?.cancel()
-        captureRefreshTask = Task { [weak self] in
-            // Coalesce resize/move notifications; never restart capture for metric values.
-            do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
-            guard let self, panel.isVisible, hudEnabled,
-                  hasVisibleContent, hudBackground != .off else { return }
-            windowContentView.layoutSubtreeIfNeeded()
-            customGlass?.refreshGeometry()
-            captureRefreshTask = nil
-        }
-    }
+    func retryGlassSession() { glassSession.retry() }
 
     func shutdown() {
         autoHidePresentation.stop()
@@ -1331,8 +1228,8 @@ final class HUDWindowController {
         appearanceObservation = nil
         fpsGraphView.reset()
         panel.stopModifierTracking()
+        glassSession.shutdown()
         panel.orderOut(nil)
-        stopCapture()
     }
 
     // MARK: - Text Appearance
@@ -1491,7 +1388,7 @@ final class HUDWindowController {
                 if temperatureMetrics.contains(metric) { append(temperatureLabels[metric], role: "temperature", reference: "149°C") }
                 if metric != .ramTotal && !hiddenUtilizationMetrics.contains(metric) {
                     // App CPU can use multiple cores (>100%). Reserve its hardware
-                    // limit so adding a digit cannot resize/restart glass capture.
+                    // limit so adding a digit cannot resize the HUD.
                     let reference = metric == .fps ? "9999" : metric == .cpu
                         ? "\(ProcessInfo.processInfo.activeProcessorCount * 100)%" : "100%"
                     append(valueLabels[metric], role: "value", reference: reference)
@@ -1514,7 +1411,7 @@ final class HUDWindowController {
                         let swapValue = ramSwapValueLabel?.stringValue ?? ""
                         appendDetail("SWP", value: swapValue, reference: "999.99 GB", help: "System swap used.")
                         // Keep the pressure slot even when normal, so state changes
-                        // cannot move RAM usage or resize the screen-capture region.
+                        // cannot move RAM usage or resize the HUD.
                         readings.append(.init(id: "ram.pressure", text: "", reference: "",
                             font: ramDetailsFont, color: HUDStyle.titleColor(for: metric, background: textBackground),
                             help: "Memory pressure: \(pressure).", startsMetric: false, resourceGroup: .ram, metric: metric,
@@ -1536,11 +1433,11 @@ final class HUDWindowController {
         let total = pixelAlignedSize(NSSize(width: size.width + 2 * horizontalPadding,
                                             height: size.height + 2 * verticalPadding))
         // Readings usually fit their reserved width. Avoid touching the window or
-        // capture geometry on each sample unless the actual size changes.
+        // window geometry on each sample unless the actual size changes.
         if forceLayout || expandedHUDSize != total {
             resizeHUD(width: total.width, height: total.height)
         } else {
-            // Sampling must not undo the presentation offset or restart capture.
+            // Sampling must not undo the presentation offset or resize the window.
             applyHUDPresentation()
         }
         horizontalView.alignFPSVertically(heightRounding: total.height - size.height - 2 * verticalPadding)
@@ -1553,7 +1450,7 @@ final class HUDWindowController {
         guard !fans.isEmpty else {
             let message = fanSample.message ?? "Fan readings unavailable"
             // Reserve the longest status so detection/retry messages cannot
-            // resize the HUD and restart its background capture.
+            // resize the HUD.
             return [.init(id: "fan.status", text: message,
                           reference: "Fan readings unavailable", font: HUDStyle.smallLabelFont(scale: hudScale),
                           color: HUDStyle.TextStyle.label.color(background: textBackground),
@@ -1607,7 +1504,7 @@ final class HUDWindowController {
         // Release the previous width before changing rows/fonts or switching
         // away from a fully collapsed horizontal viewport.
         stackTrailingConstraint?.isActive = false
-        customGlass?.hudScale = CGFloat(hudScale.rawValue)
+        backgroundView.cornerRadius = 16 * CGFloat(hudScale.rawValue)
         fpsAnimationTimer?.invalidate()
         fpsAnimationTimer = nil
         // Measure the unchanged expanded stack before applying its presentation crop.
@@ -1635,11 +1532,6 @@ final class HUDWindowController {
         stackLeadingConstraint?.constant = HUDStyle.horizontalPadding(scale: hudScale)
         stackTrailingConstraint?.constant = -HUDStyle.horizontalPadding(scale: hudScale)
         stackTopConstraint?.constant = HUDStyle.verticalPadding(scale: hudScale)
-        if let glass = backgroundView as? NSGlassEffectView {
-            glass.cornerRadius = 8 * CGFloat(hudScale.rawValue)
-            glass.layer?.cornerRadius = glass.cornerRadius
-        }
-
         let dividers = updateDividers()
         let dividerCount = CGFloat(dividers.count)
         // The graph includes its bottom gap so the fade ends close to the divider.
@@ -1793,43 +1685,13 @@ final class HUDWindowController {
     private func resizeHUD(width proposedWidth: CGFloat, height proposedHeight: CGFloat) {
         resizingHUD = true
         defer { resizingHUD = false }
-        // Auto Layout rounds the background to backing pixels. Match that grid
-        // so the reserved capture rect cannot drift by a fraction of a point.
+        // Match AppKit’s backing-pixel grid for stable text and native glass edges.
         expandedHUDSize = pixelAlignedSize(NSSize(width: proposedWidth, height: proposedHeight))
-        let width = expandedHUDSize.width
-        let totalHeight = expandedHUDSize.height
-        customGlass?.reservedCaptureSize = dynamicFPSActive || autoHidePresentation.enabled ? expandedHUDSize : nil
-        let anchor = visibleTopLeft
-        let margin = shadowMargin
-        panel.setFrame(
-            NSRect(x: anchor.x - margin,
-                   y: anchor.y - totalHeight - margin,
-                   width: width + 2 * margin,
-                   height: totalHeight + 2 * margin),
-            display: true
-        )
-        container.frame = NSRect(x: margin, y: margin, width: width, height: totalHeight)
+        layoutNativeSurface(size: expandedHUDSize, anchor: visibleTopLeft)
         stackTrailingConstraint?.isActive = alignment == .vertical
         container.layoutSubtreeIfNeeded()
 
-        // The supplied custom view owns its shadow; avoid adding a second one.
-        if customGlass == nil {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            container.layer?.shadowColor = NSColor.black.cgColor
-            container.layer?.shadowOpacity = hudBackground == .off ? 0 : 0.22
-            container.layer?.shadowRadius = 5 * CGFloat(hudScale.rawValue)
-            container.layer?.shadowOffset = CGSize(width: 0, height: -2 * CGFloat(hudScale.rawValue))
-            container.layer?.shadowPath = hudBackground == .off ? nil : CGPath(
-                roundedRect: container.bounds,
-                cornerWidth: 8 * CGFloat(hudScale.rawValue),
-                cornerHeight: 8 * CGFloat(hudScale.rawValue),
-                transform: nil
-            )
-            CATransaction.commit()
-        }
         configureDynamicFPSPresentation()
-        scheduleCaptureRefresh()
     }
 
     private func scheduleWindowGeometryRefresh(displayChanged: Bool = false) {
@@ -1843,8 +1705,7 @@ final class HUDWindowController {
             windowGeometryTask = nil
             let displayChanged = displayLayoutPending
             displayLayoutPending = false
-            let expected = NSSize(width: expandedHUDSize.width + 2 * shadowMargin,
-                                  height: expandedHUDSize.height + 2 * shadowMargin)
+            let expected = nativeWindowSize(for: presentedHUDSize)
             // AppKit may round the borderless frame outward to whole points.
             let wrongSize = abs(panel.frame.width - expected.width) > 1
                 || abs(panel.frame.height - expected.height) > 1
@@ -1859,9 +1720,9 @@ final class HUDWindowController {
     private func configureDynamicFPSPresentation() {
         fpsCollapseDistance = 0
         fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
-        if dynamicFPSActive && alignment == .horizontal {
+        if usesFPSPresentation && alignment == .horizontal {
             fpsCollapseDistance = max(0, horizontalView.fpsSectionWidth - collapsedFPSHeaderHeight)
-        } else if dynamicFPSActive {
+        } else if usesFPSPresentation {
             let remaining = enabledMetrics.subtracting([.fps, .fpsGraph])
             if remaining.isEmpty && !showsPackagePower {
                 fpsCollapseDistance = max(0, expandedHUDSize.height - collapsedFPSHeaderHeight
@@ -1888,27 +1749,45 @@ final class HUDWindowController {
         applyHUDPresentation()
     }
 
-    private func applyHUDPresentation() {
-        let progress = dynamicFPSActive ? fpsProgress : 1
-        let scale = panel.backingScaleFactor
+    private var presentedHUDSize: NSSize {
+        let progress = presentedFPSProgress
         let horizontal = alignment == .horizontal
-        let wholeHUD = autoHidePresentation.enabled
-        let clipsContent = dynamicFPSActive || wholeHUD
-        let reduction = wholeHUD
+        let reduction = autoHidePresentation.enabled
             ? (horizontal ? expandedHUDSize.width : expandedHUDSize.height) * (1 - autoHidePresentation.progress)
             : fpsCollapseDistance * (1 - progress)
-        let height = max(0, (expandedHUDSize.height - (horizontal ? 0 : reduction)) * scale).rounded() / scale
-        let width = max(0, (expandedHUDSize.width - (horizontal ? reduction : 0)) * scale).rounded() / scale
+        let scale = panel.backingScaleFactor
+        return NSSize(
+            width: max(0, (expandedHUDSize.width - (horizontal ? reduction : 0)) * scale).rounded() / scale,
+            height: max(0, (expandedHUDSize.height - (horizontal ? 0 : reduction)) * scale).rounded() / scale)
+    }
+
+    private func applyHUDPresentation() {
+        if autoHidePresentation.enabled && (autoHidePresentation.isHidden || autoHidePresentation.progress >= 1) {
+            retainedFPSPresentation = nil
+        }
+        let progress = presentedFPSProgress
+        let horizontal = alignment == .horizontal
+        let wholeHUD = autoHidePresentation.enabled
+        let clipsContent = usesFPSPresentation || wholeHUD
+        let size = presentedHUDSize
+        let width = size.width
+        let height = size.height
         // FPS rolls its rows away; All options keeps the content anchored while
         // the rounded glass edge moves over it, including its rim and shadow.
-        let offset = wholeHUD ? 0 : (horizontal ? expandedHUDSize.width - width : expandedHUDSize.height - height)
-        let radius = min(customGlass?.glassAppearance.cornerRadius ?? (8 * CGFloat(hudScale.rawValue)), min(width, height) / 2)
-        let margin = shadowMargin
-        // The top edge, actual window frame, and full capture footprint stay fixed.
+        let fullExtent = horizontal ? expandedHUDSize.width : expandedHUDSize.height
+        let backing = panel.backingScaleFactor
+        let fpsExtent = ((fullExtent - fpsCollapseDistance * (1 - progress)) * backing).rounded() / backing
+        let offset = wholeHUD ? (retainedFPSPresentation == nil ? 0 : fullExtent - fpsExtent)
+            : (horizontal ? expandedHUDSize.width - width : expandedHUDSize.height - height)
+        // Keep the top-left anchor fixed while the native surface and window resize.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        container.frame = NSRect(x: margin, y: margin + expandedHUDSize.height - height,
-                                 width: width, height: height)
+        let anchor = visibleTopLeft
+        let wasResizing = resizingHUD
+        resizingHUD = true
+        backgroundView.clipsContent = clipsContent
+        layoutNativeSurface(size: size, anchor: anchor)
+        resizingHUD = wasResizing
         stackTopConstraint?.constant = HUDStyle.verticalPadding(scale: hudScale) - (horizontal ? 0 : offset)
         if horizontal {
             horizontalView.frame.origin.x = HUDStyle.horizontalPadding(scale: hudScale) - offset
@@ -1920,7 +1799,7 @@ final class HUDWindowController {
         // it near the end of collapse so it does not overlap the regular FPS row.
         collapsedFPSIndicator.image = NSImage(systemSymbolName: horizontal ? "arrow.right" : "arrow.down",
             accessibilityDescription: "FPS enabled; collapsed while waiting for readings")
-        collapsedFPSIndicator.isHidden = !dynamicFPSActive || progress >= 0.4
+        collapsedFPSIndicator.isHidden = !usesFPSPresentation || progress >= 0.4
         let headerFade = min(1, max(0, 1 - progress / 0.4))
         collapsedFPSIndicator.alphaValue = headerFade * headerFade * (3 - 2 * headerFade)
         collapsedFPSIndicator.contentTintColor = HUDStyle.titleColor(for: .deviceInfo, background: textBackground)
@@ -1931,24 +1810,20 @@ final class HUDWindowController {
             y: horizontal ? (height - indicatorSize) / 2
                 : height - HUDStyle.verticalPadding(scale: hudScale) - (collapsedFPSHeaderHeight + indicatorSize) / 2,
             width: indicatorSize, height: indicatorSize)
-        container.alphaValue = height < 1 || width < 1 ? 0 : 1
-        panel.draggableContentRect = clipsContent ? container.frame : nil
+        backgroundView.alphaValue = height < 1 || width < 1 ? 0 : 1
+        panel.draggableContentRect = container.convert(container.bounds, to: nil)
         container.layoutSubtreeIfNeeded()
-        // Apply after layout so the mask uses this animation frame's bounds.
-        HUDCornerShape.applyMask(to: backgroundContentView.layer, radius: clipsContent ? radius : nil)
-        HUDCornerShape.applyMask(to: container.layer, radius: hudBackground == .off && clipsContent ? radius : nil)
-        customGlass?.updateVisibleSurface()
         CATransaction.commit()
         applyAutoHidePresentation()
     }
 
     private func animateFPS(to target: CGFloat) {
-        if fpsAnimationTimer != nil && fpsAnimationTarget == target { return }
+        if shouldAnimateAutoHide && fpsAnimationTimer != nil && fpsAnimationTarget == target { return }
         fpsAnimationTarget = target
         fpsAnimationTimer?.invalidate()
         fpsAnimationTimer = nil
-        guard dynamicFPSActive, fpsProgress != target, !glassRevealGate.isWaiting else { return }
-        guard hudEnabled, panel.isVisible, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+        guard dynamicFPSActive, fpsProgress != target else { return }
+        guard shouldAnimateAutoHide, panel.isVisible else {
             fpsProgress = target
             applyHUDPresentation()
             return
@@ -1996,12 +1871,32 @@ final class HUDWindowController {
     }
 
     private var shadowMargin: CGFloat {
-        Self.backgroundPreset == .customGlass ? 24 : 16 * CGFloat(hudScale.rawValue)
+        NativeGlassHUDBackground.shadowPadding
     }
 
     private var visibleTopLeft: NSPoint {
-        NSPoint(x: panel.frame.minX + container.frame.minX,
-                y: panel.frame.minY + container.frame.maxY)
+        panel.convertPoint(toScreen: container.convert(
+            NSPoint(x: container.bounds.minX, y: container.bounds.maxY), to: nil))
+    }
+
+    private func nativeWindowSize(for body: NSSize) -> NSSize {
+        let padded = NativeGlassHUDBackground.sizeIncludingShadow(bodySize: body)
+        // AppKit rounds borderless windows outward to whole points. Keep that
+        // extra fraction in the transparent margin, not in the glass or text.
+        return NSSize(width: ceil(padded.width), height: ceil(padded.height))
+    }
+
+    private func layoutNativeSurface(size: NSSize, anchor: NSPoint) {
+        let windowSize = nativeWindowSize(for: size)
+        let frame = NSRect(x: anchor.x - shadowMargin,
+                           y: anchor.y + shadowMargin - windowSize.height,
+                           width: windowSize.width, height: windowSize.height)
+        if panel.frame != frame { panel.setFrame(frame, display: false) }
+        let padded = NativeGlassHUDBackground.sizeIncludingShadow(bodySize: size)
+        backgroundView.frame = NSRect(x: 0, y: panel.contentLayoutRect.height - padded.height,
+                                      width: padded.width, height: padded.height)
+        backgroundView.needsLayout = true
+        backgroundView.layoutSubtreeIfNeeded()
     }
 
     // MARK: - Screen Position
@@ -2014,7 +1909,6 @@ final class HUDWindowController {
 
     private func restorePosition() {
         let positioningSize = dynamicFPSActive || autoHidePresentation.enabled ? expandedHUDSize : container.frame.size
-        defer { scheduleCaptureRefresh() }
         if let customTopLeft, !NSScreen.screens.isEmpty {
             // Choose the nearest remaining display if the saved display was disconnected.
             let screen = NSScreen.screens.min { left, right in
@@ -2027,7 +1921,7 @@ final class HUDWindowController {
                 in: screen.frame
             )
             panel.setFrameOrigin(NSPoint(x: contentOrigin.x - shadowMargin,
-                                        y: contentOrigin.y - shadowMargin))
+                                        y: contentOrigin.y + positioningSize.height + shadowMargin - panel.frame.height))
             return
         }
 
@@ -2052,9 +1946,9 @@ final class HUDWindowController {
 
         let y =
             usableFrame.maxY
-            - positioningSize.height
+            - panel.frame.height
             - inset
-            - shadowMargin
+            + shadowMargin
 
         panel.setFrameOrigin(
             NSPoint(

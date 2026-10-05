@@ -8,4 +8,4 @@
 
 ## Suggestions
 
-- Consider optional logging of enabled HUD readings.
+- No major suggestions currently.

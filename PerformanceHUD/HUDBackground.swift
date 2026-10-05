@@ -1,25 +1,17 @@
 import Foundation
 
 enum HUDBackground: String, CaseIterable {
-    case transparent
     case light
     case dark
     case system
-    case off
 
-    // Off remains supported in code; uncomment its entry to restore the menu option.
-    static let menuOptions: [HUDBackground] = [
-        .transparent, .light, .dark,
-        // .off,
-    ]
+    static let menuOptions: [HUDBackground] = [.light, .dark]
 
     var menuTitle: String {
         switch self {
-        case .transparent: return "Clear"
         case .light: return "Light"
         case .dark: return "Dark"
         case .system: return "Follow system"
-        case .off: return "Off"
         }
     }
 

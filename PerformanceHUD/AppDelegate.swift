@@ -77,7 +77,6 @@ final class AppDelegate:
     private var backgroundMenuView: HUDBackgroundMenuView?
 
     private var backgroundStatusItem: NSMenuItem?
-    private var backgroundSettingsItem: NSMenuItem?
     private var backgroundRetryItem: NSMenuItem?
 
     // MARK: - State
@@ -102,6 +101,10 @@ final class AppDelegate:
     private var powerHelperApprovalItem: NSMenuItem?
     private var powerHelperRemoveItem: NSMenuItem?
 
+    private let csvLogger = HUDCSVLogger()
+    private var logSnapshot = HUDLogSnapshot()
+    private var loggingMenuItem: NSMenuItem?
+
     // MARK: - Launch
 
     func applicationDidFinishLaunching(
@@ -113,6 +116,11 @@ final class AppDelegate:
             .accessory
         )
 
+        csvLogger.onFailure = { [weak self] error, recovery in
+            self?.updateLoggingMenu()
+            self?.reconcileMonitoring()
+            self?.presentLoggingError(error, recovery: recovery)
+        }
         setupHUD()
 
         // Selected app / FPS
@@ -126,9 +134,12 @@ final class AppDelegate:
         setupCPUUsageMonitor()
         setupTotalCPUUsageMonitor()
         temperatureMonitor.onUpdate = { [weak self] sample in
+            self?.logSnapshot.set(.cpuTemperature, sample.cpu)
+            self?.logSnapshot.set(.gpuTemperature, sample.gpu)
             self?.hudWindow?.updateTemperatures(sample)
         }
         powerMonitor.onUpdate = { [weak self] sample in
+            self?.logSnapshot.updatePower(sample)
             self?.hudWindow?.updatePower(sample)
         }
 
@@ -140,6 +151,7 @@ final class AppDelegate:
         // Fans (read-only; independent of the power helper).
         fanMonitor.onUpdate = { [weak self] sample in
             guard let self else { return }
+            logSnapshot.updateFans(sample)
             let defaultChanged = HUDPreferences.applyFanDetectionDefault(sample)
             let options = HUDPreferences.fanOptions
             if defaultChanged {
@@ -166,7 +178,7 @@ final class AppDelegate:
         monitorFrontmostApplication()
         reconcileMonitoring()
         powerHelperStateChanged()
-        // Let initial window/capture setup finish before offering power setup.
+        // Let initial window setup finish before offering power setup.
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(1))
             self?.powerMonitor.helper.offerSetupOnFirstLaunch()
@@ -230,6 +242,7 @@ final class AppDelegate:
                 return
             }
 
+            logSnapshot.set(.fps, metrics.fps)
             if let fps =
                 metrics.fps {
 
@@ -260,6 +273,8 @@ final class AppDelegate:
             guard let self else {
                 return
             }
+
+            logSnapshot.set(.gpuAppUsage, usage)
 
             guard let usage else {
 
@@ -299,6 +314,8 @@ final class AppDelegate:
             guard let self else {
                 return
             }
+
+            logSnapshot.set(.gpuUsage, usage)
 
             guard let usage else {
 
@@ -340,6 +357,8 @@ final class AppDelegate:
                 return
             }
 
+            logSnapshot.set(.cpuAppUsage, usage)
+
             guard let usage else {
 
                 self
@@ -379,6 +398,8 @@ final class AppDelegate:
                 return
             }
 
+            logSnapshot.set(.cpuUsage, usage)
+
             guard let usage else {
 
                 self
@@ -410,6 +431,7 @@ final class AppDelegate:
     private func setupRAMUsageMonitor() {
         let monitor = RAMUsageMonitor()
         monitor.onRAMUsageUpdate = { [weak self] usage in
+            self?.logSnapshot.updateMemory(usage, app: true)
             self?.hudWindow?.updateRAM(.ram, usage: usage)
         }
         self.ramUsageMonitor = monitor
@@ -420,6 +442,7 @@ final class AppDelegate:
     private func setupTotalRAMUsageMonitor() {
         let monitor = TotalRAMUsageMonitor()
         monitor.onRAMUsageUpdate = { [weak self] usage in
+            self?.logSnapshot.updateMemory(usage, app: false)
             self?.hudWindow?.updateRAM(.ramTotal, usage: usage)
         }
         self.totalRAMUsageMonitor = monitor
@@ -435,6 +458,7 @@ final class AppDelegate:
         monitor.onPressureUpdate = {
             [weak self] level in
 
+            self?.logSnapshot.setText(.memoryPressure, level?.displayText)
             self?.hudWindow?.updateMemoryPressure(level?.displayText ?? "")
         }
 
@@ -451,6 +475,7 @@ final class AppDelegate:
             BatteryMonitor()
 
         monitor.onBatteryUpdate = { [weak self] sample in
+            self?.logSnapshot.updateBattery(sample)
             self?.hudWindow?.updateBattery(sample)
         }
 
@@ -509,8 +534,12 @@ final class AppDelegate:
 
         self.hudVisibilityMenuItem =
             hudVisibilityItem
-        let autoHideView = HUDAutoHideMenuView(selected: HUDPreferences.autoHideMode)
+        let autoHideView = HUDAutoHideMenuView(selected: HUDPreferences.autoHideMode, animated: HUDPreferences.autoHideAnimated)
         autoHideView.onChange = { [weak self] mode in self?.selectAutoHideMode(mode) }
+        autoHideView.onAnimatedChange = { [weak self] animated in
+            HUDPreferences.autoHideAnimated = animated
+            self?.hudWindow?.setAutoHideAnimated(animated)
+        }
         let autoHideItem = NSMenuItem()
         autoHideItem.view = autoHideView
         menu.addItem(autoHideItem)
@@ -578,16 +607,13 @@ final class AppDelegate:
         self.backgroundMenuView = backgroundView
 
         let status = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        let settings = NSMenuItem(title: "Screen Recording Settings…", action: #selector(openScreenRecordingSettings), keyEquivalent: "")
-        let retry = NSMenuItem(title: "Retry Background", action: #selector(retryBackground), keyEquivalent: "")
-        settings.target = self
+        let retry = NSMenuItem(title: "Retry Glass Compatibility", action: #selector(retryGlassSession), keyEquivalent: "")
         retry.target = self
-        for item in [status, settings, retry] { item.isHidden = true; menu.addItem(item) }
+        for item in [status, retry] { item.isHidden = true; menu.addItem(item) }
         backgroundStatusItem = status
-        backgroundSettingsItem = settings
         backgroundRetryItem = retry
-        hudWindow?.onCaptureStateChange = { [weak self] state in self?.updateCaptureStatus(state) }
-        if let state = hudWindow?.captureState { updateCaptureStatus(state) }
+        hudWindow?.onGlassSessionChange = { [weak self] in self?.updateGlassSessionStatus() }
+        updateGlassSessionStatus()
 
         // Separator before metrics.
 
@@ -709,6 +735,12 @@ final class AppDelegate:
             .separator()
         )
 
+        let loggingItem = NSMenuItem(title: "Start logging", action: #selector(toggleLogging), keyEquivalent: "")
+        loggingItem.target = self
+        loggingMenuItem = loggingItem
+        menu.addItem(loggingItem)
+        updateLoggingMenu()
+
         let helperMenu = NSMenu()
         helperMenu.autoenablesItems = false
         let helperItem = NSMenuItem(title: "Power Helper", action: nil, keyEquivalent: "")
@@ -771,6 +803,7 @@ final class AppDelegate:
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        updateLoggingMenu()
         let fan = HUDPreferences.fanOptions
         fanMonitor.configure(readings: readingsActive && fan.enabled && fan.usage)
         powerMonitor.helper.refreshStatus()
@@ -841,28 +874,17 @@ final class AppDelegate:
     @objc private func openPowerHelperSettings() { powerMonitor.helper.openApprovalSettings() }
     @objc private func removePowerHelper() { powerMonitor.helper.remove() }
 
-    private func updateCaptureStatus(_ state: HUDGlassCaptureState) {
-        backgroundStatusItem?.isHidden = !state.needsAttention
-        backgroundSettingsItem?.isHidden = !state.needsAttention
-        backgroundRetryItem?.isHidden = !state.needsAttention
-        switch state {
-        case .permissionRequired:
-            backgroundStatusItem?.title = "Screen Recording permission needed"
-            backgroundStatusItem?.toolTip = "Allow PerformanceHUD in System Settings, then choose Retry Background. Metrics still work while a checkerboard marks the unavailable glass background."
-        case .failed(let message):
-            backgroundStatusItem?.title = "Glass background unavailable"
-            backgroundStatusItem?.toolTip = message
-        default:
-            backgroundStatusItem?.toolTip = nil
+    private func updateGlassSessionStatus() {
+        let failure = hudWindow?.glassSessionFailure
+        backgroundStatusItem?.isHidden = failure == nil
+        backgroundRetryItem?.isHidden = failure == nil
+        backgroundStatusItem?.title = "Glass compatibility workaround unavailable"
+        backgroundStatusItem?.toolTip = failure.map {
+            "Native glass still works, but some games may be limited to 60 FPS. \($0)"
         }
     }
 
-    @objc private func openScreenRecordingSettings() {
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    @objc private func retryBackground() { hudWindow?.retryBackground() }
+    @objc private func retryGlassSession() { hudWindow?.retryGlassSession() }
 
     private func setupHUDShortcut() {
         toggleShortcut.onToggle = { [weak self] in
@@ -887,6 +909,8 @@ final class AppDelegate:
     ) {
 
         hudEnabled.toggle()
+        if !hudEnabled { stopLogging() }
+        updateLoggingMenu()
 
         // Save preference.
         HUDPreferences.hudEnabled =
@@ -979,7 +1003,7 @@ final class AppDelegate:
         hudBackground = HUDPreferences.background
         enabledMetrics = HUDPreferences.visibleMetrics
 
-        // Pause capture while applying the layout, then resume once at its final size.
+        // Hide the HUD while applying all options, then restore its final layout.
         hudWindow?.setHUDEnabled(false)
         for group in HUDResourceGroup.allCases {
             hudWindow?.setResourceOptions(HUDPreferences.resourceOptions(for: group), for: group)
@@ -987,6 +1011,7 @@ final class AppDelegate:
         hudWindow?.setBatteryOptions(HUDPreferences.batteryOptions)
         hudWindow?.setFanOptions(HUDPreferences.fanOptions)
         hudWindow?.setPackagePowerOptions(HUDPreferences.packagePowerOptions)
+        hudWindow?.setAutoHideAnimated(HUDPreferences.autoHideAnimated)
         hudWindow?.setAutoHideMode(HUDPreferences.autoHideMode)
         hudWindow?.setAlignment(HUDPreferences.alignment)
         hudWindow?.setFPSOptions(HUDPreferences.fpsOptions)
@@ -1184,6 +1209,9 @@ final class AppDelegate:
         currentPID =
             pid
 
+        // Never attribute the previous app's readings to the newly focused app.
+        logSnapshot.clear([.fps, .gpuAppUsage, .cpuAppUsage, .memoryAppUsage, .memoryAppPhysical])
+
         // MARK: Clear Previous Selected-App Data
 
         hudWindow?
@@ -1206,10 +1234,10 @@ final class AppDelegate:
         reconcileMonitoring()
     }
 
-    // Collect only visible metrics. Each monitor's start is idempotent for its
-    // current session, so changing an unrelated toggle does not reset baselines.
+    // Collect selected metrics while visible or explicitly logging. Each monitor's
+    // start is idempotent, so unrelated toggles do not reset its baselines.
     private var readingsActive: Bool {
-        hudEnabled && !(hudWindow?.isAutomaticallyHidden ?? false)
+        hudEnabled && (csvLogger.isLogging || !(hudWindow?.isAutomaticallyHidden ?? false))
     }
 
     private func reconcileMonitoring() {
@@ -1229,35 +1257,132 @@ final class AppDelegate:
         let powerEnabled = HUDPowerDemand.isNeeded(hudEnabled: readingsActive,
             resources: resources, package: HUDPreferences.packagePowerOptions)
         powerMonitor.configure(enabled: powerEnabled)
-        if !powerEnabled { hudWindow?.updatePower(.unavailable) }
+        if !powerEnabled {
+            logSnapshot.updatePower(.unavailable)
+            hudWindow?.updatePower(.unavailable)
+        }
+        if !readingsActive || !cpu.enabled || !cpu.temperature { logSnapshot.set(.cpuTemperature, nil) }
+        if !readingsActive || !gpu.enabled || !gpu.temperature { logSnapshot.set(.gpuTemperature, nil) }
+        if !readingsActive || !fan.enabled || !fan.usage { logSnapshot.updateFans(.unavailable) }
+        if !HUDPreferences.batteryOptions.temperature { logSnapshot.set(.batteryTemperature, nil) }
         temperatureMonitor.configure(cpu: readingsActive && cpu.enabled && cpu.temperature,
                                      gpu: readingsActive && gpu.enabled && gpu.temperature)
         if metrics.contains(.gpuTotal) { totalGPUUsageMonitor?.start() }
-        else { totalGPUUsageMonitor?.stop(); hudWindow?.updateMetric(.gpuTotal, value: "") }
+        else { logSnapshot.set(.gpuUsage, nil); totalGPUUsageMonitor?.stop(); hudWindow?.updateMetric(.gpuTotal, value: "") }
         if metrics.contains(.cpuTotal) { totalCPUUsageMonitor?.start() }
-        else { totalCPUUsageMonitor?.stop(); hudWindow?.updateMetric(.cpuTotal, value: "") }
+        else { logSnapshot.set(.cpuUsage, nil); totalCPUUsageMonitor?.stop(); hudWindow?.updateMetric(.cpuTotal, value: "") }
         if metrics.contains(.ramTotal) { totalRAMUsageMonitor?.start() }
-        else { totalRAMUsageMonitor?.stop(); hudWindow?.updateRAM(.ramTotal, usage: nil) }
+        else { logSnapshot.updateMemory(nil, app: false); totalRAMUsageMonitor?.stop(); hudWindow?.updateRAM(.ramTotal, usage: nil) }
         if metrics.contains(.ramTotal) { memoryPressureMonitor?.start() }
-        else { memoryPressureMonitor?.stop(); hudWindow?.updateMemoryPressure("") }
+        else { logSnapshot.setText(.memoryPressure, nil); memoryPressureMonitor?.stop(); hudWindow?.updateMemoryPressure("") }
         if metrics.contains(.battery) { batteryMonitor?.start(temperature: HUDPreferences.batteryOptions.temperature) }
-        else { batteryMonitor?.stop(); hudWindow?.updateMetric(.battery, value: "") }
+        else { logSnapshot.updateBattery(nil); batteryMonitor?.stop(); hudWindow?.updateMetric(.battery, value: "") }
 
         if metrics.contains(.gpu), let pid = currentPID { gpuUsageMonitor?.start(pid: pid) }
-        else { gpuUsageMonitor?.stop(); hudWindow?.updateMetric(.gpu, value: "") }
+        else { logSnapshot.set(.gpuAppUsage, nil); gpuUsageMonitor?.stop(); hudWindow?.updateMetric(.gpu, value: "") }
         if metrics.contains(.cpu), let pid = currentPID { cpuUsageMonitor?.start(pid: pid) }
-        else { cpuUsageMonitor?.stop(); hudWindow?.updateMetric(.cpu, value: "") }
+        else { logSnapshot.set(.cpuAppUsage, nil); cpuUsageMonitor?.stop(); hudWindow?.updateMetric(.cpu, value: "") }
         if metrics.contains(.ram), let pid = currentPID { ramUsageMonitor?.start(pid: pid) }
-        else { ramUsageMonitor?.stop(); hudWindow?.updateRAM(.ram, usage: nil) }
+        else { logSnapshot.updateMemory(nil, app: true); ramUsageMonitor?.stop(); hudWindow?.updateRAM(.ram, usage: nil) }
         // Auto hide must keep detecting FPS even with the FPS category unchecked
         // and all other readings paused, otherwise the HUD could never reappear.
         if hudEnabled && (HUDPreferences.autoHideMode == .all || metrics.contains(.fps) || metrics.contains(.fpsGraph)), let pid = currentPID {
             do { try fpsMonitor?.start(pid: pid) }
-            catch { hudWindow?.markFPSUnavailable() }
+            catch { logSnapshot.set(.fps, nil); hudWindow?.markFPSUnavailable() }
         } else {
             fpsMonitor?.stop()
+            logSnapshot.set(.fps, nil)
             hudWindow?.resetFPS()
         }
+    }
+
+    // MARK: - Logging
+
+    private func updateLoggingMenu() {
+        loggingMenuItem?.title = csvLogger.isLogging ? "Stop logging" : "Start logging"
+        loggingMenuItem?.isEnabled = csvLogger.isLogging || hudEnabled
+    }
+
+    @objc private func toggleLogging() {
+        statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if csvLogger.isLogging { stopLogging(); return }
+            guard hudEnabled else { return }
+            var dismissExplanation = HUDPreferences.loggingExplanationDismissed
+            if !dismissExplanation {
+                let alert = NSAlert()
+                alert.alertStyle = .informational
+                alert.messageText = "Start logging HUD readings?"
+                alert.informativeText = "Record selected readings once per second to a CSV for spreadsheets and graphs. Missing readings are left blank. Stop logging, disable the HUD, or quit to save the file to your Desktop. Auto hide does not stop logging.\n\nColumns are chosen when you start. Turning readings off leaves their cells blank; start a new log to include newly selected readings."
+                alert.addButton(withTitle: "Start logging")
+                alert.addButton(withTitle: "Cancel")
+                alert.showsSuppressionButton = true
+                alert.suppressionButton?.title = "Don’t show this again"
+                NSApp.activate(ignoringOtherApps: true)
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+                dismissExplanation = alert.suppressionButton?.state == .on
+            }
+            guard hudEnabled else { return }
+            do {
+                let directory = try FileManager.default.url(for: .applicationSupportDirectory,
+                    in: .userDomainMask, appropriateFor: nil, create: true)
+                    .appendingPathComponent("PerformanceHUD/Logs", isDirectory: true)
+                let columns = HUDLogSelection.current.columns(fanSample: fanMonitor.sample)
+                try csvLogger.start(columns: columns, recoveryDirectory: directory) { [weak self] in
+                    guard let self else { return (HUDLogSnapshot(), []) }
+                    var snapshot = logSnapshot
+                    snapshot.setText(.chip, HUDDeviceInfo.current.chipName)
+                    snapshot.setText(.os, HUDDeviceInfo.current.macOSVersion)
+                    // Match the Energy icon; macOS does not expose High Power here.
+                    snapshot.set(.lowPowerMode, snapshot.values[.batteryCharge] == nil ? nil
+                        : (ProcessInfo.processInfo.isLowPowerModeEnabled ? 1 : 0))
+                    return (snapshot, Set(HUDLogSelection.current.columns(fanSample: fanMonitor.sample)))
+                }
+                HUDPreferences.loggingExplanationDismissed = dismissExplanation
+                loggingMenuItem?.toolTip = nil
+                updateLoggingMenu()
+                reconcileMonitoring()
+            } catch {
+                presentLoggingError(error, recovery: csvLogger.recoveryURL, title: "Could not start logging")
+            }
+        }
+    }
+
+    private func stopLogging() {
+        guard csvLogger.isLogging else { return }
+        // Resolving this location does not create or request unrelated folders.
+        let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask)[0]
+        do {
+            if let saved = try csvLogger.stop(savingTo: desktop) {
+                loggingMenuItem?.toolTip = "Last log saved to \(saved.path)"
+            }
+        } catch {
+            presentLoggingError(error, recovery: csvLogger.recoveryURL, title: "Could not save the log")
+        }
+        updateLoggingMenu()
+        reconcileMonitoring()
+    }
+
+    private func presentLoggingError(_ error: Error, recovery: URL?, title: String = "Logging stopped") {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = error.localizedDescription
+        if let recovery {
+            alert.informativeText += "\n\nYour recorded data is kept at:\n" + recovery.path
+            alert.addButton(withTitle: "Show Recovery File")
+        }
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn, let recovery {
+            NSWorkspace.shared.activateFileViewerSelecting([recovery])
+        }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        stopLogging()
+        return .terminateNow
     }
 
     // MARK: - Shutdown
@@ -1266,6 +1391,7 @@ final class AppDelegate:
         _ notification: Notification
     ) {
 
+        stopLogging()
         temperatureMonitor.stop()
         fanMonitor.stop()
         powerMonitor.stop()

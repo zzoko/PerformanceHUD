@@ -44,6 +44,7 @@
 
 /* Begin PBXFileReference section */
 		7578F8C1305B60D300CA190B /* PerformanceHUD.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PerformanceHUD.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A18000000000000000000001 /* NativeGlassAlternatives */ = {isa = PBXFileReference; lastKnownFileType = folder; path = NativeGlassAlternatives; sourceTree = "<group>"; };
 		ABC011000000000000000001 /* andrei.PerformanceHUD.PowerHelper */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = andrei.PerformanceHUD.PowerHelper; sourceTree = BUILT_PRODUCTS_DIR; };
 		ABC01100000000000000000E /* PowerHelper/andrei.PerformanceHUD.PowerHelper.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PowerHelper/andrei.PerformanceHUD.PowerHelper.plist; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -87,6 +88,7 @@
 				ABC011000000000000000008 /* PowerHelperShared */,
 				ABC011000000000000000009 /* PowerHelper */,
 				ABC01100000000000000000E /* PowerHelper/andrei.PerformanceHUD.PowerHelper.plist */,
+				A18000000000000000000001 /* NativeGlassAlternatives */,
 				7578F8C2305B60D300CA190B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -336,19 +338,18 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = K2XC57573H;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "PerformanceHUD uses the area behind the HUD to draw its custom glass background. Frames stay in memory and are not recorded or saved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.7;
+				MARKETING_VERSION = 1.8;
 				PRODUCT_BUNDLE_IDENTIFIER = andrei.PerformanceHUD;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -369,19 +370,18 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = K2XC57573H;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "PerformanceHUD uses the area behind the HUD to draw its custom glass background. Frames stay in memory and are not recorded or saved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.7;
+				MARKETING_VERSION = 1.8;
 				PRODUCT_BUNDLE_IDENTIFIER = andrei.PerformanceHUD;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;

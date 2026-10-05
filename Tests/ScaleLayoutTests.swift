@@ -18,8 +18,8 @@ import AppKit
   let panel: HUDPanel = member(hud, "panel")
   let container: NSView = member(hud, "container")
   let horizontal: HUDHorizontalView = member(hud, "horizontalView")
-  let glass: PerformanceHUDGlassBackground = member(hud, "backgroundView")
-  let surface: NSView = member(glass, "surface")
+  let glass: NativeGlassHUDBackground = member(hud, "backgroundView")
+  let surface: NSView = member(glass, "glass")
   surface.isHidden = true
   glass.layer?.backgroundColor = NSColor(calibratedWhite: 0.12, alpha: 1).cgColor
   let graph: HUDFPSGraphView = member(hud, "fpsGraphView")

@@ -131,7 +131,7 @@ import AppKit
         styledHUD.setHUDEnabled(false)
         styledHUD.setAutoHideMode(.off)
         let styledPanel: HUDPanel = member(styledHUD, "panel")
-        let styledGlass: PerformanceHUDGlassBackground = member(styledHUD, "backgroundView")
+        let styledGlass: NativeGlassHUDBackground = member(styledHUD, "backgroundView")
         let styledHorizontal: HUDHorizontalView = member(styledHUD, "horizontalView")
         let styledGraph: HUDFPSGraphView = member(styledHUD, "fpsGraphView")
         let styledContainer: NSView = member(styledHUD, "container")
@@ -148,7 +148,7 @@ import AppKit
                 styledGraph.append(60)
                 let storedHistory: FPSHistory = member(styledGraph, "history")
                 let frame = styledPanel.frame
-                let capture = styledGlass.captureBounds
+                let bodyFrame = styledGlass.bodyFrame
                 let values: [HUDMetric: NSTextField] = member(styledHUD, "valueLabels")
                 let titles: [HUDMetric: NSTextField] = member(styledHUD, "titleLabels")
                 for highlighted in [false, true, false] {
@@ -188,8 +188,8 @@ import AppKit
                             let gpuRight = gpu.convert(gpu.bounds, to: nil).maxX
                             check(abs(fpsRight - gpuRight) <= 0.5, "FPS number aligns with the GPU percentage's right edge")
                         }
-                        check(styledPanel.frame == frame && styledGlass.captureBounds == capture,
-                              "FPS emphasis and changing digits must not resize the window or capture")
+                        check(styledPanel.frame == frame && styledGlass.bodyFrame == bodyFrame,
+                              "FPS emphasis and changing digits must not resize the window or glass")
                     }
                     let history: FPSHistory = member(styledGraph, "history")
                     check(history.samples.count == storedHistory.samples.count, "Emphasis must retain FPS history")
@@ -199,7 +199,7 @@ import AppKit
         }
         styledHUD.shutdown()
         if CommandLine.arguments.contains("--controls-only") {
-            print("PASS: FPS mode preferences, emphasis save/reset, independent underline clicks, History/Horizontal states, matching FPS baselines in both layouts at six scales from 0.5× to 2×, preserved history and stable capture geometry")
+            print("PASS: FPS mode preferences, emphasis save/reset, independent underline clicks, History/Horizontal states, matching FPS baselines in both layouts at six scales from 0.5× to 2×, preserved history and stable surface geometry")
             return
         }
 
@@ -213,15 +213,15 @@ import AppKit
                     hud.setHUDScale(scale)
                     let panel: HUDPanel = member(hud, "panel")
                     let container: NSView = member(hud, "container")
-                    let glass: PerformanceHUDGlassBackground = member(hud, "backgroundView")
+                    let glass: NativeGlassHUDBackground = member(hud, "backgroundView")
                     let expandedSize = container.frame.size
                     let expandedFrame = panel.frame
-                    func captureRect() -> NSRect { panel.convertToScreen(glass.convert(glass.captureBounds, to: nil)) }
-                    let originalRect = captureRect()
+                    func windowAnchor() -> NSPoint { NSPoint(x: panel.frame.minX, y: panel.frame.maxY) }
+                    let originalRect = windowAnchor()
                     hud.setAutoHideMode(.fps)
                     check(container.frame.height < expandedSize.height, "Unavailable FPS collapses")
-                    check(panel.frame == expandedFrame, "Collapse must not resize or move the capture window")
-                    check(captureRect() == originalRect, "Capture mismatch scale=\(scale) fps=\(fpsMetrics) body=\(body), old=\(originalRect) new=\(captureRect()), container=\(container.frame), glass=\(glass.frame)")
+                    check(panel.frame.height < expandedFrame.height && panel.frame.width == expandedFrame.width, "Collapse shrinks the native window height")
+                    check(windowAnchor() == originalRect, "Anchor mismatch scale=\(scale) fps=\(fpsMetrics) body=\(body), old=\(originalRect) new=\(windowAnchor()), container=\(container.frame), glass=\(glass.frame)")
                     let header: NSImageView = member(hud, "collapsedFPSIndicator")
                     check(!header.isHidden && header.alphaValue == 1 && header.image != nil,
                           "Collapsed FPS keeps a visible reminder, including History-only")
@@ -248,8 +248,8 @@ import AppKit
                     }
                     if CommandLine.arguments.contains("--preview"), scale == .normal,
                        fpsMetrics == [.fps, .fpsGraph], body == [.cpuTotal, .ramTotal, .battery] {
-                        // Render the real native layout over a neutral backing without capture.
-                        let surface: NSView = member(glass, "surface")
+                        // Render the real native layout over a neutral backing over a neutral backing.
+                        let surface: NSView = member(glass, "glass")
                         surface.isHidden = true
                         glass.layer?.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 1).cgColor
                         hud.updateMetric(.cpuTotal, value: "24%")
@@ -265,15 +265,15 @@ import AppKit
                     check(header.isHidden, "Expanded FPS must not show a duplicate small header")
                     check(container.frame.size == expandedSize, "Zero FPS is a valid reading and expands the panel")
                     hud.updateFPS(60)
-                    check(panel.frame == expandedFrame && captureRect() == originalRect, "Samples do not move capture")
+                    check(panel.frame == expandedFrame && windowAnchor() == originalRect, "Samples do not move the HUD")
                     hud.markFPSUnavailable()
                     check(container.frame.size == expandedSize, "A single missing reading must not collapse")
                     hud.setAutoHideMode(.off)
                     check(header.isHidden, "Static does not show the compact reminder")
-                    check(container.frame.size == expandedSize && glass.reservedCaptureSize == nil, "Static restores original geometry")
+                    check(container.frame.size == expandedSize && glass.bodyFrame.size == expandedSize, "Static restores original geometry")
                     hud.setAlignment(.horizontal)
                     hud.setAutoHideMode(.fps)
-                    check(glass.reservedCaptureSize != nil && header.isHidden, "Horizontal reserves capture while valid FPS remains expanded")
+                    check(glass.bodyFrame.size == container.frame.size && header.isHidden, "Horizontal glass fits valid expanded FPS")
                     hud.shutdown()
                 }
             }
@@ -281,7 +281,7 @@ import AppKit
 
         for scale in [HUDScale.small, HUDScale(rawValue: 0.51), HUDScale(rawValue: 0.75), .normal,
                       HUDScale(rawValue: 1.01), HUDScale(rawValue: 1.25), HUDScale.large] {
-            for background in [HUDBackground.dark, .light, .transparent, .off] {
+            for background in [HUDBackground.dark, .light] {
                 for body: Set<HUDMetric> in [[], [.cpuTotal], [.ramTotal, .battery], [.fans]] {
                     let hud = HUDWindowController()
                     hud.setAutoHideMode(.off)
@@ -294,24 +294,24 @@ import AppKit
                     let container: NSView = member(hud, "container")
                     let horizontal: HUDHorizontalView = member(hud, "horizontalView")
                     let arrow: NSImageView = member(hud, "collapsedFPSIndicator")
-                    let glass: PerformanceHUDGlassBackground = member(hud, "backgroundView")
+                    let glass: NativeGlassHUDBackground = member(hud, "backgroundView")
                     let expandedSize = container.frame.size
                     let expandedFrame = panel.frame
-                    func captureRect() -> NSRect { panel.convertToScreen(glass.convert(glass.captureBounds, to: nil)) }
-                    let originalCapture = captureRect()
+                    func windowAnchor() -> NSPoint { NSPoint(x: panel.frame.minX, y: panel.frame.maxY) }
+                    let originalAnchor = windowAnchor()
                     hud.setAutoHideMode(.fps)
                     let collapsedSize = container.frame.size
                     check(collapsedSize.width < expandedSize.width && collapsedSize.height == expandedSize.height,
                           "Horizontal collapses width only")
                     check(!arrow.isHidden && arrow.alphaValue == 1 && container.bounds.contains(arrow.frame),
                           "Sideways reminder fits inside the compact HUD")
-                    check(panel.frame == expandedFrame && captureRect() == originalCapture, "Horizontal capture stays fixed")
+                    check(panel.frame.width < expandedFrame.width && windowAnchor() == originalAnchor, "Horizontal native window shrinks at its existing anchor")
                     hud.updateMetric(.cpuTotal, value: "24%")
-                    check(container.frame.size == collapsedSize && captureRect() == originalCapture,
-                          "Regular sampling cannot reset a collapsed width or resize capture")
+                    check(container.frame.size == collapsedSize && windowAnchor() == originalAnchor,
+                          "Regular sampling cannot reset a collapsed width or move the HUD anchor")
                     if CommandLine.arguments.contains("--preview"), scale == .normal,
                        background == .dark, body == [.cpuTotal] {
-                        let surface: NSView = member(glass, "surface")
+                        let surface: NSView = member(glass, "glass")
                         surface.isHidden = true
                         glass.layer?.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 1).cgColor
                         let bitmap = container.bitmapImageRepForCachingDisplay(in: container.bounds)!
@@ -322,9 +322,9 @@ import AppKit
                     hud.updateFPS(60)
                     check(container.frame.size == expandedSize && arrow.isHidden, "Horizontal FPS recovery restores full width")
                     check(horizontal.frame.minX == HUDStyle.horizontalPadding(scale: scale), "Expanded FPS keeps its original alignment")
-                    check(panel.frame == expandedFrame && captureRect() == originalCapture, "Recovery keeps capture fixed")
+                    check(panel.frame == expandedFrame && windowAnchor() == originalAnchor, "Recovery restores full geometry")
                     hud.setAutoHideMode(.off)
-                    check(glass.reservedCaptureSize == nil && container.frame.size == expandedSize, "Static clears horizontal reservation")
+                    check(glass.bodyFrame.size == expandedSize && container.frame.size == expandedSize, "Static restores horizontal geometry")
                     hud.shutdown()
                 }
             }
@@ -335,7 +335,7 @@ import AppKit
         hud.setAutoHideMode(.fps)
         let container: NSView = member(hud, "container")
         let panel: HUDPanel = member(hud, "panel")
-        let glass: PerformanceHUDGlassBackground = member(hud, "backgroundView")
+        let glass: NativeGlassHUDBackground = member(hud, "backgroundView")
         let compact = container.frame.height
         hud.updateFPS(60)
         let expanded = container.frame.height
@@ -352,7 +352,7 @@ import AppKit
         for _ in 0..<100 where container.frame.height != compact {
             try? await Task.sleep(for: .milliseconds(20))
         }
-        check(container.frame.height == compact && panel.frame == reserved, "Delayed collapse: height=\(container.frame.height) expected=\(compact), frame=\(panel.frame) expectedFrame=\(reserved), progress=\(member(hud, "fpsProgress") as CGFloat), availability=\(member(hud, "fpsAvailability") as HUDFPSAvailability)")
+        check(container.frame.height == compact && panel.frame.maxY == reserved.maxY && panel.frame.minX == reserved.minX, "Delayed collapse: height=\(container.frame.height) expected=\(compact), frame=\(panel.frame) expectedFrame=\(reserved), progress=\(member(hud, "fpsProgress") as CGFloat), availability=\(member(hud, "fpsAvailability") as HUDFPSAvailability)")
         hud.updateFPS(.nan)
         check(container.frame.height == compact, "Invalid readings do not reopen FPS")
         hud.updateFPS(50)
@@ -361,10 +361,9 @@ import AppKit
         let staticSize = container.frame.size
         hud.markFPSUnavailable()
         try? await Task.sleep(for: .seconds(3.1))
-        check(container.frame.size == staticSize && glass.reservedCaptureSize == nil, "Static ignores the collapse deadline")
-        // Animate a visible native window with capture deliberately off. This
-        // exercises the real timer without prompting for screen-recording access.
-        hud.setBackground(.off)
+        check(container.frame.size == staticSize && glass.bodyFrame.size == staticSize, "Static ignores the collapse deadline")
+        // Animate a visible native window and verify its anchor through reversal.
+        hud.setBackground(.dark)
         hud.setAutoHideMode(.fps)
         hud.setHUDEnabled(true)
         let animationStart = container.frame.height
@@ -374,13 +373,13 @@ import AppKit
             try? await Task.sleep(for: .milliseconds(180))
             check(container.frame.height > animationStart && container.frame.height < staticSize.height,
                   "Visible native window should pass through an intermediate expansion height")
-            check(panel.frame == animationWindow, "Animation must not resize the window")
+            check(panel.frame.maxY == animationWindow.maxY && panel.frame.minX == animationWindow.minX, "Animation preserves the window anchor")
             // Another sample during expansion must not restart its easing curve.
             hud.updateFPS(55)
         }
         try? await Task.sleep(for: .milliseconds(600))
         let finalExpanded = container.frame.height
-        check(finalExpanded > animationStart && panel.frame == animationWindow, "Animation completes at expanded size")
+        check(finalExpanded > animationStart && panel.frame.maxY == animationWindow.maxY, "Animation completes at expanded size")
         hud.resetFPS()
         try? await Task.sleep(for: .seconds(3.2))
         hud.updateFPS(48) // Reverse a collapse that has already started.
@@ -390,7 +389,7 @@ import AppKit
         hud.shutdown()
         let sideways = HUDWindowController()
         sideways.setAlignment(.horizontal)
-        sideways.setBackground(.off)
+        sideways.setBackground(.dark)
         sideways.setAutoHideMode(.fps)
         sideways.setHUDEnabled(true)
         let sidewaysContainer: NSView = member(sideways, "container")
@@ -407,15 +406,15 @@ import AppKit
         }
         try? await Task.sleep(for: .milliseconds(650))
         let fullWidth = sidewaysContainer.frame.width
-        check(fullWidth > initialWidth && sidewaysPanel.frame == fixedFrame, "Sideways expansion leaves window fixed")
+        check(fullWidth > initialWidth && sidewaysPanel.frame.minX == fixedFrame.minX && sidewaysPanel.frame.maxY == fixedFrame.maxY, "Sideways expansion preserves the top-left anchor")
         sideways.resetFPS()
         try? await Task.sleep(for: .seconds(3.2))
         sideways.updateFPS(48)
         try? await Task.sleep(for: .milliseconds(700))
-        check(sidewaysContainer.frame.width == fullWidth && sidewaysPanel.frame == fixedFrame,
+        check(sidewaysContainer.frame.width == fullWidth && sidewaysPanel.frame.minX == fixedFrame.minX && sidewaysPanel.frame.maxY == fixedFrame.maxY,
               "Horizontal recovery reverses an in-flight collapse")
         sideways.setHUDEnabled(false)
         sideways.shutdown()
-        print("PASS: FPS availability, shared mode/reset, all scales/row selections, fixed capture geometry, FPS-only, horizontal, cancelled deadlines, recovery, native animation and reversal")
+        print("PASS: FPS availability, shared mode/reset, all scales/row selections, stable text geometry and native window resizing, FPS-only, horizontal, cancelled deadlines, recovery, native animation and reversal")
     }
 }
