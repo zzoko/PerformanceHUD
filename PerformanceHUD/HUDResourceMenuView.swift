@@ -141,7 +141,14 @@ final class HUDResourceMenuView: NSView {
             button.font = .menuFont(ofSize: 0)
             button.tag = tag
             button.setControlAccessibilityLabel("\(groupTitle) \(title)")
-            button.widthAnchor.constraint(equalToConstant: width).isActive = true
+            if group == nil, tag == 6 {
+                let spacer = NSView()
+                spacer.widthAnchor.constraint(greaterThanOrEqualToConstant: 0).isActive = true
+                stack.addArrangedSubview(spacer)
+                button.widthAnchor.constraint(equalToConstant: ceil(button.intrinsicContentSize.width)).isActive = true
+            } else {
+                button.widthAnchor.constraint(equalToConstant: width).isActive = true
+            }
             controls[tag] = button
             stack.addArrangedSubview(button)
         }
@@ -199,9 +206,7 @@ final class HUDResourceMenuView: NSView {
             choices.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
             stack.leadingAnchor.constraint(equalTo: choices.leadingAnchor, constant: 8),
             stack.centerYAnchor.constraint(equalTo: choices.centerYAnchor),
-            group == nil
-                ? stack.trailingAnchor.constraint(lessThanOrEqualTo: choices.trailingAnchor, constant: -8)
-                : stack.trailingAnchor.constraint(equalTo: choices.trailingAnchor, constant: -8)
+            stack.trailingAnchor.constraint(equalTo: choices.trailingAnchor, constant: -8)
         ])
         setFrameSize(NSSize(width: 8 + masterWidth + 8 + Self.choicesWidth + 12, height: group == nil ? 40 : 34))
         refresh()

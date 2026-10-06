@@ -7,7 +7,7 @@ compile_tests() {
     set -- -swift-version 5 -parse-as-library
     for source in "$ROOT"/PerformanceHUD/*.swift; do
         case "$source" in
-            */PerformanceHUDApp.swift|*/AppDelegate.swift) continue ;;
+            */PerformanceHUDApp.swift|*/AppDelegate.swift|*/HUDUpdater.swift) continue ;;
         esac
         set -- "$@" "$source"
     done

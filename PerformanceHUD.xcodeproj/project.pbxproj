@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A20000000000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000002 /* Sparkle */; };
 		ABC01100000000000000000F /* andrei.PerformanceHUD.PowerHelper in Embed Power Helper */ = {isa = PBXBuildFile; fileRef = ABC011000000000000000001 /* andrei.PerformanceHUD.PowerHelper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		ABC011000000000000000010 /* PowerHelper/andrei.PerformanceHUD.PowerHelper.plist in Embed Helper Registration */ = {isa = PBXBuildFile; fileRef = ABC01100000000000000000E /* PowerHelper/andrei.PerformanceHUD.PowerHelper.plist */; };
 /* End PBXBuildFile section */
@@ -71,6 +72,7 @@
 		7578F8BE305B60D300CA190B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				A20000000000000000000001 /* Sparkle in Frameworks */,
 			);
 		};
 		ABC011000000000000000004 /* Frameworks */ = {
@@ -125,6 +127,9 @@
 				ABC011000000000000000008 /* PowerHelperShared */,
 			);
 			name = PerformanceHUD;
+			packageProductDependencies = (
+				A20000000000000000000002 /* Sparkle */,
+			);
 			productName = PerformanceHUD;
 			productReference = 7578F8C1305B60D300CA190B /* PerformanceHUD.app */;
 			productType = "com.apple.product-type.application";
@@ -171,6 +176,9 @@
 			);
 			mainGroup = 7578F8B8305B60D300CA190B;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A20000000000000000000003 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 7578F8C2305B60D300CA190B /* Products */;
 			projectDirPath = "";
@@ -338,18 +346,19 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = K2XC57573H;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.9;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = andrei.PerformanceHUD;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -370,18 +379,19 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = K2XC57573H;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.9;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = andrei.PerformanceHUD;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -456,6 +466,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A20000000000000000000003 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A20000000000000000000002 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A20000000000000000000003 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 7578F8B9305B60D300CA190B /* Project object */;
 	validationLevel = 1;

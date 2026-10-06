@@ -19,6 +19,16 @@ enum HUDMenuLayout {
         return ceil(label.intrinsicContentSize.width)
     }
 
+    static var actionOptionsWidth: CGFloat {
+        let widestButton = ["Position", "Size", "All"].map { title in
+            let button = NSButton(title: title, target: nil, action: nil)
+            button.bezelStyle = .rounded
+            button.font = .menuFont(ofSize: 0)
+            return ceil(button.intrinsicContentSize.width)
+        }.max() ?? 0
+        return max(backgroundOptionsWidth, widestButton * 3 + 12)
+    }
+
     // A shared width keeps Background, Alignment, and the Size track aligned.
     // Measure the actual segmented controls so every title fits at menu font size.
     static var backgroundOptionsWidth: CGFloat {

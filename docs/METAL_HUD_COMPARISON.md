@@ -13,7 +13,7 @@ It’s built around the experience of using an overlay while playing. Keep a few
 - **Convenient controls while you play.** Turn the overlay on or off from the menu bar or with an editable keyboard shortcut, even after launching a game. Hotkeys also start/stop logging and cycle appearance. Your choices stay saved as you move between apps, and supported focused-app readings follow the active app.
 - **Small details for everyday use.** A 60-second FPS history, optional automatic hiding of the FPS area or the whole overlay when FPS becomes unavailable, individual or averaged fan readings, and a battery icon that reflects your Mac’s power state.
 - **CSV logging for later comparison.** Record selected readings once per second from the menu bar, then use the saved CSV in a spreadsheet or graph. Unavailable readings stay blank, and logging continues while the HUD is automatically hidden.
-- **Low performance overhead.** The new native Liquid Glass rendering removes continuous screen capture and custom glass processing, with **under 1% performance overhead observed in current testing**. Results vary by game, Mac, and enabled readings.
+- **Low performance overhead.** Native Liquid Glass rendering has shown **under 1% performance overhead in current testing**. Results vary by game, Mac, and enabled readings.
 
 ## Where MetalHUD goes further
 

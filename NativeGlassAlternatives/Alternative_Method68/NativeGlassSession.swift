@@ -4,9 +4,7 @@ import CoreMedia
 import CoreVideo
 import QuartzCore
 
-// Method 68 replacement ONLY. Keep this file OUT of the app target while using 67.
-// Replace the main NativeGlassSession.swift with this file; never compile both.
-// NativeGlassHUDBackground.swift is shared and does not need changing.
+// Inactive Method 68 implementation, excluded from the app target.
 // Captures only this app's HUD window, then parks; no legacy refresh listener.
 // Composited/uncapped rendering is observed behavior, not an API guarantee.
 

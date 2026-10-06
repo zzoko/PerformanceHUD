@@ -2,6 +2,13 @@
 
 [← Back to README](../README.md)
 
+### v2.0
+
+- Added **Check for updates** to download and install official updates from inside the app, with signed update verification and retained HUD preferences. Available to purchased copies and source builds.
+- Added optional **Weekly / Monthly** update checks, off by default. Available updates appear in the menu without interrupting games; downloads and restarts remain your choice.
+- Added optional **Auto start on login**, off by default.
+- Simplified **Reset** and **Auto hide** into single-row controls and refined the menu layout.
+
 ### v1.9
 
 - Added **Edit hotkeys** for showing/hiding the HUD, starting/stopping logging, and cycling Light / Dark / Follow system. Defaults are **Option–H**, **Option–L**, and **Option–A**, with saved custom combinations, clearing, and a separate reset to defaults. Moving the HUD defaults to **Option + drag**, with a choice of Option, Control, Shift, or Command and a matching menu hint.
@@ -19,7 +26,7 @@
 - Improved glass reliability during resizing, layout changes, and show/hide transitions by removing capture restarts, held frames, and the checkerboard fallback. Native glass and shadows follow the HUD directly.
 - Significantly reduced PerformanceHUD’s own glass-processing overhead by eliminating continuous screen capture and custom per-frame rendering. macOS now renders the glass directly.
 - **Screen Capture permission is no longer required** for the HUD’s glass effect.
-- Added a display-refresh compatibility workaround for the observed game FPS cap with native glass. Kept the own-window capture alternative disabled and outside the app build.
+- Added a display-refresh compatibility workaround for the observed game FPS cap with native glass.
 - Updated the **Controls Guide** for logging and macOS Liquid Glass settings, and refreshed all six HUD and menu screenshots.
 
 ### v1.7

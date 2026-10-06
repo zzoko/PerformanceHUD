@@ -32,3 +32,16 @@ xcuserdata/
 *.p8
 *.mobileprovision
 *.provisionprofile
+
+# Private maintainer documentation and planning (local only)
+/MaintainerNotes/
+
+# Update service: dependencies, generated archives, local secrets, and deployment state
+node_modules/
+.pnpm-store/
+__pycache__/
+.wrangler/
+.dev.vars
+.dev.vars.*
+UpdateService/assets/
+UpdateService/staging/

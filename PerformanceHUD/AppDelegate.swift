@@ -13,6 +13,13 @@ final class AppDelegate:
 
     private var controlsGuide: HUDControlsGuide?
     private var hotkeyEditor: HUDHotkeyEditor?
+    private var updater: HUDUpdater?
+    private var checkUpdatesItem: NSMenuItem?
+    private var updateScheduleItems: [HUDUpdateSchedule: NSMenuItem] = [:]
+    private let loginItem = HUDLoginItem()
+    private var loginMenuItem: NSMenuItem?
+    private var loginOffItem: NSMenuItem?
+    private var loginOnItem: NSMenuItem?
 
     // MARK: - FPS
 
@@ -174,6 +181,11 @@ final class AppDelegate:
             self?.hudWindow?.updateMisc(sample)
             self?.logSnapshot.updateMisc(sample)
         }
+
+        // Updates are independent of monitoring and do not start automatic checks by default.
+        updater = HUDUpdater()
+        updater?.onChange = { [weak self] in self?.updateUpdaterMenu() }
+        loginItem.onChange = { [weak self] in self?.updateLoginMenu() }
 
         // Menu
         setupMenuBar()
@@ -546,16 +558,7 @@ final class AppDelegate:
 
         self.hudVisibilityMenuItem =
             hudVisibilityItem
-        let autoHideView = HUDAutoHideMenuView(selected: HUDPreferences.autoHideMode, animated: HUDPreferences.autoHideAnimated)
-        autoHideView.onChange = { [weak self] mode in self?.selectAutoHideMode(mode) }
-        autoHideView.onAnimatedChange = { [weak self] animated in
-            HUDPreferences.autoHideAnimated = animated
-            self?.hudWindow?.setAutoHideAnimated(animated)
-        }
-        let autoHideItem = NSMenuItem()
-        autoHideItem.view = autoHideView
-        menu.addItem(autoHideItem)
-        autoHideMenuView = autoHideView
+        menu.addItem(.separator())
 
         // MARK: HUD Size
 
@@ -599,6 +602,18 @@ final class AppDelegate:
         let positionItem = NSMenuItem()
         positionItem.view = positionView
         menu.insertItem(positionItem, at: menu.index(of: sizeItem))
+        menu.insertItem(.separator(), at: menu.index(of: sizeItem))
+
+        let autoHideView = HUDAutoHideMenuView(selected: HUDPreferences.autoHideMode, animated: HUDPreferences.autoHideAnimated)
+        autoHideView.onChange = { [weak self] mode in self?.selectAutoHideMode(mode) }
+        autoHideView.onAnimatedChange = { [weak self] animated in
+            HUDPreferences.autoHideAnimated = animated
+            self?.hudWindow?.setAutoHideAnimated(animated)
+        }
+        let autoHideItem = NSMenuItem()
+        autoHideItem.view = autoHideView
+        menu.insertItem(autoHideItem, at: menu.index(of: sizeItem))
+        autoHideMenuView = autoHideView
 
         let alignmentView = HUDAlignmentMenuView(selected: HUDPreferences.alignment)
         alignmentView.onAlignmentSelected = { [weak self] alignment in self?.setHUDAlignment(alignment) }
@@ -788,6 +803,39 @@ final class AppDelegate:
         guideItem.target = self
         menu.addItem(guideItem)
         menu.addItem(.separator())
+        let updatesItem = NSMenuItem(title: "Check for updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        updatesItem.target = self
+        checkUpdatesItem = updatesItem
+        menu.addItem(updatesItem)
+        let automaticItem = NSMenuItem(title: "Automatic update checks", action: nil, keyEquivalent: "")
+        let automaticMenu = NSMenu()
+        automaticMenu.autoenablesItems = false
+        for schedule in HUDUpdateSchedule.allCases {
+            let item = NSMenuItem(title: schedule.title, action: #selector(setUpdateSchedule(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = schedule.rawValue
+            automaticMenu.addItem(item)
+            updateScheduleItems[schedule] = item
+        }
+        automaticItem.submenu = automaticMenu
+        menu.addItem(automaticItem)
+        updateUpdaterMenu()
+        let login = NSMenuItem(title: "Auto start on login", action: nil, keyEquivalent: "")
+        let loginMenu = NSMenu()
+        loginMenu.autoenablesItems = false
+        for (tag, title) in ["Off", "On"].enumerated() {
+            let item = NSMenuItem(title: title, action: #selector(setLoginStart(_:)), keyEquivalent: "")
+            item.tag = tag
+            item.target = self
+            loginMenu.addItem(item)
+            if tag == 0 { loginOffItem = item } else { loginOnItem = item }
+        }
+        login.submenu = loginMenu
+        loginMenuItem = login
+        loginMenu.delegate = self
+        menu.addItem(login)
+        updateLoginMenu()
+        menu.addItem(.separator())
         menu.delegate = self
         helperMenu.delegate = self
 
@@ -820,6 +868,62 @@ final class AppDelegate:
         updateHotkeyHints()
     }
 
+    private func updateUpdaterMenu() {
+        checkUpdatesItem?.title = updater?.availableVersion.map { "Update to \($0)…" } ?? "Check for updates…"
+        checkUpdatesItem?.isEnabled = updater?.canCheck == true
+        for (schedule, item) in updateScheduleItems {
+            item.state = schedule == updater?.schedule ? .on : .off
+            item.isEnabled = updater?.startupError == nil
+        }
+        statusItem?.button?.toolTip = updater?.availableVersion.map { "PerformanceHUD — \($0) available" } ?? "PerformanceHUD"
+    }
+
+    @objc private func checkForUpdates() {
+        statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.async { [weak self] in self?.updater?.checkForUpdates() }
+    }
+
+    @objc private func setUpdateSchedule(_ sender: NSMenuItem) {
+        guard let schedule = HUDUpdateSchedule(rawValue: sender.tag) else { return }
+        updater?.setSchedule(schedule)
+    }
+
+    private func updateLoginMenu() {
+        let status = loginItem.status
+        loginOffItem?.state = status == .enabled || status == .requiresApproval ? .off : .on
+        loginOnItem?.state = status == .enabled ? .on : status == .requiresApproval ? .mixed : .off
+        for item in [loginOffItem, loginOnItem] { item?.isEnabled = !loginItem.isChanging }
+        loginMenuItem?.toolTip = status == .requiresApproval ? "Waiting for approval in macOS Login Items." : nil
+    }
+
+    @objc private func setLoginStart(_ sender: NSMenuItem) {
+        let enabled = sender.tag == 1
+        statusItem?.menu?.cancelTracking()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await loginItem.setEnabled(enabled)
+                if enabled, loginItem.status == .requiresApproval {
+                    let alert = NSAlert()
+                    alert.messageText = "Allow PerformanceHUD to start on login"
+                    alert.informativeText = "Enable PerformanceHUD in System Settings → General → Login Items & Extensions to finish turning this on."
+                    alert.addButton(withTitle: "Open Login Items")
+                    alert.addButton(withTitle: "Not Now")
+                    NSApp.activate(ignoringOtherApps: true)
+                    if alert.runModal() == .alertFirstButtonReturn { SMAppService.openSystemSettingsLoginItems() }
+                }
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Couldn’t change start on login"
+                alert.informativeText = error.localizedDescription
+                alert.addButton(withTitle: "OK")
+                NSApp.activate(ignoringOtherApps: true)
+                alert.runModal()
+            }
+            updateLoginMenu()
+        }
+    }
+
     @objc private func editHotkeys() {
         statusItem?.menu?.cancelTracking()
         DispatchQueue.main.async { [weak self] in
@@ -839,6 +943,8 @@ final class AppDelegate:
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        updateUpdaterMenu()
+        updateLoginMenu()
         updateLoggingMenu()
         updateHotkeyHints()
         let fan = HUDPreferences.fanOptions
@@ -999,7 +1105,7 @@ final class AppDelegate:
             alert.alertStyle = .informational
             alert.messageText = "Automatically hide the HUD?"
             alert.informativeText = "The HUD will appear when FPS readings are available and hide after three seconds without them. Games or apps without detectable FPS readings will keep it hidden. Enable/Disable and your shortcut still control whether the HUD is enabled."
-            alert.addButton(withTitle: "Use All options")
+            alert.addButton(withTitle: "Use All")
             alert.addButton(withTitle: "Cancel")
             alert.showsSuppressionButton = true
             alert.suppressionButton?.title = "Don’t show this again"

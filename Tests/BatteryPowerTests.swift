@@ -113,6 +113,7 @@ import AppKit
         check(flowRect.maxX < temperatureRect.minX && temperatureRect.maxX < energyRect.minX,
               "Inline flow choices fit beside Temperature and Energy")
         check(battery.frame.width == gpu.frame.width, "Inline choices preserve menu width")
+        check(abs(energyRect.maxX - (battery.bounds.width - 20)) < 0.01, "Energy aligns to the right inset")
         let selector: NSSegmentedControl = member(flowControl!, "selector")
         let highlight: HUDHighlightLine = member(flowControl!, "highlight")
         check(selector.frame.width >= selector.intrinsicContentSize.width - 1, "Flow segments fit without clipped labels")

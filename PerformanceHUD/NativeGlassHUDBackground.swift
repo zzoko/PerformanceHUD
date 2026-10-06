@@ -1,7 +1,7 @@
 import AppKit
 import QuartzCore
 
-/// Apple's regular Liquid Glass plus GlassTest's approved "Soft test 2" shadow.
+/// Apple's regular Liquid Glass with a soft exterior shadow.
 /// The frame INCLUDES 24pt transparent padding on every side. Add HUD text to
 /// contentView (body-local coordinates); don't add the padding a second time.
 /// This view draws visuals only. NativeGlassSession owns the refresh listener.
@@ -107,7 +107,7 @@ final class NativeGlassHUDBackground: NSView {
         appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        // Exact strengths used by the approved Soft test 2 in GlassTest.
+        // Keep the exterior shadow softer in light appearance.
         outsideShadow.shadowOpacity = isDark ? 0.32 : 0.17
         CATransaction.commit()
         needsLayout = true

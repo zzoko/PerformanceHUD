@@ -54,27 +54,27 @@ import AppKit
 
         let menu = HUDAutoHideMenuView(selected: .fps)
         let control: NSSegmentedControl = member(menu, "control")
-        let all: NSSegmentedControl = member(menu, "allControl")
         let menuWindow = NSWindow(contentRect: menu.frame, styleMask: [], backing: .buffered, defer: false)
         menuWindow.contentView = menu
         menu.layoutSubtreeIfNeeded()
         precondition(control.frame.minX == HUDMenuLayout.labelLeading + HUDMenuLayout.labelWidth + HUDMenuLayout.spacing)
-        precondition(control.frame.width == all.frame.width && control.frame.minX == all.frame.minX)
+        precondition((0..<control.segmentCount).map { control.label(forSegment: $0) } == ["Off", "FPS", "All"])
+        precondition(control.frame.width == HUDMenuLayout.actionOptionsWidth && menu.bounds.contains(control.frame))
         precondition(menu.subviews.compactMap { ($0 as? NSTextField)?.stringValue }.contains("Auto hide"))
-        precondition(control.selectedSegment == 0 && all.selectedSegment == -1)
+        precondition(control.selectedSegment == 1)
         var requested: HUDAutoHideMode?
         menu.onChange = { requested = $0 }
-        all.selectedSegment = 0
-        _ = all.sendAction(all.action, to: all.target)
-        precondition(requested == .all && control.selectedSegment == 0 && all.selectedSegment == -1,
+        control.selectedSegment = 2
+        _ = control.sendAction(control.action, to: control.target)
+        precondition(requested == .all && control.selectedSegment == 1,
                      "Cancelling the explanation must leave FPS selected")
         menu.select(.all)
-        precondition(control.selectedSegment == -1 && all.selectedSegment == 0)
-        control.selectedSegment = 1
+        precondition(control.selectedSegment == 2)
+        control.selectedSegment = 0
         _ = control.sendAction(control.action, to: control.target)
         precondition(requested == .off)
         menu.select(.off)
-        precondition(control.selectedSegment == 1 && all.selectedSegment == -1)
+        precondition(control.selectedSegment == 0)
         let fpsMenu = HUDFPSMenuView(options: .init(enabled: true, mode: .both), alignment: .vertical)
         precondition(fpsMenu.subviews.compactMap { $0 as? NSSegmentedControl }.count == 1,
                      "The FPS category must contain only Value / History / Both")

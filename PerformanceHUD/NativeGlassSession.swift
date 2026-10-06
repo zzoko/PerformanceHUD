@@ -2,7 +2,7 @@ import AppKit
 import CoreGraphics
 import Darwin
 
-// Primary implementation: GlassTest 67 only. No ScreenCaptureKit or image capture.
+// Display-refresh listener for native glass compatibility. No image capture.
 // The listener API is deprecated/unsupported; the uncapping effect is observed,
 // not guaranteed. Registration success does not measure game FPS.
 

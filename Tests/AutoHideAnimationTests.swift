@@ -40,7 +40,6 @@ import AppKit
         let menu = HUDAutoHideMenuView(selected: .fps, animated: true)
         let control: NSSegmentedControl = member(menu, "control")
         let checkbox: NSButton = member(menu, "animatedControl")
-        let all: NSSegmentedControl = member(menu, "allControl")
         let menuWindow = NSWindow(contentRect: menu.frame, styleMask: [], backing: .buffered, defer: false)
         menuWindow.contentView = menu
         menu.layoutSubtreeIfNeeded()
@@ -48,13 +47,13 @@ import AppKit
         let selectorRect = control.alignmentRect(forFrame: control.frame)
         let checkboxRect = checkbox.alignmentRect(forFrame: checkbox.frame)
         precondition(checkboxRect.minX >= selectorRect.maxX + 8 && abs(checkboxRect.midY - selectorRect.midY) < 0.1)
-        precondition(menu.bounds.contains(checkbox.frame) && all.frame.width == control.frame.width)
+        precondition(menu.bounds.contains(checkbox.frame) && menu.bounds.contains(control.frame))
         var selectedMode: HUDAutoHideMode?
         var selectedAnimation: Bool?
         menu.onChange = { selectedMode = $0 }
         menu.onAnimatedChange = { selectedAnimation = $0 }
         checkbox.performClick(nil)
-        precondition(selectedAnimation == false && selectedMode == nil && control.selectedSegment == 0)
+        precondition(selectedAnimation == false && selectedMode == nil && control.selectedSegment == 1)
         menu.select(.off)
         precondition(checkbox.isEnabled && checkbox.state == .off, "Off preserves the independent animation choice")
         menu.select(.all)
