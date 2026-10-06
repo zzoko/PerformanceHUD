@@ -23,11 +23,35 @@ enum HUDReadingKind: String, CaseIterable {
     case power, temperature, totalUse, focusedApp, details
 }
 
+enum HUDBatteryFlowMode: String, CaseIterable {
+    case always, auto, off
+    var title: String { rawValue.capitalized }
+}
+
 struct HUDBatteryOptions: Equatable {
     var enabled: Bool
     var temperature: Bool
     var charge: Bool
     var temperatureHighlighted: Bool = false
+    var flowMode: HUDBatteryFlowMode = .auto
+    var powerHighlighted: Bool = false
+
+    // Sampling and logging remain enabled in Auto even while its HUD text is hidden.
+    var power: Bool {
+        get { flowMode != .off }
+        set { flowMode = newValue ? .always : .off }
+    }
+
+    init(enabled: Bool, temperature: Bool, charge: Bool,
+         temperatureHighlighted: Bool = false, power: Bool? = nil,
+         powerHighlighted: Bool = false, flowMode: HUDBatteryFlowMode? = nil) {
+        self.enabled = enabled
+        self.temperature = temperature
+        self.charge = charge
+        self.temperatureHighlighted = temperatureHighlighted
+        self.flowMode = flowMode ?? power.map { $0 ? .always : .off } ?? .auto
+        self.powerHighlighted = powerHighlighted
+    }
 }
 
 enum HUDResourceGroup: String, CaseIterable {

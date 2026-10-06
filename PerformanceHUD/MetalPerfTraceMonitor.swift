@@ -5,6 +5,7 @@ final class MetalPerfTraceMonitor {
     nonisolated struct MetalMetrics: Sendable {
         let fps: Double?
         let gpuUsage: Double?
+        var resolution: HUDResolution? = nil
     }
     var onMetricsUpdate: ((MetalMetrics) -> Void)?
     private var process: Process?
@@ -176,7 +177,8 @@ nonisolated final class MetalMetricsParser: @unchecked Sendable {
             let config = layer["Configuration"] as? [String: Any]
             let width = (config?["Width (pixels)"] as? NSNumber)?.doubleValue ?? 0
             let height = (config?["Height (pixels)"] as? NSNumber)?.doubleValue ?? 0
-            let area = width * height
+            let resolution = HUDResolution(width: width, height: height)
+            let area = resolution.map { Double($0.width) * Double($0.height) } ?? 0
             var gpuUsage: Double?
             if let seconds = (performance["Time Active (sec)"] as? NSNumber)?.doubleValue,
                let gpu = presented["On-GPU Walltime Stats"] as? [String: Any],
@@ -187,7 +189,7 @@ nonisolated final class MetalMetricsParser: @unchecked Sendable {
             }
             if selected == nil || area > selectedArea {
                 selectedArea = area
-                selected = .init(fps: fps, gpuUsage: gpuUsage)
+                selected = .init(fps: fps, gpuUsage: gpuUsage, resolution: resolution)
             }
         }
         return selected

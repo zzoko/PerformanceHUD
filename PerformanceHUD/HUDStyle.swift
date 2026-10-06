@@ -147,6 +147,12 @@ enum HUDStyle {
         return current + gap * gapIncrease
     }
 
+    // A fixed 270pt vertical HUD at 1×, including its two side paddings.
+    // Reading visibility, emphasis, and category selection never change it.
+    static func verticalValueColumnRight(scale: HUDScale) -> CGFloat {
+        270 * CGFloat(scale.rawValue) - 2 * horizontalPadding(scale: scale)
+    }
+
     // Share the compact FPS-only column with the FPS section of the horizontal HUD.
     static func compactFPSValueColumnRight(scale: HUDScale) -> CGFloat {
         let title = NSTextField(labelWithString: "FPS")

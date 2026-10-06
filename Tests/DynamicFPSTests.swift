@@ -86,8 +86,8 @@ import AppKit
         check(fpsHighlight.isEnabled && fpsHighlight.state == .on, "FPS underline starts available and on")
         check(fpsMenu.hitTest(NSPoint(x: fpsHighlight.frame.midX, y: fpsHighlight.frame.midY)) === fpsHighlight,
               "FPS underline receives its own click instead of toggling the category")
-        check(fpsHighlight.frame.maxY < fpsSelector.frame.midY && fpsHighlight.frame.minY >= 0,
-              "FPS underline fits beneath the Value selector inside the existing row")
+        check(fpsHighlight.frame.maxY <= fpsSelector.frame.minY - 2 && fpsHighlight.frame.minY >= 0,
+              "FPS underline has a clear gap beneath the Value selector and fits inside the row")
         check(fpsHighlight.frame.minX > fpsSelector.frame.minX
               && fpsHighlight.frame.maxX <= fpsSelector.frame.minX + fpsSelector.frame.width / 3
               && fpsHighlight.frame.width > fpsSelector.frame.width / 4

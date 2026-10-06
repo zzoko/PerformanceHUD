@@ -36,17 +36,23 @@ final class HUDResourceMenuView: NSView {
     private var options: HUDResourceOptions
     private var controls: [Int: NSButton] = [:]
     private var usageModeControl: NSSegmentedControl?
+    private var flowControl: HUDBatteryFlowMenuControl?
+    private var flowMode: HUDBatteryFlowMode = .auto
 
     convenience init(batteryOptions: HUDBatteryOptions) {
         self.init(group: nil, options: HUDResourceOptions(enabled: batteryOptions.enabled,
             temperature: batteryOptions.temperature, totalUse: batteryOptions.charge, focusedApp: false,
-            highlighted: batteryOptions.temperatureHighlighted ? [.temperature] : []))
+            power: batteryOptions.power,
+            highlighted: Set([batteryOptions.temperatureHighlighted ? HUDReadingKind.temperature : nil,
+                              batteryOptions.powerHighlighted ? HUDReadingKind.power : nil].compactMap { $0 })))
+        flowMode = batteryOptions.flowMode
+        refresh()
     }
 
     init(group: HUDResourceGroup?, options: HUDResourceOptions) {
         self.group = group
         self.options = options
-        super.init(frame: NSRect(x: 0, y: 0, width: 480, height: 34))
+        super.init(frame: NSRect(x: 0, y: 0, width: 480, height: group == nil ? 40 : 34))
 
         autoresizingMask = [.width]
         let groupTitle = group?.title ?? "Battery"
@@ -74,11 +80,43 @@ final class HUDResourceMenuView: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         choices.addSubview(stack)
         let columns = group == .ram
-            ? [(5, "Details", Self.firstChoiceWidth), (1, "", Self.secondChoiceWidth), (7, "Usage", 106.0), (8, "", 145.0)]
+            ? [(5, "Details", Self.firstChoiceWidth), (1, "", Self.secondChoiceWidth), (7, "Use", 106.0), (8, "", 145.0)]
             : group == nil
-            ? [(6, "Energy", Self.firstChoiceWidth), (1, "Temperature", Self.secondChoiceWidth), (2, "", 106.0), (3, "", 145.0)]
-            : [(4, "Power", Self.firstChoiceWidth), (1, "Temperature", Self.secondChoiceWidth), (7, "Usage", 106.0), (8, "", 145.0)]
+            ? [(4, "Charge", Self.firstChoiceWidth + 12 + Self.secondChoiceWidth), (1, "Temperature", 126.0), (6, "Energy", 106.0)]
+            : [(4, "Power", Self.firstChoiceWidth), (1, "Temperature", Self.secondChoiceWidth), (7, "Use", 106.0), (8, "", 145.0)]
         for (tag, title, width) in columns {
+            if group == nil, tag == 4 {
+                let control = HUDBatteryFlowMenuControl()
+                control.widthAnchor.constraint(equalToConstant: width).isActive = true
+                control.onModeChange = { [weak self] mode in
+                    guard let self, self.options.enabled else { return }
+                    flowMode = mode
+                    self.options.power = mode != .off
+                    refresh()
+                    notifyBatteryChange()
+                }
+                control.onHighlight = { [weak self] in
+                    guard let self, self.options.enabled, self.options.power else { return }
+                    if self.options.highlighted.contains(.power) { self.options.highlighted.remove(.power) }
+                    else { self.options.highlighted.insert(.power) }
+                    refresh()
+                    notifyBatteryChange()
+                }
+                flowControl = control
+                stack.addArrangedSubview(control)
+                // Keep the emphasis strip outside the choices border, but
+                // inside the row so its full area remains clickable.
+                control.highlight.translatesAutoresizingMaskIntoConstraints = false
+                addSubview(control.highlight)
+                NSLayoutConstraint.activate([
+                    control.highlight.leadingAnchor.constraint(equalTo: control.leadingAnchor,
+                        constant: HUDBatteryFlowMenuControl.selectorLeading + 2),
+                    control.highlight.trailingAnchor.constraint(equalTo: control.trailingAnchor, constant: -2),
+                    control.highlight.topAnchor.constraint(equalTo: choices.bottomAnchor, constant: 2),
+                    control.highlight.heightAnchor.constraint(equalToConstant: 6)
+                ])
+                continue
+            }
             if tag == 8, let group, group.supportsTotalUse {
                 let control = NSSegmentedControl(labels: ["Total", "App", "Both"], trackingMode: .selectOne,
                                                  target: self, action: #selector(usageModeChanged(_:)))
@@ -135,21 +173,37 @@ final class HUDResourceMenuView: NSView {
                 bar.topAnchor.constraint(equalTo: choices.topAnchor),
                 bar.bottomAnchor.constraint(equalTo: choices.bottomAnchor)
             ])
+            if group == nil {
+                let energyBar = HUDResourceChoicesView()
+                energyBar.translatesAutoresizingMaskIntoConstraints = false
+                choices.addSubview(energyBar, positioned: .below, relativeTo: stack)
+                NSLayoutConstraint.activate([
+                    // Keep the right edge shared with the FAN/resource rows,
+                    // even though Battery uses fewer, shorter controls.
+                    choices.widthAnchor.constraint(equalToConstant: Self.choicesWidth),
+                    energyBar.leadingAnchor.constraint(equalTo: stack.arrangedSubviews[1].leadingAnchor, constant: -4),
+                    energyBar.trailingAnchor.constraint(equalTo: choices.trailingAnchor),
+                    energyBar.topAnchor.constraint(equalTo: choices.topAnchor),
+                    energyBar.bottomAnchor.constraint(equalTo: choices.bottomAnchor)
+                ])
+            }
         }
         NSLayoutConstraint.activate([
             master.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             master.widthAnchor.constraint(equalToConstant: masterWidth),
             master.topAnchor.constraint(equalTo: topAnchor),
-            master.bottomAnchor.constraint(equalTo: bottomAnchor),
+            master.bottomAnchor.constraint(equalTo: bottomAnchor, constant: group == nil ? -6 : 0),
             choices.leadingAnchor.constraint(equalTo: master.trailingAnchor, constant: 8),
-            choices.centerYAnchor.constraint(equalTo: centerYAnchor),
+            choices.centerYAnchor.constraint(equalTo: centerYAnchor, constant: group == nil ? -3 : 0),
             choices.heightAnchor.constraint(equalToConstant: 28),
             choices.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
             stack.leadingAnchor.constraint(equalTo: choices.leadingAnchor, constant: 8),
             stack.centerYAnchor.constraint(equalTo: choices.centerYAnchor),
-            stack.trailingAnchor.constraint(equalTo: choices.trailingAnchor, constant: -8)
+            group == nil
+                ? stack.trailingAnchor.constraint(lessThanOrEqualTo: choices.trailingAnchor, constant: -8)
+                : stack.trailingAnchor.constraint(equalTo: choices.trailingAnchor, constant: -8)
         ])
-        setFrameSize(NSSize(width: 8 + masterWidth + 8 + Self.choicesWidth + 12, height: 34))
+        setFrameSize(NSSize(width: 8 + masterWidth + 8 + Self.choicesWidth + 12, height: group == nil ? 40 : 34))
         refresh()
     }
 
@@ -162,7 +216,7 @@ final class HUDResourceMenuView: NSView {
     }
 
     @objc private func changed(_ sender: NSButton) {
-        if sender.tag == 4 && !powerAvailability.allowsPowerToggle {
+        if group != nil && sender.tag == 4 && !powerAvailability.allowsPowerToggle {
             refresh()
             onPowerSetup?()
             return
@@ -185,14 +239,12 @@ final class HUDResourceMenuView: NSView {
         }
         refresh()
         onChange?(options)
-        onBatteryChange?(HUDBatteryOptions(enabled: options.enabled,
-            temperature: options.temperature, charge: options.totalUse,
-            temperatureHighlighted: options.highlighted.contains(.temperature)))
+        notifyBatteryChange()
     }
 
     private func highlightChanged(tag: Int) {
         guard let control = controls[tag], control.isEnabled, control.state == .on else { return }
-        if tag == 4 && !powerAvailability.allowsPowerToggle { return }
+        if group != nil && tag == 4 && !powerAvailability.allowsPowerToggle { return }
         if tag == 7 {
             options.setUsagePresentation(visible: true, highlighted: !options.usageHighlighted)
         } else if let kind = readingKind(for: tag) {
@@ -201,9 +253,15 @@ final class HUDResourceMenuView: NSView {
         } else { return }
         refresh()
         onChange?(options)
+        notifyBatteryChange()
+    }
+
+    private func notifyBatteryChange() {
+        guard group == nil else { return }
         onBatteryChange?(HUDBatteryOptions(enabled: options.enabled,
             temperature: options.temperature, charge: options.totalUse,
-            temperatureHighlighted: options.highlighted.contains(.temperature)))
+            temperatureHighlighted: options.highlighted.contains(.temperature),
+            powerHighlighted: options.highlighted.contains(.power), flowMode: flowMode))
     }
 
     @objc private func usageModeChanged(_ sender: NSSegmentedControl) {
@@ -214,7 +272,7 @@ final class HUDResourceMenuView: NSView {
     }
 
     private func readingKind(for tag: Int) -> HUDReadingKind? {
-        if group == nil { return tag == 1 ? .temperature : nil }
+        if group == nil { return tag == 1 ? .temperature : tag == 4 ? .power : nil }
         switch tag {
         case 1: return .temperature
         case 4: return .power
@@ -224,6 +282,7 @@ final class HUDResourceMenuView: NSView {
     }
 
     private func refresh() {
+        flowControl?.update(mode: flowMode, enabled: options.enabled, emphasized: options.highlighted.contains(.power))
         for (tag, value) in [(0, options.enabled), (1, options.temperature),
                              (4, options.power), (5, options.details), (6, options.totalUse), (7, options.usageVisible)] {
             controls[tag]?.state = value ? .on : .off
@@ -239,13 +298,75 @@ final class HUDResourceMenuView: NSView {
             usage.emphasized = options.usageHighlighted
             usage.setAccessibilityValue(!options.usageVisible ? "Off" : usage.emphasized ? "Highlighted" : "Faint")
         }
-        if let power = controls[4] as? HUDReadingCheckbox {
+        if group != nil, let power = controls[4] as? HUDReadingCheckbox {
             power.highlightAvailable = powerAvailability.allowsPowerToggle
             // Visually unavailable, but still actionable: clicking offers setup.
             power.alphaValue = powerAvailability.usesNormalAppearance ? 1 : 0.5
             power.toolTip = powerAvailability.explanation
             power.setAccessibilityHelp(power.toolTip)
         }
+    }
+}
+
+/// Inline selection uses the same menu-safe control as FPS and fan modes.
+/// Flow emphasis stays separate from the three visibility choices.
+@MainActor
+final class HUDBatteryFlowMenuControl: NSView {
+    static let selectorLeading: CGFloat = 60
+    var onModeChange: ((HUDBatteryFlowMode) -> Void)?
+    var onHighlight: (() -> Void)?
+    private let nameLabel = NSTextField(labelWithString: "Charge")
+    private let selector = NSSegmentedControl(labels: HUDBatteryFlowMode.allCases.map(\.title),
+        trackingMode: .selectOne, target: nil, action: nil)
+    let highlight = HUDHighlightLine()
+
+    init() {
+        super.init(frame: .zero)
+        nameLabel.font = .menuFont(ofSize: 0)
+        selector.font = .menuFont(ofSize: 0)
+        selector.segmentStyle = .rounded
+        selector.target = self
+        selector.action = #selector(modeChanged)
+        selector.setAccessibilityLabel("Battery Charge mode")
+        highlight.setButtonType(.toggle)
+        highlight.isBordered = false
+        highlight.target = self
+        highlight.action = #selector(highlightChanged)
+        highlight.setAccessibilityRole(.checkBox)
+        highlight.setAccessibilityLabel("Emphasize Battery Charge")
+        for view in [nameLabel, selector] {
+            addSubview(view)
+        }
+        heightAnchor.constraint(equalToConstant: 28).isActive = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("Use init()") }
+
+    override func layout() {
+        super.layout()
+        nameLabel.frame = NSRect(x: 4, y: 4, width: 48, height: 20)
+        selector.frame = NSRect(x: Self.selectorLeading, y: 3,
+                                width: max(0, bounds.width - Self.selectorLeading), height: 22)
+    }
+
+    func update(mode: HUDBatteryFlowMode, enabled: Bool, emphasized: Bool) {
+        selector.selectedSegment = HUDBatteryFlowMode.allCases.firstIndex(of: mode) ?? 1
+        selector.isEnabled = enabled
+        for index in HUDBatteryFlowMode.allCases.indices { selector.setEnabled(enabled, forSegment: index) }
+        nameLabel.textColor = enabled ? .labelColor : .disabledControlTextColor
+        highlight.state = emphasized ? .on : .off
+        highlight.isEnabled = enabled && mode != .off
+        highlight.needsDisplay = true
+    }
+
+    @objc private func modeChanged() {
+        guard selector.isEnabled, HUDBatteryFlowMode.allCases.indices.contains(selector.selectedSegment) else { return }
+        onModeChange?(HUDBatteryFlowMode.allCases[selector.selectedSegment])
+    }
+
+    @objc private func highlightChanged() {
+        guard highlight.isEnabled else { return }
+        onHighlight?()
     }
 }
 
@@ -257,6 +378,14 @@ final class HUDResourceMasterButton: NSButton {
 
     override var state: NSControl.StateValue {
         didSet { checkmark.isHidden = state != .on }
+    }
+
+    override var isEnabled: Bool {
+        didSet {
+            let color: NSColor = isEnabled ? .labelColor : .disabledControlTextColor
+            nameLabel.textColor = color
+            checkmark.contentTintColor = color
+        }
     }
 
     init(title: String, target: AnyObject?, action: Selector?) {

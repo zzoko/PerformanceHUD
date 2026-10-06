@@ -6,7 +6,7 @@ final class HUDFanMenuView: NSView {
     private var options: HUDFanOptions
     private var sample: FanSample
     private let master: HUDResourceMasterButton
-    private let usage = HUDReadingCheckbox(title: "Usage", supportsEmphasis: false)
+    private let usage = HUDReadingCheckbox(title: "Use", supportsEmphasis: false)
     private let average = HUDReadingCheckbox(title: "Average", supportsEmphasis: false)
     private let averageMode = NSSegmentedControl(labels: HUDFanAverageMode.allCases.map(\.title),
                                                 trackingMode: .selectOne, target: nil, action: nil)
@@ -19,7 +19,7 @@ final class HUDFanMenuView: NSView {
         self.sample = sample
         master = HUDResourceMasterButton(title: "FAN", target: nil, action: nil)
         let width = 8 + HUDResourceMenuView.masterWidth + 8 + HUDResourceMenuView.choicesWidth + 12
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 34))
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 40))
         autoresizingMask = [.width]
         let bar = HUDResourceChoicesView()
         let averageBar = HUDResourceChoicesView()
@@ -31,7 +31,7 @@ final class HUDFanMenuView: NSView {
         master.setAccessibilityLabel("Show FAN")
         usage.target = self; usage.action = #selector(toggleUsage)
         usage.font = .menuFont(ofSize: 0)
-        usage.setControlAccessibilityLabel("Fan usage")
+        usage.setControlAccessibilityLabel("Fan Use")
         mode.target = self; mode.action = #selector(changeFanMode)
         mode.segmentStyle = .rounded
         mode.font = .menuFont(ofSize: 0)
@@ -56,30 +56,30 @@ final class HUDFanMenuView: NSView {
             master.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             master.widthAnchor.constraint(equalToConstant: HUDResourceMenuView.masterWidth),
             master.topAnchor.constraint(equalTo: topAnchor),
-            master.bottomAnchor.constraint(equalTo: bottomAnchor),
+            master.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
             average.leadingAnchor.constraint(equalTo: leadingAnchor, constant: HUDResourceMenuView.powerColumnLeading),
-            average.centerYAnchor.constraint(equalTo: centerYAnchor),
+            average.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
             average.widthAnchor.constraint(equalToConstant: firstWidth),
             averageMode.leadingAnchor.constraint(equalTo: average.trailingAnchor, constant: 12),
-            averageMode.centerYAnchor.constraint(equalTo: centerYAnchor),
+            averageMode.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
             averageMode.widthAnchor.constraint(equalToConstant: secondWidth),
             averageBar.leadingAnchor.constraint(equalTo: average.leadingAnchor, constant: -8),
             averageBar.trailingAnchor.constraint(equalTo: averageMode.trailingAnchor, constant: 4),
-            averageBar.centerYAnchor.constraint(equalTo: centerYAnchor),
+            averageBar.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
             averageBar.heightAnchor.constraint(equalToConstant: 28),
             usage.leadingAnchor.constraint(equalTo: leadingAnchor, constant: usageLeading),
-            usage.centerYAnchor.constraint(equalTo: centerYAnchor),
+            usage.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
             usage.widthAnchor.constraint(equalToConstant: 106),
             mode.leadingAnchor.constraint(equalTo: usage.trailingAnchor, constant: 12),
-            mode.centerYAnchor.constraint(equalTo: centerYAnchor),
+            mode.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
             mode.widthAnchor.constraint(equalToConstant: 145),
             rpmHighlight.leadingAnchor.constraint(equalTo: mode.leadingAnchor, constant: 145 / 3 + 2),
             rpmHighlight.widthAnchor.constraint(equalTo: mode.widthAnchor, multiplier: 1.0 / 3.0, constant: -4),
-            rpmHighlight.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+            rpmHighlight.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 2),
             rpmHighlight.heightAnchor.constraint(equalToConstant: 6),
             bar.leadingAnchor.constraint(equalTo: usage.leadingAnchor, constant: -4),
             bar.trailingAnchor.constraint(equalTo: mode.trailingAnchor, constant: 8),
-            bar.centerYAnchor.constraint(equalTo: centerYAnchor),
+            bar.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
             bar.heightAnchor.constraint(equalToConstant: 28)
         ])
         refresh()

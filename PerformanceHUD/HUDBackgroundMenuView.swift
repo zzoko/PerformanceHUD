@@ -52,7 +52,7 @@ final class HUDBackgroundMenuView: NSView {
         onBackgroundSelected?(.system)
     }
 
-    private func select(_ background: HUDBackground) {
+    func select(_ background: HUDBackground) {
         control.selectedSegment = HUDBackground.menuOptions.firstIndex(of: background) ?? -1
         systemControl.selectedSegment = background == .system ? 0 : -1
     }

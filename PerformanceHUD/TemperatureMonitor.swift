@@ -73,7 +73,7 @@ nonisolated final class SMCTemperatureReader: @unchecked Sendable {
 
     // Battery sensor names and the controller fallback follow Stats' battery reader.
     // These identify the battery pack, not nearby CPU/GPU or enclosure sensors.
-    func readBatteryTemperature() -> Double? {
+    func readBatteryTemperature(keepingConnectionForPower: Bool = false) -> Double? {
         if connection == 0 {
             let now = ProcessInfo.processInfo.systemUptime
             guard now >= nextOpenAttempt else { return nil }
@@ -83,10 +83,30 @@ nonisolated final class SMCTemperatureReader: @unchecked Sendable {
         let readings = ["TB1T", "TB2T"].compactMap { temperature(for: $0) }
             .compactMap { Self.validBatteryTemperature($0) }
         guard !readings.isEmpty else {
-            close() // Re-open after wake; the battery controller remains the fallback.
+            // Missing temperature keys must not close a working connection used
+            // for battery power. The controller remains the temperature fallback.
+            if !keepingConnectionForPower { close() }
             return nil
         }
         return readings.reduce(0, +) / Double(readings.count)
+    }
+
+    // Read live signed current and voltage because AppleSmartBattery's
+    // published copies can remain cached for many seconds. This uses the same
+    // read-only connection as temperature, without forcing controller polling.
+    func readBatteryPower() -> Double? {
+        if connection == 0 {
+            let now = ProcessInfo.processInfo.systemUptime
+            guard now >= nextOpenAttempt else { return nil }
+            nextOpenAttempt = now + 30
+            guard open() else { return nil }
+        }
+        let knownKeys = metadata[Self.fourCC("B0AV")] != nil && metadata[Self.fourCC("B0AC")] != nil
+        guard let voltage = value(for: "B0AV"), let amperage = value(for: "B0AC") else {
+            if knownKeys { close() } // Reconnect after previously valid sensors fail.
+            return nil
+        }
+        return BatteryPowerRate.watts(smcVoltage: voltage, smcAmperage: amperage)
     }
 
     static func validBatteryTemperature(_ value: Double) -> Double? {

@@ -9,14 +9,16 @@ nonisolated struct BatterySample: Sendable {
     let percentage: Double?
     let source: Source?
     let temperature: Double?
+    let power: Double?
 
-    init(percentage: Double?, source: Source?, temperature: Double? = nil) {
+    init(percentage: Double?, source: Source?, temperature: Double? = nil, power: Double? = nil) {
         self.percentage = percentage
         self.source = source
         self.temperature = temperature
+        self.power = power.flatMap { BatteryPowerRate.valid($0) }
     }
 
-    static func from(_ description: [String: Any], temperature: Double? = nil) -> BatterySample {
+    static func from(_ description: [String: Any], temperature: Double? = nil, power: Double? = nil) -> BatterySample {
         let source: Source?
         switch description[kIOPSPowerSourceStateKey] as? String {
         case kIOPSBatteryPowerValue: source = .battery
@@ -30,7 +32,7 @@ nonisolated struct BatterySample: Sendable {
             let value = current.doubleValue / maximum.doubleValue * 100
             if value.isFinite { percentage = min(100, max(0, value)) }
         }
-        return BatterySample(percentage: percentage, source: source, temperature: temperature)
+        return BatterySample(percentage: percentage, source: source, temperature: temperature, power: power)
     }
 }
 
@@ -39,11 +41,15 @@ final class BatteryMonitor {
     var onBatteryUpdate: ((BatterySample?) -> Void)?
     private let poller = MetricPoller<BatterySample>(label: "PerformanceHUD.Battery")
     private var includesTemperature = false
-    func start(temperature: Bool = true) {
-        guard !poller.isRunning || includesTemperature != temperature else { return }
+    private var includesPower = false
+    func start(temperature: Bool = true, power: Bool = false) {
+        guard !poller.isRunning || includesTemperature != temperature || includesPower != power else { return }
         includesTemperature = temperature
-        let reader = temperature ? SMCTemperatureReader() : nil
-        poller.start(interval: 5, sample: { BatteryReader.readBattery(temperatureReader: reader) }) { [weak self] in
+        includesPower = power
+        let reader = temperature || power ? SMCTemperatureReader() : nil
+        poller.start(interval: 1, sample: {
+            BatteryReader.readBattery(sensorReader: reader, temperature: temperature, power: power)
+        }) { [weak self] in
             self?.onBatteryUpdate?($0)
         }
     }
@@ -53,7 +59,7 @@ final class BatteryMonitor {
 nonisolated private enum BatteryReader {
     // MARK: - Read Battery
 
-    static func readBattery(temperatureReader: SMCTemperatureReader?)
+    static func readBattery(sensorReader: SMCTemperatureReader?, temperature includesTemperature: Bool, power: Bool)
         -> BatterySample?
     {
 
@@ -99,20 +105,31 @@ nonisolated private enum BatteryReader {
                 continue
             }
 
-            let temperature = temperatureReader.flatMap { $0.readBatteryTemperature() ?? controllerTemperature() }
-            return BatterySample.from(description, temperature: temperature)
+            var temperature = includesTemperature ? sensorReader?.readBatteryTemperature(keepingConnectionForPower: power) : nil
+            let sensorPower = power ? sensorReader?.readBatteryPower() : nil
+            // Fetch the controller snapshot only for missing sensor readings.
+            let needsController = (power && sensorPower == nil) || (includesTemperature && temperature == nil)
+            let controller = needsController ? controllerProperties() : nil
+            if includesTemperature, temperature == nil,
+               let raw = controller?["Temperature"] as? NSNumber {
+                temperature = SMCTemperatureReader.validBatteryTemperature(raw.doubleValue / 100)
+            }
+            let watts = power ? sensorPower ?? BatteryPowerRate.watts(controller: controller) : nil
+            return BatterySample.from(description, temperature: temperature, power: watts)
         }
 
         return nil
     }
 
-    private static func controllerTemperature() -> Double? {
+    private static func controllerProperties() -> [String: Any]? {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
         guard service != 0 else { return nil }
         defer { IOObjectRelease(service) }
-        guard let property = IORegistryEntryCreateCFProperty(service, "Temperature" as CFString, kCFAllocatorDefault, 0),
-              let raw = property.takeRetainedValue() as? NSNumber else { return nil }
-        return SMCTemperatureReader.validBatteryTemperature(raw.doubleValue / 100)
+        var properties: Unmanaged<CFMutableDictionary>?
+        guard IORegistryEntryCreateCFProperties(service, &properties, kCFAllocatorDefault, 0) == KERN_SUCCESS,
+              let values = properties?.takeRetainedValue() as? [String: Any],
+              values["BatteryInstalled"] as? Bool != false else { return nil }
+        return values
     }
 
 }

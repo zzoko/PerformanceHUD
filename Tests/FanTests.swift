@@ -108,8 +108,9 @@ import AppKit
         check(defaults.object(forKey: "hud.fan.average") == nil && defaults.object(forKey: "hud.fan.averageMode") == nil, "Options reset includes average preferences")
         check(defaults.object(forKey: "hud.fan.rpmHighlighted") == nil, "Options reset clears RPM emphasis")
         let memMenu = HUDResourceMenuView(group: .ram, options: .init(enabled: true, temperature: false, totalUse: true, focusedApp: false))
-        let menuCanvas = NSView(frame: NSRect(x: 0, y: 0, width: menu.frame.width, height: 68))
-        menu.frame.origin.y = 0; memMenu.frame.origin.y = 34
+        let menuCanvas = NSView(frame: NSRect(x: 0, y: 0, width: menu.frame.width,
+                                            height: menu.frame.height + memMenu.frame.height))
+        menu.frame.origin.y = 0; memMenu.frame.origin.y = menu.frame.height
         menuCanvas.addSubview(menu); menuCanvas.addSubview(memMenu)
         let menuWindow = NSWindow(contentRect: menuCanvas.frame, styleMask: [], backing: .buffered, defer: false)
         menuWindow.contentView = menuCanvas
@@ -176,7 +177,7 @@ import AppKit
                 render(menuCanvas, name: "-menu")
                 let fps = HUDFPSMenuView(options: .init(enabled: true, mode: .both), alignment: .vertical)
                 render(fps, name: "-fps-menu")
-                let view = HUDFanView(frame: NSRect(x: 0, y: 0, width: 254, height: 21))
+                let view = HUDFanView(frame: NSRect(x: 0, y: 0, width: HUDStyle.verticalValueColumnRight(scale: .normal), height: 21))
                 for light in [false, true] {
                     let suffix = light ? "-light" : "-dark"
                     let background: HUDBackground = light ? .light : .dark
@@ -317,7 +318,7 @@ import AppKit
                 hud.updateFans(two)
                 snapshot(horizontal, at: path + (useAverage ? "-horizontal-average.png" : "-horizontal-individual.png"))
             }
-            let view = HUDFanView(frame: NSRect(x: 0, y: 0, width: 310, height: 21))
+            let view = HUDFanView(frame: NSRect(x: 0, y: 0, width: HUDStyle.verticalValueColumnRight(scale: .normal), height: 21))
             view.update(sample: two, options: .init(averageMode: .both), scale: .normal, background: .dark)
             snapshot(view, at: path + "-vertical-average.png")
             view.frame.size.height = view.height(scale: .normal) * 2 + HUDStyle.rowSpacing(scale: .normal)

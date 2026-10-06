@@ -50,6 +50,7 @@ final class HUDWindowController {
         [.ram, .ramTotal],
         [.fans],
         [.battery],
+        [.misc],
         [.deviceInfo]
     ]
 
@@ -77,6 +78,8 @@ final class HUDWindowController {
     private var ramPressureValueLabel: NSTextField?
     private var ramPressureTitleLabel: NSTextField?
     private let batteryIndicator = HUDBatteryIndicatorView(frame: .zero)
+    private let miscView = HUDMiscView(frame: .zero)
+    private var miscOptions = HUDPreferences.miscOptions
 
     private var deviceInfoLabels: [NSTextField] = []
     private var primaryLabelHeightConstraints: [HUDMetric: NSLayoutConstraint] = [:]
@@ -431,7 +434,7 @@ final class HUDWindowController {
                 metricRows[metric] = row
                 stackView.addArrangedSubview(row)
                 if metric == .aneTotal { createPackageRow() }
-                if metric == .fpsGraph || metric == .battery || metric == .fans {
+                if metric == .fpsGraph || metric == .battery || metric == .fans || metric == .misc {
                     NSLayoutConstraint.activate([
                         row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor),
                         row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor)
@@ -520,6 +523,14 @@ final class HUDWindowController {
             return fanView
         }
         if metric == .deviceInfo { return createDeviceInfoRow() }
+        if metric == .misc {
+            miscView.translatesAutoresizingMaskIntoConstraints = false
+            miscView.configure(options: miscOptions, scale: hudScale, background: textBackground)
+            let height = miscView.heightAnchor.constraint(equalToConstant: miscView.height(scale: hudScale))
+            rowHeightConstraints[.misc] = height
+            height.isActive = true
+            return miscView
+        }
         if metric == .battery {
             batteryIndicator.translatesAutoresizingMaskIntoConstraints = false
             batteryIndicator.applyStyle(scale: hudScale, background: textBackground)
@@ -1108,6 +1119,10 @@ final class HUDWindowController {
         }
     }
 
+    func setDragModifier(_ modifier: HUDDragModifier) {
+        panel.dragModifier = modifier
+    }
+
     // MARK: - HUD Scale
 
     func setHUDScale(
@@ -1259,6 +1274,7 @@ final class HUDWindowController {
     }
 
     private func updateReadingAppearance() {
+        miscView.configure(options: miscOptions, scale: hudScale, background: textBackground)
         let detailValues = Array(ramDetailLabels.values)
             + [ramSwapValueLabel, ramPressureValueLabel].compactMap { $0 }
         for label in detailValues { label.font = ramDetailsFont }
@@ -1337,11 +1353,18 @@ final class HUDWindowController {
         powerTrailingConstraints[.aneTotal]?.constant = cpuPowerRight
         packageTrailingConstraint?.constant = cpuPowerRight
 
-        batteryIndicator.alignTemperature(trailingInset: batteryTemperatureTrailingInset)
+        // Prefer CPU so battery flow also lines up with ANE and SOC. When a
+        // complete reference row is hidden, retain compact local battery columns.
+        let reference = [HUDMetric.cpuTotal, .gpuTotal].first {
+            enabledMetrics.contains($0) && temperatureMetrics.contains($0) && !hiddenUtilizationMetrics.contains($0)
+        }
+        batteryIndicator.alignVerticalReadings(
+            powerTrailingInset: reference.flatMap { powerTrailingConstraints[$0]?.constant }.map { readingColumnRight - $0 },
+            temperatureTrailingInset: reference.flatMap { temperatureTrailingConstraints[$0]?.constant }.map { readingColumnRight - $0 })
     }
 
     // Use the same reserved column in both layouts, independent of window width.
-    private var batteryTemperatureTrailingInset: CGFloat? {
+    private var batteryReadingTrailingInset: CGFloat? {
         guard let reference = [HUDMetric.gpuTotal, .cpuTotal].first(where: {
             enabledMetrics.contains($0) && temperatureMetrics.contains($0) && !hiddenUtilizationMetrics.contains($0)
         }) else { return nil }
@@ -1353,7 +1376,7 @@ final class HUDWindowController {
 
     private func refreshHorizontalReadings(forceLayout: Bool = false) {
         guard alignment == .horizontal else { return }
-        horizontalView.battery.alignTemperature(trailingInset: batteryTemperatureTrailingInset)
+        horizontalView.battery.alignTrailingReading(trailingInset: batteryReadingTrailingInset)
         var sections: [[HUDHorizontalView.Reading]] = []
         for metrics in metricGroups {
             var readings: [HUDHorizontalView.Reading] = []
@@ -1483,6 +1506,7 @@ final class HUDWindowController {
     }
 
     private func metricRowHeight(_ metric: HUDMetric, scale: HUDScale) -> CGFloat {
+        if metric == .misc { return miscView.height(scale: scale) }
         if metric == .fans { return fanView.height(scale: scale) }
         if !showsRAMDetails && (metric == .ram || metric == .ramTotal) {
             return HUDStyle.rowHeight(scale: scale)
@@ -1569,98 +1593,13 @@ final class HUDWindowController {
             + spacingHeight
             + verticalPadding
 
-        // Keep the compact columns wide enough for the enabled metrics.
-        var valueColumnRight =
-            HUDStyle.valueColumnRight(scale: hudScale)
-
-        for metric in enabledMetrics {
-            guard let titleLabel = titleLabels[metric] else {
-                continue
-            }
-
-            let sampleValue = NSTextField(
-                labelWithString: "100%"
-            )
-            sampleValue.font = readingFont(for: metric, kind: .totalUse)
-
-            let requiredWidth =
-                titleLabel.intrinsicContentSize.width
-                + HUDStyle.metricColumnSpacing(scale: hudScale)
-                + sampleValue.intrinsicContentSize.width
-
-            valueColumnRight = max(valueColumnRight, requiredWidth)
-        }
-
-        if enabledMetrics.contains(.battery) {
-            valueColumnRight = max(valueColumnRight, batteryIndicator.minimumRowWidth)
-        }
-
-        if enabledMetrics.contains(.deviceInfo) {
-            let requiredWidth = deviceInfoLabels.reduce(CGFloat.zero) { $0 + $1.intrinsicContentSize.width }
-                + HUDStyle.metricColumnSpacing(scale: hudScale)
-            valueColumnRight = max(valueColumnRight, requiredWidth)
-        }
-
-        let expandedBaseWidth = HUDStyle.expandedValueColumnRight(valueColumnRight, scale: hudScale)
-        for metric in temperatureMetrics.union(powerMetrics).intersection(enabledMetrics) {
-            let temperature = NSTextField(labelWithString: "149°C")
-            temperature.font = temperatureFont(for: metric)
-            let usage = NSTextField(labelWithString: "100%")
-            usage.font = readingFont(for: metric, kind: .totalUse)
-            let gap = HUDStyle.metricColumnSpacing(scale: hudScale)
-            let power = NSTextField(labelWithString: "999.9 W")
-            power.font = powerFont(for: metric)
-            let titleWidth = max(titleLabels[metric]?.intrinsicContentSize.width ?? 0,
-                metric == .cpuTotal && showsPackagePower ? packageTitleLabel?.intrinsicContentSize.width ?? 0 : 0)
-            let required = titleWidth
-                + (powerMetrics.contains(metric) ? gap + power.intrinsicContentSize.width : 0)
-                + (temperatureMetrics.contains(metric) ? gap + temperature.intrinsicContentSize.width : 0)
-                + (hiddenUtilizationMetrics.contains(metric) ? 0 : gap + usage.intrinsicContentSize.width)
-            valueColumnRight = max(valueColumnRight, required)
-        }
-
-        // ANE and Package share CPU's watts column even when their fonts differ.
-        // Reserve enough room to the left of that column for their titles/values.
-        if enabledMetrics.contains(.aneTotal) && powerMetrics.contains(.aneTotal) || showsPackagePower {
-            let gap = HUDStyle.metricColumnSpacing(scale: hudScale)
-            func width(_ text: String, _ font: NSFont) -> CGFloat {
-                let label = NSTextField(labelWithString: text)
-                label.font = font
-                return label.intrinsicContentSize.width
-            }
-            let cpuVisible = enabledMetrics.contains(.cpuTotal)
-            let cpuSuffix = cpuVisible
-                ? (temperatureMetrics.contains(.cpuTotal) ? gap + width("149°C", temperatureFont(for: .cpuTotal)) : 0)
-                    + (hiddenUtilizationMetrics.contains(.cpuTotal) ? 0 : gap + width("100%", readingFont(for: .cpuTotal, kind: .totalUse)))
-                : 0
-            if enabledMetrics.contains(.aneTotal) && powerMetrics.contains(.aneTotal) {
-                valueColumnRight = max(valueColumnRight, (titleLabels[.aneTotal]?.intrinsicContentSize.width ?? 0)
-                    + gap + width("999.9 W", powerFont(for: .aneTotal)) + cpuSuffix)
-            }
-            if showsPackagePower, let font = packageValueLabel?.font {
-                valueColumnRight = max(valueColumnRight, (packageTitleLabel?.intrinsicContentSize.width ?? 0)
-                    + gap + width("999.9 W", font) + cpuSuffix)
-            }
-        }
-
-        // Power adds another value column, not another large block of empty space.
-        // Retain the normal expanded width, growing only enough to fit the readings.
-        if showsPackagePower || !powerMetrics.intersection(enabledMetrics).isEmpty {
-            valueColumnRight = max(valueColumnRight, expandedBaseWidth)
-        } else {
-            valueColumnRight = HUDStyle.expandedValueColumnRight(valueColumnRight, scale: hudScale)
-        }
-
+        // The vertical footprint depends only on scale, not the selected
+        // categories, readings, emphasis, or current values. FPS Value alone
+        // retains its deliberately compact presentation.
         let fpsOnly = enabledMetrics == [.fps] && !showsPackagePower
-        if !fpsOnly {
-            // Widen the established label-to-value gap by another 10% (1.188 × 1.10 = 1.3068),
-            // keeping spacing within the readings and the outside padding unchanged.
-            valueColumnRight = HUDStyle.expandedValueColumnRight(valueColumnRight, scale: hudScale, gapIncrease: 0.3068)
-        }
-        if fpsOnly {
-            valueColumnRight = HUDStyle.compactFPSValueColumnRight(scale: hudScale)
-        }
-
+        let valueColumnRight = fpsOnly
+            ? HUDStyle.compactFPSValueColumnRight(scale: hudScale)
+            : HUDStyle.verticalValueColumnRight(scale: hudScale)
         readingColumnRight = valueColumnRight
         updateReadingPositions()
 
@@ -1958,9 +1897,17 @@ final class HUDWindowController {
         )
     }
 
-    func updateBattery(_ sample: BatterySample?) {
-        horizontalView.battery.update(percentage: sample?.percentage, source: sample?.source, temperature: sample?.temperature)
-        batteryIndicator.update(percentage: sample?.percentage, source: sample?.source, temperature: sample?.temperature)
+    func updateBattery(_ sample: BatterySample?, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        horizontalView.battery.update(percentage: sample?.percentage, source: sample?.source,
+            temperature: sample?.temperature, power: sample?.power, now: now)
+        batteryIndicator.update(percentage: sample?.percentage, source: sample?.source,
+            temperature: sample?.temperature, power: sample?.power, now: now)
+        if alignment == .horizontal, enabledMetrics.contains(.battery),
+           horizontalView.battery.frame.width != ceil(horizontalView.battery.minimumRowWidth) {
+            // Resize on the Auto visibility transition, including battery-only
+            // HUDs that have no other metric updates to refresh their layout.
+            refreshHorizontalReadings()
+        }
     }
 
     func setBatteryOptions(_ options: HUDBatteryOptions) {
@@ -2001,6 +1948,19 @@ final class HUDWindowController {
         valueLabels[metric]?.stringValue = usage.map { "\(Int($0.percentage.rounded()))%" } ?? ""
         ramDetailLabels[metric]?.stringValue = usage?.gigabytesText ?? ""
         if metric == .ramTotal { ramSwapValueLabel?.stringValue = usage?.swapGigabytesText ?? "" }
+    }
+
+    // MARK: - Misc
+
+    func setMiscOptions(_ options: HUDMiscOptions) {
+        miscOptions = options
+        miscView.configure(options: options, scale: hudScale, background: textBackground)
+        rowHeightConstraints[.misc]?.constant = miscView.height(scale: hudScale)
+        setMetricEnabled(.misc, enabled: alignment.allows(.misc) && !options.visibleReadings.isEmpty)
+    }
+
+    func updateMisc(_ sample: HUDMiscSample) {
+        miscView.update(sample)
     }
 
     // MARK: - FPS

@@ -6,7 +6,7 @@ final class HUDPackagePowerMenuView: NSView {
     var onPowerSetup: (() -> Void)?
     private var helperAvailability: PowerHelperAvailability = .idle
     private var options: HUDPackagePowerOptions
-    private let checkbox = HUDReadingCheckbox(title: "SoC Power")
+    private let checkbox = HUDReadingCheckbox(title: "SoC combined")
 
     init(options: HUDPackagePowerOptions) {
         self.options = options
@@ -17,7 +17,7 @@ final class HUDPackagePowerMenuView: NSView {
         checkbox.font = .menuFont(ofSize: 0)
         checkbox.target = self
         checkbox.action = #selector(changed)
-        checkbox.setControlAccessibilityLabel("SoC Power")
+        checkbox.setControlAccessibilityLabel("SoC combined")
         checkbox.onHighlight = { [weak self] in self?.highlightChanged() }
         checkbox.translatesAutoresizingMaskIntoConstraints = false
         addSubview(checkbox)

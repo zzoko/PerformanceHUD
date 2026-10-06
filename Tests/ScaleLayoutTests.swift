@@ -25,6 +25,7 @@ import AppKit
   let graph: HUDFPSGraphView = member(hud, "fpsGraphView")
   for index in 0..<60 { graph.append(144 + sin(Double(index) / 4) * 10) }
   var issues = Set<String>()
+  var verticalWidths: [HUDScale: CGFloat] = [:]
   func check(_ value: Bool, _ message: String) { if !value { issues.insert(message) } }
   for alignment in HUDAlignment.allCases {
    hud.setAlignment(alignment)
@@ -45,10 +46,15 @@ import AppKit
       for metric in [HUDMetric.ramTotal, .ram] {
        hud.updateRAM(metric, usage: .init(percentage: 100, usedBytes: 128 * 1_073_741_824, swapUsedBytes: 32 * 1_073_741_824))
       }
-      hud.updateBattery(.init(percentage: 100, source: .powerAdapter, temperature: 39))
+      hud.updateBattery(.init(percentage: 100, source: .powerAdapter, temperature: 39, power: -99.9))
       hud.updateMemoryPressure("normal")
       panel.contentView?.layoutSubtreeIfNeeded()
       let original = panel.frame.size
+      if alignment == .vertical {
+       if let expected = verticalWidths[scale] {
+        check(original.width == expected, "Vertical options/emphasis resized at \(scale.rawValue)")
+       } else { verticalWidths[scale] = original.width }
+      }
       hud.updateMemoryPressure("critical")
       panel.contentView?.layoutSubtreeIfNeeded()
       check(panel.frame.size == original, "Pressure resized \(alignment) at \(scale.rawValue)")

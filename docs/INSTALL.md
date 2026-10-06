@@ -32,7 +32,7 @@ Background activity approval allows PerformanceHUD’s power helper to provide C
 
 You can choose **Not Now** and continue using the other metrics. If setup is declined, approval is missing, the helper is removed, or it repeatedly fails to respond, Power checkboxes turn off and appear muted. They remain clickable while their category is enabled: click **Power** to open setup, repair, or approval settings. Successful setup or later approval enables these options again. Brief startup delays or missing samples do not change your selections. Use **Power Helper → Set Up Power Readings…** in the menu to enable watts later, or **Remove Power Helper** to unregister it. Sampling stops when no selected category needs Power, when the HUD is disabled, or when the app is closed. It also pauses while fully auto-hidden, unless logging is active. The installed helper is otherwise idle.
 
-CPU, GPU, ANE, and SoC watts all use this helper. ANE shows power only; utilization percentage, temperature, and focused-app usage are not offered. SoC Power is the combined CPU, GPU, and Neural Engine estimate, not whole-Mac power consumption. Its checkbox works independently of the individual Power options and is available in both Vertical and Horizontal alignment. Missing or unsupported readings stay blank.
+CPU, GPU, ANE, and SoC watts all use this helper. ANE shows power only; utilization percentage, temperature, and focused-app usage are not offered. SoC combined is the combined CPU, GPU, and Neural Engine estimate, not whole-Mac power consumption. Its checkbox works independently of the individual Power options and is available in both Vertical and Horizontal alignment. Battery Charge watts use separate read-only sensors and do not need the helper. Missing or unsupported readings stay blank.
 
 An approved helper shows **Power helper idle** with normal-looking Power checkboxes when sampling is off. When sampling is requested, it shows **Starting power readings…** until its first valid sample arrives. If macOS remembers approval but cannot launch the helper, the app attempts to refresh that existing registration once. It does not bypass macOS approval.
 
@@ -51,7 +51,7 @@ Before deleting the app, choose **Power Helper → Remove Power Helper**, wait f
 <details>
 <summary><strong>Watch the installation walkthrough</strong></summary>
 
-Watch a quick walkthrough of installing the app and granting macOS permissions the first time. These are remembered for later launches. When updating the app, you usually only need to approve the updated power helper if prompted. The exact prompts and order may vary. The video shows an older version; its Screen Recording approval steps are no longer needed with native Liquid Glass.
+Installing app and granting macOS permissions the first time. These are remembered for later launches. When updating the app, you usually only need to approve the updated power helper if prompted. The video shows an older version; its Screen Recording approval steps are no longer needed with native Liquid Glass.
 
 [![Watch the PerformanceHUD installation walkthrough on YouTube](https://img.youtube.com/vi/7mou4dwnUpE/hqdefault.jpg)](https://youtu.be/7mou4dwnUpE)
 
@@ -72,7 +72,7 @@ Watch a quick walkthrough of installing the app and granting macOS permissions t
 2. Open **PerformanceHUD.xcodeproj** in an Xcode version that includes the macOS 27 SDK or newer.
 3. Select each target, **PerformanceHUD** and **PowerHelper**, then **Signing & Capabilities**. Replace the author's saved development team with your own team and use matching Apple signing certificates for both. You do not need the author's signing credentials. Ad-hoc (unsigned/local-only) builds can use other metrics but cannot enable the power helper.
 4. Select the **PerformanceHUD** scheme and **My Mac**, then choose **Product → Run**.
-5. Follow **Allow Background App Activity** above for watt readings. Native Liquid Glass needs no Screen Recording approval.
+5. Follow **Allow Background App Activity** above for CPU, GPU, ANE, and SoC watt readings. Battery Charge works without the helper. Native Liquid Glass needs no Screen Recording approval.
 
 A locally compiled app generally does not need the downloaded-app Gatekeeper exception. Xcode is required to build the source, not to follow the downloaded-app installation steps.
 
@@ -88,7 +88,7 @@ python3 Tests/run-power-lifecycle-tests.py
 python3 -B -m unittest discover -s .github/tests -p 'test_*.py'
 ```
 
-The app checks cover power parsing and recovery, fan detection and layouts, saved preferences, Follow system, menu alignment, the full size range, FPS history, Auto hide and its independent animation setting, fullscreen window geometry, native glass geometry and refresh-listener lifecycle, and CSV logging, formatting, and save recovery. They use simulated data, need no administrator approval, and do not register the app’s power helper. The power lifecycle check also creates and removes a temporary LaunchAgent in your user session to verify child-process cleanup. The repository-activity checks cover the README graph.
+The app checks cover power parsing and recovery, battery Charge modes and live sampling, fan detection and layouts, Misc readings, custom hotkeys, saved preferences, Follow system, menu alignment, the full size range, FPS history, Auto hide and its independent animation setting, fullscreen window geometry, native glass geometry and refresh-listener lifecycle, and CSV logging, formatting, and save recovery. They mainly use simulated data; the battery check also samples local sensors, and the hotkey check briefly registers test combinations. They need no administrator approval and do not register the app’s power helper. The power lifecycle check creates and removes a temporary LaunchAgent in your user session to verify child-process cleanup. The repository-activity checks cover the README graph.
 
 Test files are not included in the app. Actual sensor readings and macOS approval should also be checked with an exported app on suitable hardware. Add `--probe` to `sh Tests/run-fan-tests.sh` to read the local Mac’s fan sensors. `sh Tests/run-native-glass-tests.sh --probe` also checks refresh-listener registration; it does not measure game FPS.
 

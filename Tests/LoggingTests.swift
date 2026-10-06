@@ -34,7 +34,7 @@ import AppKit
             .cpuPower, .cpuTemperature, .cpuUsage, .anePower, .socPower,
             .memoryPhysical, .memorySwap, .memoryPressure, .memoryAppPhysical, .memoryUsage, .memoryAppUsage,
             .fanUsage(0), .fanRPM(0), .fanUsage(1), .fanRPM(1), .powerSource,
-            .batteryCharge, .lowPowerMode, .batteryTemperature, .chip, .os]
+            .batteryPower, .batteryTemperature, .batteryCharge, .lowPowerMode, .chip, .os]
         check(selection.columns(fanSample: fans) == expected, "Columns must follow menu order with individual fans sorted")
         selection.resources[.gpu]?.enabled = false
         selection.resources[.ram]?.setUsagePresentation(visible: false, highlighted: false)
@@ -62,7 +62,14 @@ import AppKit
         snapshot.updateMemory(.init(percentage: 51.25, usedBytes: 2_147_483_648, swapUsedBytes: 0), app: false)
         snapshot.updateMemory(.init(percentage: 20, usedBytes: 1_073_741_824), app: true)
         snapshot.updateFans(fans)
-        snapshot.updateBattery(.init(percentage: 95, source: .powerAdapter, temperature: nil))
+        snapshot.updateBattery(.init(percentage: 95, source: .powerAdapter, temperature: nil, power: -12.3467))
+        check(snapshot.values[.batteryPower] == "-12.35", "Battery discharge stays negative on an adapter")
+        selection.battery.flowMode = .auto
+        check(selection.columns(fanSample: fans).contains(.batteryPower), "Auto keeps logging enabled while hidden")
+        snapshot.updateBattery(.init(percentage: 95, source: .powerAdapter, power: 0))
+        check(snapshot.values[.batteryPower] == "0.00", "Auto records real zeros rather than display blanks")
+        selection.battery.flowMode = .off
+        check(!selection.columns(fanSample: fans).contains(.batteryPower), "Off excludes battery flow from logging")
         check(snapshot.values[.memoryPhysical] == "2.00" && snapshot.values[.memoryAppPhysical] == "1.00")
         check(snapshot.values[.memorySwap] == "0.00")
         check(snapshot.values[.fanRPM(0)] == "0" && snapshot.values[.fanUsage(1)] == "50.0")
@@ -78,7 +85,7 @@ import AppKit
 
         // Exercise every numeric kind, including averages and per-app readings.
         let precisionGroups: [([HUDLogColumn], String)] = [
-            ([.fps, .gpuPower, .cpuPower, .anePower, .socPower, .memoryPhysical, .memorySwap, .memoryAppPhysical], "12.35"),
+            ([.fps, .gpuPower, .cpuPower, .anePower, .socPower, .batteryPower, .memoryPhysical, .memorySwap, .memoryAppPhysical], "12.35"),
             ([.gpuTemperature, .cpuTemperature, .batteryTemperature, .gpuUsage, .gpuAppUsage,
               .cpuUsage, .cpuAppUsage, .memoryUsage, .memoryAppUsage, .fanUsage(0), .fanAverageUsage, .batteryCharge], "12.3"),
             ([.fanRPM(0), .fanAverageRPM], "12")

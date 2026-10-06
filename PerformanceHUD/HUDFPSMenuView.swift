@@ -36,7 +36,7 @@ final class HUDFPSMenuView: NSView {
     init(options: HUDFPSOptions, alignment: HUDAlignment) {
         self.options = options
         self.alignment = alignment
-        super.init(frame: NSRect(x: 0, y: 0, width: 480, height: 34))
+        super.init(frame: NSRect(x: 0, y: 0, width: 480, height: 40))
         autoresizingMask = [.width]
         master.target = self
         master.action = #selector(toggleCategory)
@@ -60,18 +60,18 @@ final class HUDFPSMenuView: NSView {
             master.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             master.widthAnchor.constraint(equalToConstant: HUDResourceMenuView.masterWidth),
             master.topAnchor.constraint(equalTo: topAnchor),
-            master.bottomAnchor.constraint(equalTo: bottomAnchor),
+            master.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
             valueHighlight.leadingAnchor.constraint(equalTo: control.leadingAnchor, constant: 2),
             valueHighlight.widthAnchor.constraint(equalTo: control.widthAnchor, multiplier: 1.0 / 3.0, constant: -4),
             valueHighlight.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
             valueHighlight.heightAnchor.constraint(equalToConstant: 6),
             control.leadingAnchor.constraint(equalTo: master.trailingAnchor, constant: 8),
-            control.centerYAnchor.constraint(equalTo: centerYAnchor),
+            control.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
             control.widthAnchor.constraint(equalToConstant: HUDResourceMenuView.readingsChoicesWidth),
             control.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12)
         ])
         setFrameSize(NSSize(width: 8 + HUDResourceMenuView.masterWidth + 8
-            + HUDResourceMenuView.readingsChoicesWidth + 12, height: 34))
+            + HUDResourceMenuView.readingsChoicesWidth + 12, height: 40))
         refresh()
     }
 

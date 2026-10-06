@@ -4,6 +4,9 @@ import AppKit
 final class HUDPanel: NSPanel {
     var onDragFinished: (() -> Void)?
     var draggableContentRect: NSRect?
+    var dragModifier: HUDDragModifier = .option {
+        didSet { updateMouseAccess() }
+    }
     private var modifierTimer: Timer?
     private var dragging = false
 
@@ -17,8 +20,8 @@ final class HUDPanel: NSPanel {
         frameRect
     }
 
-    static func dragModifiersHeld(_ flags: NSEvent.ModifierFlags) -> Bool {
-        flags.intersection([.control, .option, .command, .shift]) == [.control, .option, .command]
+    static func dragModifiersHeld(_ flags: NSEvent.ModifierFlags, modifier: HUDDragModifier = .option) -> Bool {
+        flags.intersection([.control, .option, .command, .shift]) == modifier.flags
     }
 
     func startModifierTracking() {
@@ -45,11 +48,11 @@ final class HUDPanel: NSPanel {
             onDragFinished?()
         }
         let insideContent = draggableContentRect.map { $0.contains(convertPoint(fromScreen: NSEvent.mouseLocation)) } ?? true
-        ignoresMouseEvents = !isVisible || (!dragging && (!insideContent || !Self.dragModifiersHeld(NSEvent.modifierFlags)))
+        ignoresMouseEvents = !isVisible || (!dragging && (!insideContent || !Self.dragModifiersHeld(NSEvent.modifierFlags, modifier: dragModifier)))
     }
 
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .leftMouseDown && Self.dragModifiersHeld(event.modifierFlags)
+        if event.type == .leftMouseDown && Self.dragModifiersHeld(event.modifierFlags, modifier: dragModifier)
             && (draggableContentRect?.contains(event.locationInWindow) ?? true) {
             dragging = true
             performDrag(with: event)

@@ -15,6 +15,7 @@ enum HUDMetric: Int, CaseIterable, Hashable {
     case deviceInfo
     case aneTotal = 11
     case fans = 12
+    case misc = 13
 
     // MARK: - Menu Titles
 
@@ -57,6 +58,8 @@ enum HUDMetric: Int, CaseIterable, Hashable {
 
         case .deviceInfo:
             return "Chip & OS"
+        case .misc:
+            return "Misc"
         }
     }
 
@@ -101,6 +104,8 @@ enum HUDMetric: Int, CaseIterable, Hashable {
 
         case .deviceInfo:
             return "Chip & OS"
+        case .misc:
+            return "Misc"
         }
     }
 

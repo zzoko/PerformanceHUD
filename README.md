@@ -1,17 +1,17 @@
 # PerformanceHUD
 
-## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version.svg" alt="App version 1.8 — view changelog" width="56" height="30" align="top"></a>
+## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version.svg" alt="App version 1.9 — view changelog" width="56" height="30" align="top"></a>
 
-Get the ready-built app for a one-time **$3.99**, or build it yourself for free. Both offer the same features, with no subscription or feature unlocks.
+Download the ready-built app for **$3.99**, or build it yourself for free. Both offer the same features, with no subscription or feature unlocks.
 
 <p>
   <a href="https://ko-fi.com/s/01a23ddc51"><img src="docs/images/download-kofi.svg" alt="Download app on Ko-fi — $3.99 one-time" width="250" height="64"></a>&nbsp;
   <a href="docs/INSTALL.md#build-from-source"><img src="docs/images/build-from-source.svg" alt="Build it yourself — free, requires Xcode" width="250" height="64"></a>
 </p>
 
-Purchases support me and the continuing of maintenance and development of PerformanceHUD. The paid app can be used personally or commercially, including in monetized videos and streams. Free source builds and modifications are for **personal, non-commercial use**. Resale and external redistribution are not permitted. See the [license](LICENSE) for details.
+Purchases support me and the continuation of maintaining PerformanceHUD. The paid app can be used personally or commercially, including in monetized videos and streams. Free source builds and modifications are for **personal, non-commercial use**. Resale and external redistribution are not permitted. See the [license](LICENSE) for details.
 
-If you prefer to build the app yourself but would still like to support it, **GitHub Sponsorships** will offer another way to contribute. A link will be added once approved.
+If you prefer to build the app yourself but would still like to support it, **GitHub Sponsorships** will offer another way to contribute, it will be added later.
 
 ![Repository activity: daily Git clones over the last 14 days](https://raw.githubusercontent.com/zzoko/PerformanceHUD/stats/repository-activity.svg)
 
@@ -24,9 +24,9 @@ If you prefer to build the app yourself but would still like to support it, **Gi
 <details>
 <summary><strong>Take a closer look — features, screenshots &amp; controls</strong></summary>
 
-PerformanceHUD is a tiny (<4 MB) app that displays a performance overlay over games and apps. You can use it as just an FPS display, or also show CPU, GPU, and memory usage, temperatures, power readings, fan speeds, and battery information for a deeper overview of how your Mac is handling the workload.
+PerformanceHUD is a tiny (<4 MB) app that displays a performance overlay over games and apps. You can use it as just an FPS display, or also show CPU, GPU, and memory usage, temperatures, power readings, fan speeds, and battery information for a deeper overview of how your Mac is handling the workload. Optional readings include battery charging/discharging watts, the focused process, Metal output resolution, display refresh rate, experimental Game Mode status, and thermal state.
 
-The HUD is customized from the menu bar. You can choose which readings to display and highlight, swap between vertical and horizontal layouts, adjust the size and appearance, and move the overlay where you want it. You can also turn it on and off at any time, even if the game is already running, or log selected readings to a CSV for spreadsheets and graphs. There’s a built-in Controls Guide explaining in detail what each option in the menu does and how it works.
+The HUD is customized from the menu bar. You can choose which readings to display and highlight, swap between vertical and horizontal layouts, adjust the size and appearance, and move the overlay where you want it. You can also turn it on and off at any time, even if the game is already running, or log selected readings to a CSV for spreadsheets and graphs. Editable hotkeys let you show/hide the HUD, start/stop logging, and cycle appearance. There’s a built-in Controls Guide explaining in detail what each option in the menu does and how it works.
 
 I’ve put a lot of thought into keeping the overlay easy to read and the controls organized, even as more features have been added. Attention to detail and making something genuinely useful that I would want to use myself and would improve my macOS experience have been the goal. There are many small details, from the battery icon dynamically changing with your Mac’s power state to Apple’s Liquid Glass effect that lets the HUD blend naturally into whatever’s on screen.
 

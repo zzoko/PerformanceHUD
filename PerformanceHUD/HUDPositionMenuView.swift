@@ -5,8 +5,9 @@ final class HUDPositionMenuView: NSView {
     var onReset: (() -> Void)?
     var onResetSize: (() -> Void)?
     var onResetOptions: (() -> Void)?
+    private let hint = NSTextField(labelWithString: "")
 
-    init() {
+    init(dragModifier: HUDDragModifier = .option) {
         super.init(frame: NSRect(x: 0, y: 0, width: 290, height: 56))
         // Let NSMenu expand this row to its full width.
         autoresizingMask = [.width]
@@ -34,11 +35,10 @@ final class HUDPositionMenuView: NSView {
         stack.alignment = .centerY
         stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
-        let hint = NSTextField(labelWithString: "⌃⌥⌘ + drag")
         hint.font = .menuFont(ofSize: 0)
         // Match the faint native keyboard equivalent beside Enable/Disable.
         hint.textColor = .tertiaryLabelColor
-        hint.setAccessibilityLabel("Hold Control, Option, and Command and drag the HUD to move it. Release all three keys after dragging to prevent automatic snapping to the grid.")
+        setDragModifier(dragModifier)
         hint.setContentCompressionResistancePriority(.required, for: .horizontal)
         hint.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
@@ -59,6 +59,11 @@ final class HUDPositionMenuView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setDragModifier(_ modifier: HUDDragModifier) {
+        hint.stringValue = "\(modifier.symbol) + drag"
+        hint.setAccessibilityLabel("Hold \(modifier.name) and drag the HUD with the left mouse button to move it. Release \(modifier.name) after dragging to prevent automatic snapping to the grid.")
+    }
 
     @objc private func sizeClicked(_ sender: NSButton) { onResetSize?() }
 

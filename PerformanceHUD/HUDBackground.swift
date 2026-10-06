@@ -7,6 +7,14 @@ enum HUDBackground: String, CaseIterable {
 
     static let menuOptions: [HUDBackground] = [.light, .dark]
 
+    var next: HUDBackground {
+        switch self {
+        case .light: return .dark
+        case .dark: return .system
+        case .system: return .light
+        }
+    }
+
     var menuTitle: String {
         switch self {
         case .light: return "Light"

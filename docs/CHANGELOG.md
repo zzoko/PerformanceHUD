@@ -2,6 +2,14 @@
 
 [← Back to README](../README.md)
 
+### v1.9
+
+- Added **Edit hotkeys** for showing/hiding the HUD, starting/stopping logging, and cycling Light / Dark / Follow system. Defaults are **Option–H**, **Option–L**, and **Option–A**, with saved custom combinations, clearing, and a separate reset to defaults. Moving the HUD defaults to **Option + drag**, with a choice of Option, Control, Shift, or Command and a matching menu hint.
+- Added an optional **Misc** category for the focused process, Metal output resolution, display refresh rate, experimental Game Mode status, and macOS thermal state, with independent reading buttons and CSV logging support. Disabled by default and available in Vertical alignment only.
+- Added a battery Charge reading, showing charging or discharging in watts, with Always / Auto / Off modes, independent emphasis, and CSV logging. Auto is the default: idle readings keep their space in Vertical, while Horizontal reclaims it until charging or discharging resumes. Samples live battery voltage and current once per second, with a battery-controller fallback. Reorganized the Battery controls; remaining readings move right when an option is turned off.
+- Kept the Vertical HUD width consistent when toggling readings and categories; FPS Value alone retains its compact layout.
+- Refined Battery and fan controls, shortened **Usage** to **Use**, and renamed **SoC Power** to **SoC combined**. Usage emphasis is off by default; existing saved choices are preserved.
+
 ### v1.8
 
 - Added **Start / Stop logging** for selected HUD readings, sampled once per second into a CSV for spreadsheets and graphs. Logs save to the Desktop when stopped, when the HUD is disabled, or when the app quits; unavailable values stay blank. Includes an independent first-use explanation and recovery files if saving fails.

@@ -12,6 +12,7 @@ final class AppDelegate:
         HUDWindowController?
 
     private var controlsGuide: HUDControlsGuide?
+    private var hotkeyEditor: HUDHotkeyEditor?
 
     // MARK: - FPS
 
@@ -54,13 +55,14 @@ final class AppDelegate:
 
     private var currentPID:
         pid_t?
+    private let miscMonitor = HUDMiscMonitor()
 
     // MARK: - Menu Bar
 
     private var statusItem:
         NSStatusItem?
 
-    private let toggleShortcut = HUDToggleShortcut()
+    private let hotkeys = HUDHotkeyMonitor()
 
     private var hudVisibilityMenuItem:
         NSMenuItem?
@@ -74,7 +76,9 @@ final class AppDelegate:
         HUDSizeMenuView?
 
     private var fpsMenuView: HUDFPSMenuView?
+    private var miscMenuView: HUDMiscMenuView?
     private var backgroundMenuView: HUDBackgroundMenuView?
+    private var positionMenuView: HUDPositionMenuView?
 
     private var backgroundStatusItem: NSMenuItem?
     private var backgroundRetryItem: NSMenuItem?
@@ -104,6 +108,7 @@ final class AppDelegate:
     private let csvLogger = HUDCSVLogger()
     private var logSnapshot = HUDLogSnapshot()
     private var loggingMenuItem: NSMenuItem?
+    private var loggingActionPending = false
 
     // MARK: - Launch
 
@@ -165,10 +170,14 @@ final class AppDelegate:
 
         // Battery
         setupBatteryMonitor()
+        miscMonitor.onUpdate = { [weak self] sample in
+            self?.hudWindow?.updateMisc(sample)
+            self?.logSnapshot.updateMisc(sample)
+        }
 
         // Menu
         setupMenuBar()
-        setupHUDShortcut()
+        setupHUDShortcuts()
 
         // Active app detection
         setupApplicationMonitoring()
@@ -191,11 +200,13 @@ final class AppDelegate:
 
         let hud =
             HUDWindowController()
+        hud.setDragModifier(hotkeys.settings.dragModifier)
         for group in HUDResourceGroup.allCases {
             hud.setResourceOptions(HUDPreferences.resourceOptions(for: group), for: group)
         }
         hud.setBatteryOptions(HUDPreferences.batteryOptions)
         hud.setFanOptions(HUDPreferences.fanOptions)
+        hud.setMiscOptions(HUDPreferences.miscOptions)
 
         // Restore metric visibility.
         for metric in HUDMetric.allCases {
@@ -243,6 +254,7 @@ final class AppDelegate:
             }
 
             logSnapshot.set(.fps, metrics.fps)
+            miscMonitor.updateResolution(metrics.resolution)
             if let fps =
                 metrics.fps {
 
@@ -577,7 +589,8 @@ final class AppDelegate:
 
         // MARK: Reset
 
-        let positionView = HUDPositionMenuView()
+        let positionView = HUDPositionMenuView(dragModifier: hotkeys.settings.dragModifier)
+        positionMenuView = positionView
         positionView.onReset = { [weak self] in
             self?.hudWindow?.resetPosition()
         }
@@ -597,9 +610,7 @@ final class AppDelegate:
 
         let backgroundView = HUDBackgroundMenuView(selectedBackground: hudBackground)
         backgroundView.onBackgroundSelected = { [weak self] background in
-            self?.hudBackground = background
-            HUDPreferences.background = background
-            self?.hudWindow?.setBackground(background)
+            self?.setHUDBackground(background)
         }
         let backgroundItem = NSMenuItem()
         backgroundItem.view = backgroundView
@@ -727,6 +738,18 @@ final class AppDelegate:
         let batteryItem = NSMenuItem()
         batteryItem.view = batteryView
         menu.addItem(batteryItem)
+        let miscView = HUDMiscMenuView(options: HUDPreferences.miscOptions, alignment: HUDPreferences.alignment)
+        miscMenuView = miscView
+        miscView.onChange = { [weak self] options in
+            guard let self else { return }
+            HUDPreferences.miscOptions = options
+            enabledMetrics = HUDPreferences.visibleMetrics
+            hudWindow?.setMiscOptions(options)
+            reconcileMonitoring()
+        }
+        let miscItem = NSMenuItem()
+        miscItem.view = miscView
+        menu.addItem(miscItem)
         addMetric(.deviceInfo)
 
         // Separator before Close App.
@@ -758,6 +781,9 @@ final class AppDelegate:
         powerHelperApprovalItem = helperApproval
         powerHelperRemoveItem = helperRemove
         menu.addItem(helperItem)
+        let hotkeysItem = NSMenuItem(title: "Edit hotkeys…", action: #selector(editHotkeys), keyEquivalent: "")
+        hotkeysItem.target = self
+        menu.addItem(hotkeysItem)
         let guideItem = NSMenuItem(title: "Controls Guide…", action: #selector(showControlsGuide), keyEquivalent: "")
         guideItem.target = self
         menu.addItem(guideItem)
@@ -791,6 +817,16 @@ final class AppDelegate:
 
         self.statusItem =
             statusItem
+        updateHotkeyHints()
+    }
+
+    @objc private func editHotkeys() {
+        statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if hotkeyEditor == nil { hotkeyEditor = HUDHotkeyEditor(hotkeys: hotkeys) }
+            hotkeyEditor?.present()
+        }
     }
 
     @objc private func showControlsGuide() {
@@ -804,6 +840,7 @@ final class AppDelegate:
 
     func menuWillOpen(_ menu: NSMenu) {
         updateLoggingMenu()
+        updateHotkeyHints()
         let fan = HUDPreferences.fanOptions
         fanMonitor.configure(readings: readingsActive && fan.enabled && fan.usage)
         powerMonitor.helper.refreshStatus()
@@ -886,19 +923,37 @@ final class AppDelegate:
 
     @objc private func retryGlassSession() { hudWindow?.retryGlassSession() }
 
-    private func setupHUDShortcut() {
-        toggleShortcut.onToggle = { [weak self] in
-            self?.toggleHUD(nil)
+    private func setupHUDShortcuts() {
+        hotkeys.onPress = { [weak self] action in
+            guard let self else { return }
+            switch action {
+            case .visibility: toggleHUD(nil)
+            case .logging: toggleLogging()
+            case .appearance: setHUDBackground(hudBackground.next)
+            }
         }
-        let status = toggleShortcut.start()
-        if status == 0 {
-            // AppKit draws the right-aligned, subdued shortcut glyphs.
-            hudVisibilityMenuItem?.keyEquivalent = HUDToggleShortcut.menuKey
-            hudVisibilityMenuItem?.keyEquivalentModifierMask = HUDToggleShortcut.menuModifiers
-        } else {
-            hudVisibilityMenuItem?.toolTip = "Control + Option + Command + H could not be registered. Another app may be using it."
-            NSLog("PerformanceHUD: toggle shortcut registration failed (%d)", status)
+        hotkeys.onChange = { [weak self] in self?.updateHotkeyHints() }
+        hotkeys.start()
+    }
+
+    private func updateHotkeyHints() {
+        hudWindow?.setDragModifier(hotkeys.settings.dragModifier)
+        positionMenuView?.setDragModifier(hotkeys.settings.dragModifier)
+        for (action, item) in [(HUDHotkeyAction.visibility, hudVisibilityMenuItem), (.logging, loggingMenuItem)] {
+            let shortcut = hotkeys.isActive(action) ? hotkeys.settings[action] : nil
+            item?.keyEquivalent = shortcut?.menuKey ?? ""
+            item?.keyEquivalentModifierMask = shortcut?.menuModifiers ?? []
         }
+        hudVisibilityMenuItem?.toolTip = hotkeys.errors[.visibility]
+        backgroundMenuView?.toolTip = hotkeys.errors[.appearance]
+            ?? hotkeys.settings[.appearance].map { "Cycle appearance: \($0.displayName)" }
+    }
+
+    private func setHUDBackground(_ background: HUDBackground) {
+        hudBackground = background
+        HUDPreferences.background = background
+        hudWindow?.setBackground(background)
+        backgroundMenuView?.select(background)
     }
 
     // MARK: - Enable / Disable HUD
@@ -1010,6 +1065,7 @@ final class AppDelegate:
         }
         hudWindow?.setBatteryOptions(HUDPreferences.batteryOptions)
         hudWindow?.setFanOptions(HUDPreferences.fanOptions)
+        hudWindow?.setMiscOptions(HUDPreferences.miscOptions)
         hudWindow?.setPackagePowerOptions(HUDPreferences.packagePowerOptions)
         hudWindow?.setAutoHideAnimated(HUDPreferences.autoHideAnimated)
         hudWindow?.setAutoHideMode(HUDPreferences.autoHideMode)
@@ -1021,15 +1077,8 @@ final class AppDelegate:
         hudWindow?.setHUDEnabled(hudEnabled)
         reconcileMonitoring()
 
-        // Rebuild choices from the restored preferences, reusing the status item
-        // and preserving the existing keyboard-shortcut registration.
-        let shortcut = hudVisibilityMenuItem?.keyEquivalent ?? ""
-        let modifiers = hudVisibilityMenuItem?.keyEquivalentModifierMask ?? []
-        let shortcutHelp = hudVisibilityMenuItem?.toolTip
+        // Display reset preserves the independently saved hotkeys.
         setupMenuBar()
-        hudVisibilityMenuItem?.keyEquivalent = shortcut
-        hudVisibilityMenuItem?.keyEquivalentModifierMask = modifiers
-        hudVisibilityMenuItem?.toolTip = shortcutHelp
         updatePowerHelperMenu()
     }
 
@@ -1040,6 +1089,7 @@ final class AppDelegate:
         enabledMetrics = HUDPreferences.visibleMetrics
         hudWindow?.setAlignment(alignment)
         fpsMenuView?.update(options: HUDPreferences.fpsOptions, alignment: alignment)
+        miscMenuView?.update(alignment: alignment)
         updatePackagePowerMenu()
         for metric in [HUDMetric.deviceInfo] {
             guard let item = metricMenuItems[metric] else { continue }
@@ -1200,6 +1250,7 @@ final class AppDelegate:
 
         // Avoid restarting all selected-app
         // monitors for the same PID.
+        miscMonitor.setTarget(app)
         guard
             pid != currentPID
         else {
@@ -1241,6 +1292,7 @@ final class AppDelegate:
     }
 
     private func reconcileMonitoring() {
+        miscMonitor.configure(readingsActive && enabledMetrics.contains(.misc) ? HUDPreferences.miscOptions : HUDMiscOptions())
         var metrics = readingsActive ? enabledMetrics : []
         // CPU/GPU rows can stay visible without utilization. Memory sampling also
         // supplies Details, so it remains active for a Details-only row.
@@ -1265,6 +1317,7 @@ final class AppDelegate:
         if !readingsActive || !gpu.enabled || !gpu.temperature { logSnapshot.set(.gpuTemperature, nil) }
         if !readingsActive || !fan.enabled || !fan.usage { logSnapshot.updateFans(.unavailable) }
         if !HUDPreferences.batteryOptions.temperature { logSnapshot.set(.batteryTemperature, nil) }
+        if !HUDPreferences.batteryOptions.power { logSnapshot.set(.batteryPower, nil) }
         temperatureMonitor.configure(cpu: readingsActive && cpu.enabled && cpu.temperature,
                                      gpu: readingsActive && gpu.enabled && gpu.temperature)
         if metrics.contains(.gpuTotal) { totalGPUUsageMonitor?.start() }
@@ -1275,7 +1328,9 @@ final class AppDelegate:
         else { logSnapshot.updateMemory(nil, app: false); totalRAMUsageMonitor?.stop(); hudWindow?.updateRAM(.ramTotal, usage: nil) }
         if metrics.contains(.ramTotal) { memoryPressureMonitor?.start() }
         else { logSnapshot.setText(.memoryPressure, nil); memoryPressureMonitor?.stop(); hudWindow?.updateMemoryPressure("") }
-        if metrics.contains(.battery) { batteryMonitor?.start(temperature: HUDPreferences.batteryOptions.temperature) }
+        if metrics.contains(.battery) {
+            batteryMonitor?.start(temperature: HUDPreferences.batteryOptions.temperature, power: HUDPreferences.batteryOptions.power)
+        }
         else { logSnapshot.updateBattery(nil); batteryMonitor?.stop(); hudWindow?.updateMetric(.battery, value: "") }
 
         if metrics.contains(.gpu), let pid = currentPID { gpuUsageMonitor?.start(pid: pid) }
@@ -1286,12 +1341,15 @@ final class AppDelegate:
         else { logSnapshot.updateMemory(nil, app: true); ramUsageMonitor?.stop(); hudWindow?.updateRAM(.ram, usage: nil) }
         // Auto hide must keep detecting FPS even with the FPS category unchecked
         // and all other readings paused, otherwise the HUD could never reappear.
-        if hudEnabled && (HUDPreferences.autoHideMode == .all || metrics.contains(.fps) || metrics.contains(.fpsGraph)), let pid = currentPID {
+        let needsResolution = readingsActive && enabledMetrics.contains(.misc)
+            && HUDPreferences.miscOptions.visibleReadings.contains(.resolution)
+        if hudEnabled && (HUDPreferences.autoHideMode == .all || metrics.contains(.fps) || metrics.contains(.fpsGraph) || needsResolution), let pid = currentPID {
             do { try fpsMonitor?.start(pid: pid) }
-            catch { logSnapshot.set(.fps, nil); hudWindow?.markFPSUnavailable() }
+            catch { logSnapshot.set(.fps, nil); miscMonitor.updateResolution(nil); hudWindow?.markFPSUnavailable() }
         } else {
             fpsMonitor?.stop()
             logSnapshot.set(.fps, nil)
+            miscMonitor.updateResolution(nil)
             hudWindow?.resetFPS()
         }
     }
@@ -1304,9 +1362,12 @@ final class AppDelegate:
     }
 
     @objc private func toggleLogging() {
+        guard !loggingActionPending else { return }
+        loggingActionPending = true
         statusItem?.menu?.cancelTracking()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            defer { loggingActionPending = false }
             if csvLogger.isLogging { stopLogging(); return }
             guard hudEnabled else { return }
             var dismissExplanation = HUDPreferences.loggingExplanationDismissed
@@ -1393,10 +1454,11 @@ final class AppDelegate:
 
         stopLogging()
         temperatureMonitor.stop()
+        miscMonitor.stop()
         fanMonitor.stop()
         powerMonitor.stop()
         hudWindow?.shutdown()
-        toggleShortcut.stop()
+        hotkeys.stop()
 
         // FPS
         fpsMonitor?

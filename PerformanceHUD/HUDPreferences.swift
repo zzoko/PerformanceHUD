@@ -26,8 +26,9 @@ enum HUDPreferences {
         var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.fps.valueHighlighted", "hud.autoHide", "hud.autoHide.mode", "hud.autoHide.animated",
                     "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
+                    "hud.battery.power", "hud.battery.powerHighlighted", "hud.battery.flowMode",
                     "hud.group.ram.details", "hud.fan.usage", "hud.fan.mode",
-                    "hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted"]
+                    "hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted", "hud.misc.readings"]
         keys += HUDMetric.allCases.map { metricKey($0) }
         for group in HUDResourceGroup.allCases {
             keys += ["enabled", "temperature", "power", "highlighted", "usageMode"].map {
@@ -219,6 +220,22 @@ enum HUDPreferences {
 
     // MARK: - Metric Visibility
 
+    static var miscOptions: HUDMiscOptions {
+        get { miscOptions(in: defaults) }
+        set { setMiscOptions(newValue, in: defaults) }
+    }
+
+    static func miscOptions(in store: UserDefaults) -> HUDMiscOptions {
+        HUDMiscOptions(enabled: store.bool(forKey: metricKey(.misc)),
+            readings: store.stringArray(forKey: "hud.misc.readings")
+                .map { Set($0.compactMap(HUDMiscReading.init(rawValue:))) } ?? Set(HUDMiscReading.allCases))
+    }
+
+    static func setMiscOptions(_ options: HUDMiscOptions, in store: UserDefaults) {
+        store.set(options.enabled, forKey: metricKey(.misc))
+        store.set(options.readings.map(\.rawValue).sorted(), forKey: "hud.misc.readings")
+    }
+
     static func isMetricEnabled(
         _ metric: HUDMetric
     ) -> Bool {
@@ -301,18 +318,28 @@ enum HUDPreferences {
     }
 
     static var batteryOptions: HUDBatteryOptions {
-        HUDBatteryOptions(
-            enabled: isMetricEnabled(.battery),
-            temperature: defaults.object(forKey: "hud.battery.temperature") as? Bool ?? true,
-            charge: defaults.object(forKey: "hud.battery.charge") as? Bool ?? true,
-            temperatureHighlighted: defaults.bool(forKey: "hud.battery.temperatureHighlighted"))
+        batteryOptions(in: defaults)
     }
 
-    static func setBatteryOptions(_ options: HUDBatteryOptions) {
-        setMetricEnabled(.battery, enabled: options.enabled)
-        defaults.set(options.temperature, forKey: "hud.battery.temperature")
-        defaults.set(options.charge, forKey: "hud.battery.charge")
-        defaults.set(options.temperatureHighlighted, forKey: "hud.battery.temperatureHighlighted")
+    static func batteryOptions(in store: UserDefaults) -> HUDBatteryOptions {
+        HUDBatteryOptions(
+            enabled: store.object(forKey: metricKey(.battery)) as? Bool ?? HUDMetric.battery.defaultEnabled,
+            temperature: store.object(forKey: "hud.battery.temperature") as? Bool ?? true,
+            charge: store.object(forKey: "hud.battery.charge") as? Bool ?? true,
+            temperatureHighlighted: store.bool(forKey: "hud.battery.temperatureHighlighted"),
+            power: store.object(forKey: "hud.battery.power") as? Bool,
+            powerHighlighted: store.bool(forKey: "hud.battery.powerHighlighted"),
+            flowMode: store.string(forKey: "hud.battery.flowMode").flatMap(HUDBatteryFlowMode.init(rawValue:)))
+    }
+
+    static func setBatteryOptions(_ options: HUDBatteryOptions, in store: UserDefaults = .standard) {
+        store.set(options.enabled, forKey: metricKey(.battery))
+        store.set(options.temperature, forKey: "hud.battery.temperature")
+        store.set(options.charge, forKey: "hud.battery.charge")
+        store.set(options.temperatureHighlighted, forKey: "hud.battery.temperatureHighlighted")
+        store.set(options.power, forKey: "hud.battery.power")
+        store.set(options.powerHighlighted, forKey: "hud.battery.powerHighlighted")
+        store.set(options.flowMode.rawValue, forKey: "hud.battery.flowMode")
     }
 
     static func resourceOptions(for group: HUDResourceGroup) -> HUDResourceOptions {
@@ -324,11 +351,10 @@ enum HUDPreferences {
             && (defaults.object(forKey: "hud.group.\(group.rawValue).power") as? Bool ?? true)
         let enabled = defaults.object(forKey: "hud.group.\(group.rawValue).enabled") as? Bool
             ?? (total || app || temperature || (group == .ane && power))
-        // Fresh installs emphasize usage only. An explicitly saved empty array
-        // still means the user chose faint readings.
-        let defaultHighlights: [HUDReadingKind] = group.supportsTotalUse ? [.totalUse, .focusedApp] : []
+        // Fresh installs and All options reset use regular readings. Preserve
+        // individually saved emphasis choices when updating the app.
         let highlights = defaults.stringArray(forKey: "hud.group.\(group.rawValue).highlighted")
-            .map { $0.compactMap(HUDReadingKind.init(rawValue:)) } ?? defaultHighlights
+            .map { $0.compactMap(HUDReadingKind.init(rawValue:)) } ?? []
         var options = HUDResourceOptions(enabled: enabled, temperature: temperature, totalUse: total, focusedApp: app, power: power,
             details: defaults.object(forKey: "hud.group.ram.details") as? Bool ?? true,
             highlighted: Set(highlights),
@@ -352,6 +378,7 @@ enum HUDPreferences {
         var metrics = Set(HUDMetric.allCases.filter { isMetricEnabled($0) })
         metrics.subtract([.fps, .fpsGraph])
         metrics.formUnion(fpsOptions.visibleMetrics(alignment: alignment))
+        if miscOptions.visibleReadings.isEmpty { metrics.remove(.misc) }
         for group in HUDResourceGroup.allCases {
             if let appMetric = group.appMetric { metrics.remove(appMetric) }
             metrics.remove(group.totalMetric)
@@ -401,6 +428,8 @@ enum HUDPreferences {
 
         case .deviceInfo:
             return "hud.metric.deviceInfo"
+        case .misc:
+            return "hud.metric.misc"
         }
     }
 }

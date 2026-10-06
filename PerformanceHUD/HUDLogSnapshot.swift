@@ -6,7 +6,8 @@ enum HUDLogColumn: Hashable {
     case cpuPower, cpuTemperature, cpuUsage, cpuAppUsage, anePower, socPower
     case memoryUsage, memoryPhysical, memorySwap, memoryPressure, memoryAppUsage, memoryAppPhysical
     case fanUsage(Int), fanRPM(Int), fanAverageUsage, fanAverageRPM
-    case powerSource, batteryTemperature, batteryCharge, lowPowerMode, chip, os
+    case powerSource, batteryPower, batteryTemperature, batteryCharge, lowPowerMode, chip, os
+    case process, resolutionWidth, resolutionHeight, refreshMinimum, refreshMaximum, gameMode, thermal
 
     var title: String {
         switch self {
@@ -32,11 +33,19 @@ enum HUDLogColumn: Hashable {
         case .fanAverageUsage: return "Fan Average Usage (%)"
         case .fanAverageRPM: return "Fan Average RPM"
         case .powerSource: return "Power Source"
+        case .batteryPower: return "Battery Net Power (W)"
         case .batteryTemperature: return "Battery Temperature (°C)"
         case .batteryCharge: return "Battery Charge (%)"
         case .lowPowerMode: return "Low Power Mode (0/1)"
         case .chip: return "Chip"
         case .os: return "macOS"
+        case .process: return "Process"
+        case .resolutionWidth: return "Resolution Width (px)"
+        case .resolutionHeight: return "Resolution Height (px)"
+        case .refreshMinimum: return "Display Refresh Min (Hz)"
+        case .refreshMaximum: return "Display Refresh Max (Hz)"
+        case .gameMode: return "Game Mode (0/1)"
+        case .thermal: return "Thermal State"
         }
     }
 
@@ -46,16 +55,16 @@ enum HUDLogColumn: Hashable {
         guard number.isFinite else { return nil }
         let places: Int
         switch self {
-        case .fps, .gpuPower, .cpuPower, .anePower, .socPower,
-             .memoryPhysical, .memorySwap, .memoryAppPhysical:
+        case .fps, .gpuPower, .cpuPower, .anePower, .socPower, .batteryPower,
+             .memoryPhysical, .memorySwap, .memoryAppPhysical, .refreshMinimum, .refreshMaximum:
             places = 2
         case .gpuTemperature, .cpuTemperature, .batteryTemperature,
              .gpuUsage, .gpuAppUsage, .cpuUsage, .cpuAppUsage,
              .memoryUsage, .memoryAppUsage, .fanUsage, .fanAverageUsage, .batteryCharge:
             places = 1
-        case .fanRPM, .fanAverageRPM, .lowPowerMode:
+        case .fanRPM, .fanAverageRPM, .lowPowerMode, .resolutionWidth, .resolutionHeight, .gameMode:
             places = 0
-        case .memoryPressure, .powerSource, .chip, .os:
+        case .memoryPressure, .powerSource, .chip, .os, .process, .thermal:
             return nil
         }
         // Keep CSV numbers parseable regardless of the Mac's decimal separator.
@@ -80,6 +89,7 @@ struct HUDLogSelection {
     var battery: HUDBatteryOptions
     var deviceInfo: Bool
     var alignment: HUDAlignment
+    var misc = HUDMiscOptions()
 
     static var current: Self {
         Self(fps: HUDPreferences.fpsOptions.enabled,
@@ -88,7 +98,7 @@ struct HUDLogSelection {
              }), package: HUDPreferences.packagePowerOptions, fans: HUDPreferences.fanOptions,
              battery: HUDPreferences.batteryOptions,
              deviceInfo: HUDPreferences.visibleMetrics.contains(.deviceInfo),
-             alignment: HUDPreferences.alignment)
+             alignment: HUDPreferences.alignment, misc: HUDPreferences.miscOptions)
     }
 
     func columns(fanSample: FanSample) -> [HUDLogColumn] {
@@ -128,8 +138,18 @@ struct HUDLogSelection {
         }
         if battery.enabled {
             result.append(.powerSource)
-            if battery.charge { result += [.batteryCharge, .lowPowerMode] }
+            if battery.power { result.append(.batteryPower) }
             if battery.temperature { result.append(.batteryTemperature) }
+            if battery.charge { result += [.batteryCharge, .lowPowerMode] }
+        }
+        for reading in misc.visibleReadings where alignment == .vertical {
+            switch reading {
+            case .process: result.append(.process)
+            case .resolution: result += [.resolutionWidth, .resolutionHeight]
+            case .refreshRate: result += [.refreshMinimum, .refreshMaximum]
+            case .gameMode: result.append(.gameMode)
+            case .thermal: result.append(.thermal)
+            }
         }
         if deviceInfo && alignment == .vertical { result += [.chip, .os] }
         return result
@@ -177,7 +197,18 @@ struct HUDLogSnapshot {
 
     mutating func updateBattery(_ sample: BatterySample?) {
         setText(.powerSource, sample?.source?.rawValue)
+        set(.batteryPower, sample?.power)
         set(.batteryTemperature, sample?.temperature)
         set(.batteryCharge, sample?.percentage)
+    }
+
+    mutating func updateMisc(_ sample: HUDMiscSample) {
+        setText(.process, sample.process)
+        set(.resolutionWidth, sample.resolution.map { Double($0.width) })
+        set(.resolutionHeight, sample.resolution.map { Double($0.height) })
+        set(.refreshMinimum, sample.refreshRate?.minimum)
+        set(.refreshMaximum, sample.refreshRate?.maximum)
+        set(.gameMode, sample.gameMode.map { $0 ? 1 : 0 })
+        setText(.thermal, sample.thermal)
     }
 }
