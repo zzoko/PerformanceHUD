@@ -2,6 +2,14 @@
 
 [← Back to README](../README.md)
 
+### v2.1
+
+- Redesigned the menu’s category controls with aligned reading rows, consistent emphasis buttons, and individually selectable Misc options. Existing settings and category switches are preserved.
+- FAN is now disabled on fanless Macs, with a clear **Not Available** status.
+- Smoothed transitions between all Auto hide modes, including returning directly to the collapsed FPS arrow. The matching **Animation** checkbox keeps instant changes available.
+- Kept the collapsed FPS height and divider position steady when changing its display mode.
+- Updated the **Controls Guide** for the redesigned controls, removed the outdated illustration, and refreshed the documentation screenshots.
+
 ### v2.0
 
 - Added **Check for updates** to download and install official updates from inside the app, with signed update verification and retained HUD preferences. Available to purchased copies and source builds.

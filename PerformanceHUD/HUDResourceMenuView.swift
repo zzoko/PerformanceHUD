@@ -1,33 +1,7 @@
 import AppKit
 
 @MainActor
-final class HUDResourceMenuView: NSView {
-    static var masterWidth: CGFloat {
-        // Keep the options clear of every category title, even when resource
-        // names are shortened. The power connector shares this same column.
-        let titleWidth = ceil((HUDResourceGroup.allCases.map(\.title) + ["Battery", "FPS History", "Chip & OS"]).map {
-            ($0 as NSString).size(withAttributes: [.font: NSFont.menuFont(ofSize: 0)]).width
-        }.max() ?? 0)
-        return max(144, titleWidth + 24)
-    }
-    static var powerColumnLeading: CGFloat { 8 + masterWidth + 8 + 8 }
-    // Keep the original sizing reference so the shorter Average label does not
-    // shift the shared menu columns or its layout selector.
-    static var firstChoiceWidth: CGFloat {
-        let checkbox = HUDReadingCheckbox(title: "Fan Average", supportsEmphasis: false)
-        checkbox.font = .menuFont(ofSize: 0)
-        return max(90, ceil(checkbox.intrinsicContentSize.width))
-    }
-    static var secondChoiceWidth: CGFloat {
-        let selector = NSSegmentedControl(labels: HUDFanAverageMode.allCases.map(\.title),
-                                          trackingMode: .selectOne, target: nil, action: nil)
-        selector.segmentStyle = .rounded
-        selector.font = .menuFont(ofSize: 0)
-        return max(126, ceil(selector.intrinsicContentSize.width))
-    }
-    static var choicesWidth: CGFloat { 16 + firstChoiceWidth + secondChoiceWidth + 106 + 145 + 36 }
-    static var readingsChoicesWidth: CGFloat { 8 + firstChoiceWidth + 12 + secondChoiceWidth + 4 }
-
+final class HUDResourceMenuView: HUDCategoryMenuView {
     var onChange: ((HUDResourceOptions) -> Void)?
     var onPowerSetup: (() -> Void)?
     private var powerAvailability: PowerHelperAvailability = .ready
@@ -36,7 +10,10 @@ final class HUDResourceMenuView: NSView {
     private var options: HUDResourceOptions
     private var controls: [Int: NSButton] = [:]
     private var usageModeControl: NSSegmentedControl?
-    private var flowControl: HUDBatteryFlowMenuControl?
+    private var flowControl: NSSegmentedControl?
+    private let flowHighlight = HUDEmphasisButton()
+    private var flowLabel: NSTextField?
+    private let master = HUDResourceMasterButton(title: "", target: nil, action: nil)
     private var flowMode: HUDBatteryFlowMode = .auto
 
     convenience init(batteryOptions: HUDBatteryOptions) {
@@ -52,167 +29,79 @@ final class HUDResourceMenuView: NSView {
     init(group: HUDResourceGroup?, options: HUDResourceOptions) {
         self.group = group
         self.options = options
-        super.init(frame: NSRect(x: 0, y: 0, width: 480, height: group == nil ? 40 : 34))
-
-        autoresizingMask = [.width]
-        let groupTitle = group?.title ?? "Battery"
-        let masterWidth = Self.masterWidth
-
-        // Keep the master in the normal menu checkmark/title columns. The inset
-        // container makes its subordinate choices read as one related group.
-        let master = HUDResourceMasterButton(title: groupTitle, target: self, action: #selector(changed(_:)))
+        super.init()
+        let title = group?.title ?? "Battery"
+        setAccessibilityLabel("\(title) display options")
+        master.setName(title)
+        master.target = self
+        master.action = #selector(changed(_:))
         master.tag = 0
-        master.setAccessibilityLabel("Show \(groupTitle)")
-        master.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(master)
+        master.setAccessibilityLabel("Show \(title)")
         controls[0] = master
+        setCategory(master)
 
-        let choices = NSView()
-        choices.translatesAutoresizingMaskIntoConstraints = false
-        choices.setAccessibilityRole(.group)
-        choices.setAccessibilityLabel("\(groupTitle) display options")
-        addSubview(choices)
-
-        let stack = NSStackView()
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = 12
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        choices.addSubview(stack)
-        let columns = group == .ram
-            ? [(5, "Details", Self.firstChoiceWidth), (1, "", Self.secondChoiceWidth), (7, "Use", 106.0), (8, "", 145.0)]
-            : group == nil
-            ? [(4, "Charge", Self.firstChoiceWidth + 12 + Self.secondChoiceWidth), (1, "Temperature", 126.0), (6, "Energy", 106.0)]
-            : [(4, "Power", Self.firstChoiceWidth), (1, "Temperature", Self.secondChoiceWidth), (7, "Use", 106.0), (8, "", 145.0)]
-        for (tag, title, width) in columns {
-            if group == nil, tag == 4 {
-                let control = HUDBatteryFlowMenuControl()
-                control.widthAnchor.constraint(equalToConstant: width).isActive = true
-                control.onModeChange = { [weak self] mode in
-                    guard let self, self.options.enabled else { return }
-                    flowMode = mode
-                    self.options.power = mode != .off
-                    refresh()
-                    notifyBatteryChange()
-                }
-                control.onHighlight = { [weak self] in
-                    guard let self, self.options.enabled, self.options.power else { return }
-                    if self.options.highlighted.contains(.power) { self.options.highlighted.remove(.power) }
-                    else { self.options.highlighted.insert(.power) }
-                    refresh()
-                    notifyBatteryChange()
-                }
-                flowControl = control
-                stack.addArrangedSubview(control)
-                // Keep the emphasis strip outside the choices border, but
-                // inside the row so its full area remains clickable.
-                control.highlight.translatesAutoresizingMaskIntoConstraints = false
-                addSubview(control.highlight)
-                NSLayoutConstraint.activate([
-                    control.highlight.leadingAnchor.constraint(equalTo: control.leadingAnchor,
-                        constant: HUDBatteryFlowMenuControl.selectorLeading + 2),
-                    control.highlight.trailingAnchor.constraint(equalTo: control.trailingAnchor, constant: -2),
-                    control.highlight.topAnchor.constraint(equalTo: choices.bottomAnchor, constant: 2),
-                    control.highlight.heightAnchor.constraint(equalToConstant: 6)
-                ])
-                continue
-            }
-            if tag == 8, let group, group.supportsTotalUse {
-                let control = NSSegmentedControl(labels: ["Total", "App", "Both"], trackingMode: .selectOne,
-                                                 target: self, action: #selector(usageModeChanged(_:)))
-                control.segmentStyle = .rounded
+        let readings: [(Int, String)] = group == .ram ? [(5, "Details"), (7, "Use")]
+            : group == .ane ? [(4, "Power")]
+            : group == nil ? [(4, "Charge"), (1, "Temperature"), (6, "Energy")]
+            : [(4, "Power"), (1, "Temperature"), (7, "Use")]
+        var rows: [HUDCategoryMenuRow] = []
+        for (tag, name) in readings {
+            if group == nil && tag == 4 {
+                let label = NSTextField(labelWithString: name)
+                label.font = .menuFont(ofSize: 0)
+                flowLabel = label
+                let control = NSSegmentedControl(labels: HUDBatteryFlowMode.allCases.map(\.title),
+                    trackingMode: .selectOne, target: self, action: #selector(flowModeChanged(_:)))
                 control.font = .menuFont(ofSize: 0)
-                control.widthAnchor.constraint(equalToConstant: width).isActive = true
-                control.setAccessibilityLabel("\(groupTitle) usage mode")
-                usageModeControl = control
-                stack.addArrangedSubview(control)
+                control.segmentStyle = .rounded
+                control.setAccessibilityLabel("Battery Charge mode")
+                flowControl = control
+                flowHighlight.target = self
+                flowHighlight.action = #selector(flowHighlightChanged)
+                flowHighlight.setAccessibilityLabel("Emphasize Battery Charge")
+                rows.append(.init(reading: label, mode: control, emphasis: flowHighlight))
                 continue
             }
-            if title.isEmpty || (tag == 1 && group?.supportsTemperature == false) || (tag == 4 && group?.supportsPower == false) || (tag == 7 && group?.supportsTotalUse == false) {
-                let spacer = NSView()
-                spacer.widthAnchor.constraint(equalToConstant: width).isActive = true
-                stack.addArrangedSubview(spacer)
-                continue
-            }
-            let button = HUDReadingCheckbox(title: title, supportsEmphasis: readingKind(for: tag) != nil || tag == 7)
+            let button = HUDReadingCheckbox(title: name, supportsEmphasis: readingKind(for: tag) != nil || tag == 7)
             button.target = self
             button.action = #selector(changed(_:))
-            button.onHighlight = { [weak self] in self?.highlightChanged(tag: tag) }
-            button.font = .menuFont(ofSize: 0)
             button.tag = tag
-            button.setControlAccessibilityLabel("\(groupTitle) \(title)")
-            if group == nil, tag == 6 {
-                let spacer = NSView()
-                spacer.widthAnchor.constraint(greaterThanOrEqualToConstant: 0).isActive = true
-                stack.addArrangedSubview(spacer)
-                button.widthAnchor.constraint(equalToConstant: ceil(button.intrinsicContentSize.width)).isActive = true
-            } else {
-                button.widthAnchor.constraint(equalToConstant: width).isActive = true
-            }
+            button.setControlAccessibilityLabel("\(title) \(name)")
+            button.onHighlight = { [weak self] in self?.highlightChanged(tag: tag) }
             controls[tag] = button
-            stack.addArrangedSubview(button)
-        }
-        // Split the backgrounds without shifting the shared checkbox columns.
-        if group?.supportsTotalUse == true {
-            let readingsBar = HUDResourceChoicesView()
-            let usageBar = HUDResourceChoicesView()
-            for bar in [readingsBar, usageBar] {
-                bar.translatesAutoresizingMaskIntoConstraints = false
-                choices.addSubview(bar, positioned: .below, relativeTo: stack)
-                NSLayoutConstraint.activate([
-                    bar.topAnchor.constraint(equalTo: choices.topAnchor),
-                    bar.bottomAnchor.constraint(equalTo: choices.bottomAnchor)
-                ])
+            var row = HUDCategoryMenuRow(reading: button)
+            if tag == 7 {
+                let control = NSSegmentedControl(labels: ["Total", "App", "Both"], trackingMode: .selectOne,
+                    target: self, action: #selector(usageModeChanged(_:)))
+                control.font = .menuFont(ofSize: 0)
+                control.segmentStyle = .rounded
+                control.setAccessibilityLabel("\(title) usage mode")
+                usageModeControl = control
+                row.mode = control
             }
-            NSLayoutConstraint.activate([
-                readingsBar.leadingAnchor.constraint(equalTo: choices.leadingAnchor),
-                readingsBar.trailingAnchor.constraint(equalTo: stack.arrangedSubviews[1].trailingAnchor, constant: 4),
-                usageBar.leadingAnchor.constraint(equalTo: stack.arrangedSubviews[2].leadingAnchor, constant: -4),
-                usageBar.trailingAnchor.constraint(equalTo: choices.trailingAnchor)
-            ])
-        } else {
-            let bar = HUDResourceChoicesView()
-            bar.translatesAutoresizingMaskIntoConstraints = false
-            choices.addSubview(bar, positioned: .below, relativeTo: stack)
-            NSLayoutConstraint.activate([
-                bar.leadingAnchor.constraint(equalTo: choices.leadingAnchor),
-                bar.widthAnchor.constraint(equalToConstant: Self.readingsChoicesWidth),
-                bar.topAnchor.constraint(equalTo: choices.topAnchor),
-                bar.bottomAnchor.constraint(equalTo: choices.bottomAnchor)
-            ])
-            if group == nil {
-                let energyBar = HUDResourceChoicesView()
-                energyBar.translatesAutoresizingMaskIntoConstraints = false
-                choices.addSubview(energyBar, positioned: .below, relativeTo: stack)
-                NSLayoutConstraint.activate([
-                    // Keep the right edge shared with the FAN/resource rows,
-                    // even though Battery uses fewer, shorter controls.
-                    choices.widthAnchor.constraint(equalToConstant: Self.choicesWidth),
-                    energyBar.leadingAnchor.constraint(equalTo: stack.arrangedSubviews[1].leadingAnchor, constant: -4),
-                    energyBar.trailingAnchor.constraint(equalTo: choices.trailingAnchor),
-                    energyBar.topAnchor.constraint(equalTo: choices.topAnchor),
-                    energyBar.bottomAnchor.constraint(equalTo: choices.bottomAnchor)
-                ])
-            }
+            rows.append(row)
         }
-        NSLayoutConstraint.activate([
-            master.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            master.widthAnchor.constraint(equalToConstant: masterWidth),
-            master.topAnchor.constraint(equalTo: topAnchor),
-            master.bottomAnchor.constraint(equalTo: bottomAnchor, constant: group == nil ? -6 : 0),
-            choices.leadingAnchor.constraint(equalTo: master.trailingAnchor, constant: 8),
-            choices.centerYAnchor.constraint(equalTo: centerYAnchor, constant: group == nil ? -3 : 0),
-            choices.heightAnchor.constraint(equalToConstant: 28),
-            choices.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
-            stack.leadingAnchor.constraint(equalTo: choices.leadingAnchor, constant: 8),
-            stack.centerYAnchor.constraint(equalTo: choices.centerYAnchor),
-            stack.trailingAnchor.constraint(equalTo: choices.trailingAnchor, constant: -8)
-        ])
-        setFrameSize(NSSize(width: 8 + masterWidth + 8 + Self.choicesWidth + 12, height: group == nil ? 40 : 34))
+        setRows(rows)
         refresh()
     }
 
     required init?(coder: NSCoder) { fatalError("Use init(group:options:)") }
+
+    @objc private func flowModeChanged(_ sender: NSSegmentedControl) {
+        guard options.enabled, HUDBatteryFlowMode.allCases.indices.contains(sender.selectedSegment) else { return }
+        flowMode = HUDBatteryFlowMode.allCases[sender.selectedSegment]
+        options.power = flowMode != .off
+        refresh()
+        notifyBatteryChange()
+    }
+
+    @objc private func flowHighlightChanged() {
+        guard flowHighlight.isEnabled else { return }
+        if options.highlighted.contains(.power) { options.highlighted.remove(.power) }
+        else { options.highlighted.insert(.power) }
+        refresh()
+        notifyBatteryChange()
+    }
 
     func setPowerState(_ availability: PowerHelperAvailability, selected: Bool) {
         powerAvailability = availability
@@ -287,7 +176,11 @@ final class HUDResourceMenuView: NSView {
     }
 
     private func refresh() {
-        flowControl?.update(mode: flowMode, enabled: options.enabled, emphasized: options.highlighted.contains(.power))
+        flowControl?.selectedSegment = HUDBatteryFlowMode.allCases.firstIndex(of: flowMode) ?? 1
+        flowControl?.isEnabled = options.enabled
+        flowLabel?.textColor = options.enabled ? .labelColor : .disabledControlTextColor
+        flowHighlight.state = options.highlighted.contains(.power) ? .on : .off
+        flowHighlight.isEnabled = options.enabled && flowMode != .off
         for (tag, value) in [(0, options.enabled), (1, options.temperature),
                              (4, options.power), (5, options.details), (6, options.totalUse), (7, options.usageVisible)] {
             controls[tag]?.state = value ? .on : .off
@@ -313,83 +206,20 @@ final class HUDResourceMenuView: NSView {
     }
 }
 
-/// Inline selection uses the same menu-safe control as FPS and fan modes.
-/// Flow emphasis stays separate from the three visibility choices.
-@MainActor
-final class HUDBatteryFlowMenuControl: NSView {
-    static let selectorLeading: CGFloat = 60
-    var onModeChange: ((HUDBatteryFlowMode) -> Void)?
-    var onHighlight: (() -> Void)?
-    private let nameLabel = NSTextField(labelWithString: "Charge")
-    private let selector = NSSegmentedControl(labels: HUDBatteryFlowMode.allCases.map(\.title),
-        trackingMode: .selectOne, target: nil, action: nil)
-    let highlight = HUDHighlightLine()
-
-    init() {
-        super.init(frame: .zero)
-        nameLabel.font = .menuFont(ofSize: 0)
-        selector.font = .menuFont(ofSize: 0)
-        selector.segmentStyle = .rounded
-        selector.target = self
-        selector.action = #selector(modeChanged)
-        selector.setAccessibilityLabel("Battery Charge mode")
-        highlight.setButtonType(.toggle)
-        highlight.isBordered = false
-        highlight.target = self
-        highlight.action = #selector(highlightChanged)
-        highlight.setAccessibilityRole(.checkBox)
-        highlight.setAccessibilityLabel("Emphasize Battery Charge")
-        for view in [nameLabel, selector] {
-            addSubview(view)
-        }
-        heightAnchor.constraint(equalToConstant: 28).isActive = true
-    }
-
-    required init?(coder: NSCoder) { fatalError("Use init()") }
-
-    override func layout() {
-        super.layout()
-        nameLabel.frame = NSRect(x: 4, y: 4, width: 48, height: 20)
-        selector.frame = NSRect(x: Self.selectorLeading, y: 3,
-                                width: max(0, bounds.width - Self.selectorLeading), height: 22)
-    }
-
-    func update(mode: HUDBatteryFlowMode, enabled: Bool, emphasized: Bool) {
-        selector.selectedSegment = HUDBatteryFlowMode.allCases.firstIndex(of: mode) ?? 1
-        selector.isEnabled = enabled
-        for index in HUDBatteryFlowMode.allCases.indices { selector.setEnabled(enabled, forSegment: index) }
-        nameLabel.textColor = enabled ? .labelColor : .disabledControlTextColor
-        highlight.state = emphasized ? .on : .off
-        highlight.isEnabled = enabled && mode != .off
-        highlight.needsDisplay = true
-    }
-
-    @objc private func modeChanged() {
-        guard selector.isEnabled, HUDBatteryFlowMode.allCases.indices.contains(selector.selectedSegment) else { return }
-        onModeChange?(HUDBatteryFlowMode.allCases[selector.selectedSegment])
-    }
-
-    @objc private func highlightChanged() {
-        guard highlight.isEnabled else { return }
-        onHighlight?()
-    }
-}
-
-/// A borderless toggle using AppKit's menu checkmark, rather than a boxed checkbox.
+/// A compact, neutral switch with the category label sharing its click target.
 @MainActor
 final class HUDResourceMasterButton: NSButton {
-    private let checkmark = NSImageView()
     private let nameLabel: NSTextField
 
     override var state: NSControl.StateValue {
-        didSet { checkmark.isHidden = state != .on }
+        didSet { needsDisplay = true }
     }
 
     override var isEnabled: Bool {
         didSet {
             let color: NSColor = isEnabled ? .labelColor : .disabledControlTextColor
             nameLabel.textColor = color
-            checkmark.contentTintColor = color
+            needsDisplay = true
         }
     }
 
@@ -403,187 +233,50 @@ final class HUDResourceMasterButton: NSButton {
         isBordered = false
         focusRingType = .default
         setAccessibilityRole(.checkBox)
-        // The legacy menu template is thinner than current macOS menu ticks.
-        checkmark.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 13, weight: .bold))
-        checkmark.contentTintColor = .labelColor
-        checkmark.imageScaling = .scaleProportionallyDown
-        nameLabel.font = .menuFont(ofSize: 0)
+        nameLabel.font = .systemFont(ofSize: NSFont.menuFont(ofSize: 0).pointSize, weight: .semibold)
         nameLabel.textColor = .labelColor
-        for view in [checkmark, nameLabel] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(view)
-        }
-        NSLayoutConstraint.activate([
-            checkmark.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            checkmark.widthAnchor.constraint(equalToConstant: 12),
-            checkmark.heightAnchor.constraint(equalToConstant: 16),
-            checkmark.centerYAnchor.constraint(equalTo: centerYAnchor),
-            nameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 22),
-            nameLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor)
-        ])
+        addSubview(nameLabel)
     }
 
     required init?(coder: NSCoder) { fatalError("Use init(title:target:action:)") }
 
+    func setName(_ name: String) { nameLabel.stringValue = name; needsLayout = true }
+
+    override func layout() {
+        super.layout()
+        // Menu views may be measured at zero width before the category assigns its frame.
+        let height = nameLabel.intrinsicContentSize.height
+        nameLabel.frame = NSRect(x: 38, y: (bounds.height - height) / 2,
+                                width: max(0, bounds.width - 38), height: height)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let selected = state == .on
+        let trackRect = NSRect(x: 4, y: (bounds.height - 16) / 2, width: 26, height: 16)
+        let track = NSBezierPath(roundedRect: trackRect, xRadius: 8, yRadius: 8)
+        // Keep the same neutral palette as the menu's other controls, independent
+        // of the system accent color. Thumb position also communicates the state.
+        NSColor.labelColor.withAlphaComponent(isEnabled ? (selected ? 0.30 : 0.10) : 0.05).setFill()
+        track.fill()
+        NSColor.labelColor.withAlphaComponent(isEnabled ? 0.16 : 0.06).setStroke()
+        track.lineWidth = 0.5
+        track.stroke()
+        let thumbRect = NSRect(x: trackRect.minX + (selected ? 12 : 2), y: trackRect.minY + 2,
+                               width: 12, height: 12)
+        let thumb = NSBezierPath(ovalIn: thumbRect)
+        NSColor.white.withAlphaComponent(isEnabled ? 0.95 : 0.25).setFill()
+        thumb.fill()
+        NSColor.black.withAlphaComponent(isEnabled ? 0.12 : 0.04).setStroke()
+        thumb.lineWidth = 0.5
+        thumb.stroke()
+        if window?.firstResponder === self {
+            NSFocusRingPlacement.only.set()
+            track.fill()
+        }
+    }
+
     // The decorative subviews belong to the same toggle hit area.
     override func hitTest(_ point: NSPoint) -> NSView? {
         super.hitTest(point) == nil ? nil : self
-    }
-}
-
-@MainActor
-final class HUDResourceChoicesView: NSView {
-    override func draw(_ dirtyRect: NSRect) {
-        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
-        NSColor.labelColor.withAlphaComponent(0.035).setFill()
-        shape.fill()
-        NSColor.separatorColor.withAlphaComponent(0.25).setStroke()
-        shape.lineWidth = 0.5
-        shape.stroke()
-    }
-}
-
-/// Two independent targets: the checkbox controls visibility, the attached strip
-/// controls emphasis. Plain options use the same checkbox without the strip.
-@MainActor
-final class HUDReadingCheckbox: NSButton {
-    private let visibility = HUDVisibilityButton(checkboxWithTitle: "", target: nil, action: nil)
-    private let highlight = HUDHighlightButton()
-    private let supportsEmphasis: Bool
-    var onHighlight: (() -> Void)?
-    var emphasized = false { didSet { updateControls() } }
-    var highlightAvailable = true { didSet { updateControls() } }
-
-    override var state: NSControl.StateValue { didSet { updateControls() } }
-    override var isEnabled: Bool { didSet { updateControls() } }
-    override var font: NSFont? { didSet { visibility.font = font } }
-    override var toolTip: String? { didSet { visibility.toolTip = toolTip } }
-
-    init(title: String, supportsEmphasis: Bool = true) {
-        self.supportsEmphasis = supportsEmphasis
-        super.init(frame: .zero)
-        self.title = title
-        isBordered = false
-        setAccessibilityElement(false)
-        visibility.title = title
-        visibility.split = supportsEmphasis
-        visibility.target = self
-        visibility.action = #selector(toggleVisibility)
-        highlight.setButtonType(.toggle)
-        highlight.isBordered = false
-        highlight.target = self
-        highlight.action = #selector(toggleHighlight)
-        highlight.setAccessibilityRole(.checkBox)
-        addSubview(visibility)
-        if supportsEmphasis { addSubview(highlight) }
-        setControlAccessibilityLabel(title)
-        updateControls()
-    }
-
-    required init?(coder: NSCoder) { fatalError("Use init(title:supportsEmphasis:)") }
-    // Keyboard focus belongs to the two actionable child buttons.
-    override var acceptsFirstResponder: Bool { false }
-    override var intrinsicContentSize: NSSize {
-        NSSize(width: visibility.intrinsicContentSize.width + (supportsEmphasis ? 14 : 0), height: 22)
-    }
-    override func draw(_ dirtyRect: NSRect) {}
-    override func layout() {
-        super.layout()
-        visibility.frame = bounds
-        highlight.frame = NSRect(x: 18, y: (bounds.height - 18) / 2, width: 12, height: 18)
-    }
-    func setControlAccessibilityLabel(_ label: String) {
-        visibility.setAccessibilityLabel(label)
-        highlight.setAccessibilityLabel("Highlight \(label)")
-    }
-    private func updateControls() {
-        visibility.state = state
-        visibility.isEnabled = isEnabled
-        highlight.state = emphasized ? .on : .off
-        highlight.isEnabled = isEnabled && state == .on && highlightAvailable
-        visibility.needsDisplay = true
-        highlight.needsDisplay = true
-    }
-    override func performClick(_ sender: Any?) { visibility.performClick(sender) }
-    @objc private func toggleVisibility() {
-        state = visibility.state
-        sendAction(action, to: target)
-    }
-    @objc private func toggleHighlight() {
-        guard highlight.isEnabled else { return }
-        onHighlight?()
-        updateControls()
-    }
-}
-
-@MainActor
-private final class HUDVisibilityButton: NSButton {
-    override var isFlipped: Bool { false }
-    var split = false
-    override func draw(_ dirtyRect: NSRect) {
-        let y = (bounds.height - 18) / 2
-        NSGraphicsContext.saveGraphicsState()
-        NSBezierPath(roundedRect: NSRect(x: 0, y: y, width: split ? 30 : 18, height: 18), xRadius: 4, yRadius: 4).addClip()
-        NSColor.labelColor.withAlphaComponent(isEnabled ? (state == .on ? 0.30 : 0.10) : 0.06).setFill()
-        NSRect(x: 0, y: y, width: 18, height: 18).fill()
-        NSGraphicsContext.restoreGraphicsState()
-        if state == .on {
-            let path = NSBezierPath()
-            path.move(to: NSPoint(x: 4, y: y + 9))
-            path.line(to: NSPoint(x: 8, y: y + 5))
-            path.line(to: NSPoint(x: 14, y: y + 13))
-            NSColor.labelColor.withAlphaComponent(isEnabled ? 1 : 0.3).setStroke()
-            path.lineWidth = 2
-            path.lineCapStyle = .round
-            path.lineJoinStyle = .round
-            path.stroke()
-        }
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: font ?? NSFont.menuFont(ofSize: 0),
-            .foregroundColor: isEnabled ? NSColor.labelColor : NSColor.disabledControlTextColor
-        ]
-        let size = (title as NSString).size(withAttributes: attributes)
-        (title as NSString).draw(at: NSPoint(x: split ? 36 : 24, y: (bounds.height - size.height) / 2), withAttributes: attributes)
-        if window?.firstResponder === self {
-            NSFocusRingPlacement.only.set()
-            NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 4, yRadius: 4).fill()
-        }
-    }
-}
-
-@MainActor
-private final class HUDHighlightButton: NSButton {
-    override var isFlipped: Bool { false }
-    override func draw(_ dirtyRect: NSRect) {
-        NSBezierPath(rect: bounds).addClip()
-        let shape = NSBezierPath(roundedRect: NSRect(x: -18, y: 0, width: 30, height: bounds.height), xRadius: 4, yRadius: 4)
-        NSColor.labelColor.withAlphaComponent(isEnabled ? (state == .on ? 0.90 : 0.13) : (state == .on ? 0.18 : 0.05)).setFill()
-        shape.fill()
-        NSColor.labelColor.withAlphaComponent(isEnabled ? 0.25 : 0.08).setFill()
-        NSRect(x: 0, y: 0, width: 1, height: bounds.height).fill()
-        if window?.firstResponder === self {
-            NSFocusRingPlacement.only.set()
-            NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 3, yRadius: 3).fill()
-        }
-    }
-}
-
-// Shared thin emphasis toggle for FPS and fan RPM.
-
-@MainActor
-final class HUDHighlightLine: NSButton {
-    // Native button bezel insets do not apply to this thin custom control.
-    override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0) }
-    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 6) }
-    override func draw(_ dirtyRect: NSRect) {
-        let line = NSRect(x: 0, y: (bounds.height - 4) / 2, width: bounds.width, height: 4)
-        NSColor.labelColor.withAlphaComponent(isEnabled ? (state == .on ? 0.9 : 0.22) : 0.08).setFill()
-        NSBezierPath(roundedRect: line, xRadius: 2, yRadius: 2).fill()
-        if window?.firstResponder === self {
-            NSFocusRingPlacement.only.set()
-            NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
-        }
     }
 }

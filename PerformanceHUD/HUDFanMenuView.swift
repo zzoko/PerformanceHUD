@@ -1,7 +1,7 @@
 import AppKit
 
 @MainActor
-final class HUDFanMenuView: NSView {
+final class HUDFanMenuView: HUDCategoryMenuView {
     var onChange: ((HUDFanOptions) -> Void)?
     private var options: HUDFanOptions
     private var sample: FanSample
@@ -12,21 +12,18 @@ final class HUDFanMenuView: NSView {
                                                 trackingMode: .selectOne, target: nil, action: nil)
     private let mode = NSSegmentedControl(labels: HUDFanMode.allCases.map(\.title),
                                          trackingMode: .selectOne, target: nil, action: nil)
-    private let rpmHighlight = HUDHighlightLine()
+    private let rpmHighlight = HUDEmphasisButton()
+    private let unavailableLabel = NSTextField(labelWithString: "Not Available")
 
     init(options: HUDFanOptions, sample: FanSample) {
         self.options = options
         self.sample = sample
         master = HUDResourceMasterButton(title: "FAN", target: nil, action: nil)
-        let width = 8 + HUDResourceMenuView.masterWidth + 8 + HUDResourceMenuView.choicesWidth + 12
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 40))
-        autoresizingMask = [.width]
-        let bar = HUDResourceChoicesView()
-        let averageBar = HUDResourceChoicesView()
-        for view in [master, bar, averageBar, average, averageMode, usage, mode, rpmHighlight] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(view)
-        }
+        super.init()
+        setAccessibilityLabel("Fan display options")
+        setCategory(master)
+        unavailableLabel.font = .menuFont(ofSize: 0)
+        unavailableLabel.textColor = .disabledControlTextColor
         master.target = self; master.action = #selector(toggleCategory)
         master.setAccessibilityLabel("Show FAN")
         usage.target = self; usage.action = #selector(toggleUsage)
@@ -41,7 +38,7 @@ final class HUDFanMenuView: NSView {
         rpmHighlight.target = self
         rpmHighlight.action = #selector(toggleRPMHighlight)
         rpmHighlight.setAccessibilityRole(.checkBox)
-        rpmHighlight.setAccessibilityLabel("Highlight fan RPM in RPM and Both modes")
+        rpmHighlight.setAccessibilityLabel("Emphasize fan RPM")
         average.target = self; average.action = #selector(toggleAverage)
         average.font = .menuFont(ofSize: 0)
         average.setControlAccessibilityLabel("Average")
@@ -49,39 +46,6 @@ final class HUDFanMenuView: NSView {
         averageMode.segmentStyle = .rounded
         averageMode.font = .menuFont(ofSize: 0)
         averageMode.setAccessibilityLabel("Layouts using fan average")
-        let firstWidth = HUDResourceMenuView.firstChoiceWidth
-        let secondWidth = HUDResourceMenuView.secondChoiceWidth
-        let usageLeading = HUDResourceMenuView.powerColumnLeading + firstWidth + 12 + secondWidth + 12
-        NSLayoutConstraint.activate([
-            master.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            master.widthAnchor.constraint(equalToConstant: HUDResourceMenuView.masterWidth),
-            master.topAnchor.constraint(equalTo: topAnchor),
-            master.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
-            average.leadingAnchor.constraint(equalTo: leadingAnchor, constant: HUDResourceMenuView.powerColumnLeading),
-            average.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
-            average.widthAnchor.constraint(equalToConstant: firstWidth),
-            averageMode.leadingAnchor.constraint(equalTo: average.trailingAnchor, constant: 12),
-            averageMode.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
-            averageMode.widthAnchor.constraint(equalToConstant: secondWidth),
-            averageBar.leadingAnchor.constraint(equalTo: average.leadingAnchor, constant: -8),
-            averageBar.trailingAnchor.constraint(equalTo: averageMode.trailingAnchor, constant: 4),
-            averageBar.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
-            averageBar.heightAnchor.constraint(equalToConstant: 28),
-            usage.leadingAnchor.constraint(equalTo: leadingAnchor, constant: usageLeading),
-            usage.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
-            usage.widthAnchor.constraint(equalToConstant: 106),
-            mode.leadingAnchor.constraint(equalTo: usage.trailingAnchor, constant: 12),
-            mode.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
-            mode.widthAnchor.constraint(equalToConstant: 145),
-            rpmHighlight.leadingAnchor.constraint(equalTo: mode.leadingAnchor, constant: 145 / 3 + 2),
-            rpmHighlight.widthAnchor.constraint(equalTo: mode.widthAnchor, multiplier: 1.0 / 3.0, constant: -4),
-            rpmHighlight.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 2),
-            rpmHighlight.heightAnchor.constraint(equalToConstant: 6),
-            bar.leadingAnchor.constraint(equalTo: usage.leadingAnchor, constant: -4),
-            bar.trailingAnchor.constraint(equalTo: mode.trailingAnchor, constant: 8),
-            bar.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -3),
-            bar.heightAnchor.constraint(equalToConstant: 28)
-        ])
         refresh()
     }
 
@@ -95,8 +59,12 @@ final class HUDFanMenuView: NSView {
 
     private func refresh() {
         let detected = !sample.fans.isEmpty
-        master.state = options.enabled ? .on : .off
-        master.isEnabled = true
+        unavailableLabel.stringValue = sample.message ?? "Not Available"
+        setRows(detected ? [.init(reading: average, mode: averageMode),
+                            .init(reading: usage, mode: mode, emphasis: rpmHighlight)]
+                         : [.init(reading: unavailableLabel, fullWidth: true)])
+        master.isEnabled = sample.status != .noFans
+        master.state = options.enabled && master.isEnabled ? .on : .off
         usage.state = detected && options.usage ? .on : .off
         usage.isEnabled = options.enabled && detected
         let message = sample.message
@@ -116,7 +84,11 @@ final class HUDFanMenuView: NSView {
         averageMode.isEnabled = average.isEnabled && options.average
     }
 
-    @objc private func toggleCategory() { options.enabled = master.state == .on; changed() }
+    @objc private func toggleCategory() {
+        guard master.isEnabled else { return }
+        options.enabled = master.state == .on
+        changed()
+    }
     @objc private func toggleUsage() { options.usage = usage.state == .on; changed() }
     @objc private func changeFanMode() {
         guard HUDFanMode.allCases.indices.contains(mode.selectedSegment) else { return }

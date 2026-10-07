@@ -32,7 +32,7 @@ Background activity approval allows PerformanceHUD’s power helper to provide C
 
 You can choose **Not Now** and continue using the other metrics. If setup is declined, approval is missing, the helper is removed, or it repeatedly fails to respond, Power checkboxes turn off and appear muted. They remain clickable while their category is enabled: click **Power** to open setup, repair, or approval settings. Successful setup or later approval enables these options again. Brief startup delays or missing samples do not change your selections. Use **Power Helper → Set Up Power Readings…** in the menu to enable watts later, or **Remove Power Helper** to unregister it. Sampling stops when no selected category needs Power, when the HUD is disabled, or when the app is closed. It also pauses while fully auto-hidden, unless logging is active. The installed helper is otherwise idle.
 
-CPU, GPU, ANE, and SoC watts all use this helper. ANE shows power only; utilization percentage, temperature, and focused-app usage are not offered. SoC Combined is the combined CPU, GPU, and Neural Engine estimate, not whole-Mac power consumption. Its checkbox works independently of the individual Power options and is available in both Vertical and Horizontal alignment. Battery Charge watts use separate read-only sensors and do not need the helper. Missing or unsupported readings stay blank.
+CPU, GPU, ANE, and SOC watts all use this helper. ANE shows power only; utilization percentage, temperature, and focused-app usage are not offered. SOC Combined Power is the combined CPU, GPU, and Neural Engine estimate, not whole-Mac power consumption. Its category switch works independently of the individual Power options and is available in both Vertical and Horizontal alignment. Battery Charge watts use separate read-only sensors and do not need the helper. Missing or unsupported readings stay blank.
 
 An approved helper shows **Power helper idle** with normal-looking Power checkboxes when sampling is off. When sampling is requested, it shows **Starting power readings…** until its first valid sample arrives. If macOS remembers approval but cannot launch the helper, the app attempts to refresh that existing registration once. It does not bypass macOS approval.
 
@@ -44,7 +44,7 @@ Keep the app in a stable location, preferably Applications. From v2.0, choose **
 
 If an update reports that the app is running from a read-only or temporary location, quit it, move **PerformanceHUD.app itself** into Applications using Finder, and open that copy again.
 
-Older versions need one manual update to v2.0: quit PerformanceHUD, replace that copy, and reopen it. You can continue updating manually this way too. A freshly downloaded copy may require **Open Anyway** again. Avoid running multiple copies at once.
+Versions before v2.0 need one manual update to a current version: quit PerformanceHUD, replace that copy, and reopen it. You can continue updating manually this way too. A freshly downloaded copy may require **Open Anyway** again. Avoid running multiple copies at once.
 
 Before deleting the app, set **Auto start on login → Off**, choose **Power Helper → Remove Power Helper**, wait for removal to finish, then quit PerformanceHUD and move it to the Trash. Removing the helper alone leaves the app and its other metrics available.
 

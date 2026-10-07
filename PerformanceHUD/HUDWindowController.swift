@@ -147,22 +147,27 @@ final class HUDWindowController {
     private let autoHidePresentation = HUDAutoHidePresentation(enabled: HUDPreferences.autoHideMode == .all)
     private var lastAutoHideHidden = HUDPreferences.autoHideMode == .all
     var onAutoHideVisibilityChange: (() -> Void)?
-    var isAutomaticallyHidden: Bool { autoHidePresentation.isHidden }
+    var isAutomaticallyHidden: Bool { modeTransition == nil && autoHidePresentation.isHidden }
     private var autoHideMode = HUDPreferences.autoHideMode
     private var autoHideAnimated = HUDPreferences.autoHideAnimated
-    // Carry the compact FPS content into a whole-HUD hide. Its rows and arrow
-    // stay where they were, even though the whole native surface now shrinks.
-    private struct RetainedFPSPresentation {
-        var progress: CGFloat
-        var revealStart: CGFloat?
+    // Mode changes interpolate both the rounded surface and the FPS content.
+    // Keep this presentation independent of the newly selected mode until it
+    // reaches that mode's resting shape, including a compact FPS arrow.
+    private struct ModeTransition {
+        var size: NSSize
+        var fpsProgress: CGFloat
+        var available: Bool
     }
-    private var retainedFPSPresentation: RetainedFPSPresentation?
+    private var modeTransition: ModeTransition?
+    private var modeAnimationTimer: Timer?
     private var fpsAvailability = HUDFPSAvailability()
     private var fpsAvailabilityTask: Task<Void, Never>?
     private var fpsAnimationTimer: Timer?
     private var fpsAnimationTarget: CGFloat?
     private var fpsProgress: CGFloat = 1
     private var fpsCollapseDistance: CGFloat = 0
+    private weak var fpsPresentationAnchor: NSView?
+    private var collapsedVerticalFPSHeight: CGFloat = 0
     private let collapsedFPSIndicator = NSImageView()
     private var collapsedFPSHeaderHeight: CGFloat { HUDStyle.ramDetailHeight(scale: hudScale) }
     private var expandedHUDSize = NSSize.zero
@@ -171,15 +176,12 @@ final class HUDWindowController {
     }
 
     private var usesFPSPresentation: Bool {
-        (dynamicFPSActive || retainedFPSPresentation != nil)
+        (dynamicFPSActive || modeTransition != nil)
             && !enabledMetrics.isDisjoint(with: [.fps, .fpsGraph])
     }
 
     private var presentedFPSProgress: CGFloat {
-        guard let retained = retainedFPSPresentation else { return dynamicFPSActive ? fpsProgress : 1 }
-        guard let start = retained.revealStart else { return retained.progress }
-        let fraction = min(1, max(0, (autoHidePresentation.progress - start) / max(0.0001, 1 - start)))
-        return retained.progress + (1 - retained.progress) * fraction
+        modeTransition?.fpsProgress ?? (dynamicFPSActive ? fpsProgress : 1)
     }
 
     private var shouldAnimateAutoHide: Bool {
@@ -195,6 +197,7 @@ final class HUDWindowController {
         windowGeometryTask?.cancel()
         fpsAvailabilityTask?.cancel()
         fpsAnimationTimer?.invalidate()
+        modeAnimationTimer?.invalidate()
     }
 
     // MARK: - Init
@@ -481,6 +484,7 @@ final class HUDWindowController {
                 dividerHeightConstraints[index]?.constant = height
                 (divider as? HUDSampleDividerView)?.applyStyle(
                     scale: hudScale, background: textBackground,
+                    afterFPS: lastVisibleGroup == 0,
                     connectsToHistory: lastVisibleGroup == 0 && enabledMetrics.contains(.fpsGraph))
                 if showDivider {
                     visibleDividerCount += 1
@@ -497,6 +501,7 @@ final class HUDWindowController {
         bottomDividerHeightConstraint?.constant = bottomHeight
         (bottomDivider as? HUDSampleDividerView)?.applyStyle(
             scale: hudScale, background: textBackground,
+            afterFPS: lastVisibleGroup == 0,
             connectsToHistory: lastVisibleGroup == 0 && enabledMetrics.contains(.fpsGraph))
         return (visibleDividerCount + (showBottomDivider ? 1 : 0),
                 totalDividerHeight + (showBottomDivider ? bottomHeight : 0))
@@ -887,6 +892,7 @@ final class HUDWindowController {
             enabled
         fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
         if !enabled {
+            stopModeAnimation()
             autoHidePresentation.transition(visible: fpsAvailability.expanded, animated: false)
             fpsAnimationTimer?.invalidate()
             fpsAnimationTimer = nil
@@ -902,32 +908,68 @@ final class HUDWindowController {
 
     func setAutoHideMode(_ mode: HUDAutoHideMode) {
         guard autoHideMode != mode else { return }
-        let previousFPSProgress = dynamicFPSActive ? fpsProgress : 1
-        let previousSize = presentedHUDSize
-        let carryFPS = dynamicFPSActive && fpsProgress < 1 && mode == .all
+        transitionToAutoHideMode(mode)
+    }
+
+    private func transitionToAutoHideMode(_ mode: HUDAutoHideMode) {
+        let startSize = presentedHUDSize
+        var startFPS = presentedFPSProgress
         let fullExtent = alignment == .horizontal ? expandedHUDSize.width : expandedHUDSize.height
-        let visibleExtent = alignment == .horizontal ? previousSize.width : previousSize.height
-        let initialProgress = fullExtent > 0 ? min(1, max(0, visibleExtent / fullExtent)) : 1
+        let startExtent = alignment == .horizontal ? startSize.width : startSize.height
         fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
-        retainedFPSPresentation = carryFPS
-            ? RetainedFPSPresentation(progress: previousFPSProgress,
-                revealStart: fpsAvailability.expanded ? initialProgress : nil)
-            : nil
+        let available = fpsAvailability.expanded
+        let targetFPS: CGFloat = mode == .fps && !available
+            && !enabledMetrics.isDisjoint(with: [.fps, .fpsGraph]) ? 0 : 1
+        // There is no visible FPS content to carry out of a fully hidden HUD.
+        // Reveal the destination's rows (or arrow) from the very first frame.
+        if startExtent == 0 { startFPS = targetFPS }
+        let endFPS = mode == .all && !available ? startFPS : targetFPS
+        stopModeAnimation()
+        modeTransition = ModeTransition(size: startSize, fpsProgress: startFPS, available: available)
         autoHideMode = mode
         fpsAnimationTimer?.invalidate()
         fpsAnimationTimer = nil
         fpsAnimationTarget = nil
-        autoHidePresentation.setEnabled(mode == .all, visible: fpsAvailability.expanded,
-            animated: shouldAnimateAutoHide, initialProgress: mode == .all ? initialProgress : nil)
-        updateLayout()
-        updateVisibility()
-        if dynamicFPSActive {
-            let target = fpsProgress
-            if shouldAnimateAutoHide { fpsProgress = previousFPSProgress }
+        autoHidePresentation.stop()
+        // Settle the destination's availability state behind the temporary
+        // presentation, so callbacks never expose an intermediate full HUD.
+        autoHidePresentation.setEnabled(mode == .all, visible: available, animated: false)
+        autoHidePresentation.transition(visible: available, animated: false)
+        updateLayout(keepingModeTransition: true)
+        let endSize = settledHUDSize
+        let endExtent = alignment == .horizontal ? endSize.width : endSize.height
+        let distance = max(abs(endFPS - startFPS), abs(endExtent - startExtent) / max(1, fullExtent))
+        guard shouldAnimateAutoHide, distance > 0 else {
+            stopModeAnimation()
             applyHUDPresentation()
-            animateFPS(to: target)
+            updateVisibility()
+            return
         }
-        restorePosition()
+        updateVisibility()
+        let started = ProcessInfo.processInfo.systemUptime
+        let duration = HUDFPSAvailability.animationDuration * Double(distance)
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self else { timer.invalidate(); return }
+                let t = min(1, (ProcessInfo.processInfo.systemUptime - started) / duration)
+                let eased = CGFloat(t * t * (3 - 2 * t))
+                let scale = self.panel.backingScaleFactor
+                self.modeTransition?.size = NSSize(
+                    width: ((startSize.width + (endSize.width - startSize.width) * eased) * scale).rounded() / scale,
+                    height: ((startSize.height + (endSize.height - startSize.height) * eased) * scale).rounded() / scale)
+                self.modeTransition?.fpsProgress = startFPS + (endFPS - startFPS) * eased
+                if t >= 1 { self.stopModeAnimation() }
+                self.applyHUDPresentation()
+            }
+        }
+        modeAnimationTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func stopModeAnimation() {
+        modeAnimationTimer?.invalidate()
+        modeAnimationTimer = nil
+        modeTransition = nil
     }
 
     func setAutoHideAnimated(_ animated: Bool) {
@@ -937,7 +979,9 @@ final class HUDWindowController {
         // an in-flight transition immediately without changing the hide mode.
         guard !animated else { return }
         fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
-        if autoHidePresentation.enabled {
+        if modeTransition != nil {
+            transitionToAutoHideMode(autoHideMode)
+        } else if autoHidePresentation.enabled {
             autoHidePresentation.transition(visible: fpsAvailability.expanded, animated: false)
         } else {
             animateFPS(to: fpsAvailability.expanded ? 1 : 0)
@@ -945,7 +989,7 @@ final class HUDWindowController {
     }
 
     private func applyAutoHidePresentation() {
-        let hidden = autoHidePresentation.isHidden
+        let hidden = isAutomaticallyHidden
         if lastAutoHideHidden != hidden {
             lastAutoHideHidden = hidden
             updateVisibility()
@@ -954,10 +998,6 @@ final class HUDWindowController {
     }
 
     private func animateAutoHide(visible: Bool) {
-        if retainedFPSPresentation != nil && autoHidePresentation.targetsVisible != visible {
-            retainedFPSPresentation = RetainedFPSPresentation(progress: presentedFPSProgress,
-                revealStart: visible ? autoHidePresentation.progress : nil)
-        }
         autoHidePresentation.transition(visible: visible, animated: shouldAnimateAutoHide)
     }
 
@@ -1103,7 +1143,7 @@ final class HUDWindowController {
 
     private func updateVisibility() {
 
-        if hudEnabled && hasVisibleContent && !autoHidePresentation.isHidden {
+        if hudEnabled && hasVisibleContent && !isAutomaticallyHidden {
 
             restorePosition()
 
@@ -1232,6 +1272,7 @@ final class HUDWindowController {
     func retryGlassSession() { glassSession.retry() }
 
     func shutdown() {
+        stopModeAnimation()
         autoHidePresentation.stop()
         windowGeometryTask?.cancel()
         windowGeometryTask = nil
@@ -1524,7 +1565,8 @@ final class HUDWindowController {
         }
     }
 
-    private func updateLayout() {
+    private func updateLayout(keepingModeTransition: Bool = false) {
+        if !keepingModeTransition { stopModeAnimation() }
         // Release the previous width before changing rows/fonts or switching
         // away from a fully collapsed horizontal viewport.
         stackTrailingConstraint?.isActive = false
@@ -1593,6 +1635,16 @@ final class HUDWindowController {
             + spacingHeight
             + verticalPadding
 
+        // Measure the collapsed layout directly from its visible body, replacing
+        // any FPS mode with one arrow row. Subtracting from an already rounded
+        // expanded height can otherwise leave a different half-pixel remainder.
+        let bodyMetrics = enabledMetrics.subtracting([.fps, .fpsGraph])
+        let bodyHeight = bodyMetrics.reduce(CGFloat.zero) { $0 + metricRowHeight($1, scale: hudScale) }
+        collapsedVerticalFPSHeight = pixelAlignedSize(NSSize(width: 0,
+            height: 2 * verticalPadding + collapsedFPSHeaderHeight + bodyHeight
+                + packageHeight + dividers.height
+                + (CGFloat(bodyMetrics.count) + dividerCount) * HUDStyle.rowSpacing(scale: hudScale))).height
+
         // The vertical footprint depends only on scale, not the selected
         // categories, readings, emphasis, or current values. FPS Value alone
         // retains its deliberately compact presentation.
@@ -1658,6 +1710,7 @@ final class HUDWindowController {
 
     private func configureDynamicFPSPresentation() {
         fpsCollapseDistance = 0
+        fpsPresentationAnchor = nil
         fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
         if usesFPSPresentation && alignment == .horizontal {
             fpsCollapseDistance = max(0, horizontalView.fpsSectionWidth - collapsedFPSHeaderHeight)
@@ -1678,6 +1731,7 @@ final class HUDWindowController {
                         && !groupDividers.values.contains(where: { $0 === view }) && view !== bottomDivider
                 }
                 if let first = divider ?? firstBody, let host = stackView.superview {
+                    fpsPresentationAnchor = first
                     let rect = first.convert(first.bounds, to: host)
                     fpsCollapseDistance = max(0, host.bounds.maxY - rect.maxY - HUDStyle.verticalPadding(scale: hudScale)
                         - collapsedFPSHeaderHeight - HUDStyle.rowSpacing(scale: hudScale))
@@ -1689,11 +1743,16 @@ final class HUDWindowController {
     }
 
     private var presentedHUDSize: NSSize {
-        let progress = presentedFPSProgress
+        modeTransition?.size ?? settledHUDSize
+    }
+
+    private var settledHUDSize: NSSize {
+        let progress = dynamicFPSActive ? fpsProgress : 1
         let horizontal = alignment == .horizontal
         let reduction = autoHidePresentation.enabled
             ? (horizontal ? expandedHUDSize.width : expandedHUDSize.height) * (1 - autoHidePresentation.progress)
-            : fpsCollapseDistance * (1 - progress)
+            : (horizontal ? fpsCollapseDistance
+                : usesFPSPresentation ? max(0, expandedHUDSize.height - collapsedVerticalFPSHeight) : 0) * (1 - progress)
         let scale = panel.backingScaleFactor
         return NSSize(
             width: max(0, (expandedHUDSize.width - (horizontal ? reduction : 0)) * scale).rounded() / scale,
@@ -1701,9 +1760,6 @@ final class HUDWindowController {
     }
 
     private func applyHUDPresentation() {
-        if autoHidePresentation.enabled && (autoHidePresentation.isHidden || autoHidePresentation.progress >= 1) {
-            retainedFPSPresentation = nil
-        }
         let progress = presentedFPSProgress
         let horizontal = alignment == .horizontal
         let wholeHUD = autoHidePresentation.enabled
@@ -1716,8 +1772,10 @@ final class HUDWindowController {
         let fullExtent = horizontal ? expandedHUDSize.width : expandedHUDSize.height
         let backing = panel.backingScaleFactor
         let fpsExtent = ((fullExtent - fpsCollapseDistance * (1 - progress)) * backing).rounded() / backing
-        let offset = wholeHUD ? (retainedFPSPresentation == nil ? 0 : fullExtent - fpsExtent)
-            : (horizontal ? expandedHUDSize.width - width : expandedHUDSize.height - height)
+        // Position the content from the measured divider edge, independently of
+        // the rounded surface height, so the divider stays fixed across modes.
+        let fpsOffset = horizontal ? fullExtent - fpsExtent : fpsCollapseDistance * (1 - progress)
+        let offset = fpsOffset
         // Keep the top-left anchor fixed while the native surface and window resize.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -1734,6 +1792,10 @@ final class HUDWindowController {
         }
         backgroundContentView.wantsLayer = true
         for metric in [HUDMetric.fps, .fpsGraph] { metricRows[metric]?.alphaValue = progress }
+        for divider in groupDividers.values {
+            (divider as? HUDSampleDividerView)?.setHistoryVisibility(progress)
+        }
+        (bottomDivider as? HUDSampleDividerView)?.setHistoryVisibility(progress)
         // A quiet arrow points toward the space where FPS will return. Cross-fade
         // it near the end of collapse so it does not overlap the regular FPS row.
         collapsedFPSIndicator.image = NSImage(systemSymbolName: horizontal ? "arrow.right" : "arrow.down",
@@ -1752,6 +1814,19 @@ final class HUDWindowController {
         backgroundView.alphaValue = height < 1 || width < 1 ? 0 : 1
         panel.draggableContentRect = container.convert(container.bounds, to: nil)
         container.layoutSubtreeIfNeeded()
+        if !horizontal, usesFPSPresentation, let first = fpsPresentationAnchor {
+            // NSStackView rounds its child frames again when the cropped surface
+            // changes height. Keep the body anchored to the arrow's fixed spacing
+            // instead of inheriting the expanded mode's rounding remainder.
+            let desired = HUDStyle.verticalPadding(scale: hudScale) + collapsedFPSHeaderHeight
+                + HUDStyle.rowSpacing(scale: hudScale) + fpsCollapseDistance * progress
+            let target = (desired * backing).rounded() / backing
+            let actual = backgroundContentView.bounds.maxY - first.convert(first.bounds, to: backgroundContentView).maxY
+            if abs(target - actual) > 0.01 {
+                stackTopConstraint?.constant += target - actual
+                container.layoutSubtreeIfNeeded()
+            }
+        }
         CATransaction.commit()
         applyAutoHidePresentation()
     }
@@ -1789,7 +1864,9 @@ final class HUDWindowController {
         fpsAvailabilityTask = nil
         fpsAvailability.receivedReading()
         // Do not restart an in-flight expansion for each arriving sample.
-        if autoHidePresentation.enabled { animateAutoHide(visible: true) }
+        if let transition = modeTransition {
+            if !transition.available { transitionToAutoHideMode(autoHideMode) }
+        } else if autoHidePresentation.enabled { animateAutoHide(visible: true) }
         else { animateFPS(to: 1) }
     }
 
@@ -1803,7 +1880,8 @@ final class HUDWindowController {
             fpsAvailabilityTask = nil
             fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
             if !fpsAvailability.expanded {
-                if autoHidePresentation.enabled { animateAutoHide(visible: false) }
+                if modeTransition != nil { transitionToAutoHideMode(autoHideMode) }
+                else if autoHidePresentation.enabled { animateAutoHide(visible: false) }
                 else { animateFPS(to: 0) }
             }
         }
@@ -1847,7 +1925,8 @@ final class HUDWindowController {
     }
 
     private func restorePosition() {
-        let positioningSize = dynamicFPSActive || autoHidePresentation.enabled ? expandedHUDSize : container.frame.size
+        let positioningSize = dynamicFPSActive || autoHidePresentation.enabled || modeTransition != nil
+            ? expandedHUDSize : container.frame.size
         if let customTopLeft, !NSScreen.screens.isEmpty {
             // Choose the nearest remaining display if the saved display was disconnected.
             let screen = NSScreen.screens.min { left, right in
@@ -2018,7 +2097,9 @@ final class HUDWindowController {
 private final class HUDSampleDividerView: NSView {
     private let line = NSView()
     private var hudScale: CGFloat = 1
+    private var normalLineOffset: CGFloat = 2
     private var connectsToHistory = false
+    private var historyVisibility: CGFloat = 1
     override var isFlipped: Bool { true }
 
     init() {
@@ -2029,16 +2110,25 @@ private final class HUDSampleDividerView: NSView {
 
     required init?(coder: NSCoder) { fatalError("Use init()") }
 
-    func applyStyle(scale: HUDScale, background: HUDBackground, connectsToHistory: Bool = false) {
+    func applyStyle(scale: HUDScale, background: HUDBackground, afterFPS: Bool = true, connectsToHistory: Bool = false) {
         hudScale = CGFloat(scale.rawValue)
+        normalLineOffset = HUDStyle.dividerHeight(scale: scale, afterFPS: afterFPS) - 5 * hudScale
         self.connectsToHistory = connectsToHistory
         line.layer?.backgroundColor = HUDStyle.separatorColor(background: background).cgColor
         needsLayout = true
     }
 
+    func setHistoryVisibility(_ progress: CGFloat) {
+        guard historyVisibility != progress else { return }
+        historyVisibility = progress
+        needsLayout = true
+    }
+
     override func layout() {
         super.layout()
-        line.frame = NSRect(x: 0, y: connectsToHistory ? 0 : bounds.height - 5 * hudScale,
+        // The graph's fade meets the divider only while the graph is visible.
+        // A collapsed arrow uses the same divider position in every FPS mode.
+        line.frame = NSRect(x: 0, y: normalLineOffset * (connectsToHistory ? 1 - historyVisibility : 1),
                             width: bounds.width, height: 0.5 * hudScale)
     }
 }

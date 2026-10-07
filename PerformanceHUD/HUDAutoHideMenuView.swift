@@ -9,7 +9,7 @@ final class HUDAutoHideMenuView: NSView {
         trackingMode: .selectOne, target: nil, action: nil)
     private static let modes: [HUDAutoHideMode] = [.off, .fps, .all]
 
-    private let animatedControl = NSButton(checkboxWithTitle: "Animated", target: nil, action: nil)
+    private let animatedControl = HUDReadingCheckbox(title: "Animation", supportsEmphasis: false)
 
     init(selected: HUDAutoHideMode, animated: Bool = true) {
         self.selected = selected
@@ -26,7 +26,7 @@ final class HUDAutoHideMenuView: NSView {
         animatedControl.state = animated ? .on : .off
         animatedControl.target = self
         animatedControl.action = #selector(animatedChanged)
-        animatedControl.setAccessibilityLabel("Animate automatic hiding and showing")
+        animatedControl.setControlAccessibilityLabel("Animate automatic hiding and showing")
         for view in [label, control, animatedControl] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)

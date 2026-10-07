@@ -24,10 +24,10 @@ nonisolated enum PowerHelperAvailability {
         switch self {
         case .idle, .ready: return nil
         case .starting: return "Starting power readings. Waiting for the helper’s first valid sample."
-        case .setupRequired: return "Power readings need helper setup. Click a Power checkbox or SoC Power to set up or update the helper."
-        case .approvalRequired: return "Power readings need macOS approval. Click a Power checkbox or SoC Power to open approval settings."
+        case .setupRequired: return "Power readings need helper setup. Click a Power checkbox or the SOC switch to set up or update the helper."
+        case .approvalRequired: return "Power readings need macOS approval. Click a Power checkbox or the SOC switch to open approval settings."
         case .updating: return "Power helper setup is in progress."
-        case .failed: return "The power helper could not provide readings. Click a Power checkbox or SoC Power to repair its setup."
+        case .failed: return "The power helper could not provide readings. Click a Power checkbox or the SOC switch to repair its setup."
         }
     }
 }

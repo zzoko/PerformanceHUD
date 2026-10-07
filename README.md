@@ -1,6 +1,6 @@
 # PerformanceHUD
 
-## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version.svg" alt="App version 2.0 — view changelog" width="56" height="30" align="top"></a>
+## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version.svg" alt="App version 2.1 — view changelog" width="56" height="30" align="top"></a>
 
 Download the ready-built app for **$3.99**, or build it yourself for free. Both offer the same features, with no subscription or feature unlocks.
 
@@ -52,6 +52,8 @@ I’ve put a lot of thought into keeping the overlay easy to read and the contro
   </tr>
 </table>
 
+*Glass opacity varies with your macOS Liquid Glass setting.*
+
 <table>
   <tr>
     <th colspan="2">Light appearance</th>
@@ -73,6 +75,8 @@ I’ve put a lot of thought into keeping the overlay easy to read and the contro
     </td>
   </tr>
 </table>
+
+*Glass opacity varies with your macOS Liquid Glass setting.*
 
 <details>
 <summary>Watch PerformanceHUD in-game</summary>

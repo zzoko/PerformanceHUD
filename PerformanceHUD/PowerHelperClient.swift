@@ -117,7 +117,7 @@ final class PowerHelperClient {
         UserDefaults.standard.set(true, forKey: promptKey)
         let alert = NSAlert()
         alert.messageText = needsUpdate ? "Update power readings helper?" : "Enable power readings?"
-        alert.informativeText = "CPU, GPU, ANE, and SoC watts use a small background helper to read macOS hardware measurements. macOS may ask for administrator approval. It only samples while the HUD is visible and a category’s Power option or SoC Power is enabled. You can remove it from the Power Helper menu."
+        alert.informativeText = "CPU, GPU, ANE, and SOC watts use a small background helper to read macOS hardware measurements. macOS may ask for administrator approval. It samples only for selected power readings while the HUD is visible or logging is active. You can remove it from the Power Helper menu."
         alert.addButton(withTitle: needsUpdate ? "Update Helper" : "Enable Power Readings")
         alert.addButton(withTitle: "Not Now")
         NSApp.activate(ignoringOtherApps: true)

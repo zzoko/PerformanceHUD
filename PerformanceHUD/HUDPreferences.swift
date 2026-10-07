@@ -289,13 +289,12 @@ enum HUDPreferences {
         }
     }
 
-    // Only confirmed fanless hardware changes the initial category default.
-    // Persist it to avoid showing the empty category again at the next launch,
-    // but never overwrite a user's saved choice (including manually enabling it).
+    // Only confirmed fanless hardware forces the category off. Temporary read
+    // failures preserve the user's selection and the known fan topology.
     @discardableResult
-    static func applyFanDetectionDefault(_ sample: FanSample, in store: UserDefaults = .standard) -> Bool {
+    static func applyFanAvailability(_ sample: FanSample, in store: UserDefaults = .standard) -> Bool {
         let key = metricKey(.fans)
-        guard sample.status == .noFans, store.object(forKey: key) == nil else { return false }
+        guard sample.status == .noFans, store.object(forKey: key) as? Bool != false else { return false }
         store.set(false, forKey: key)
         return true
     }

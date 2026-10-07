@@ -76,8 +76,8 @@ final class AppDelegate:
 
     private var autoHideMenuView: HUDAutoHideMenuView?
 
-    private var metricMenuItems:
-        [HUDMetric: NSMenuItem] = [:]
+    private var categoryMenuView: HUDCategoryListView?
+    private var deviceInfoMenuView: HUDDeviceInfoMenuView?
 
     private var sizeMenuView:
         HUDSizeMenuView?
@@ -164,15 +164,15 @@ final class AppDelegate:
         fanMonitor.onUpdate = { [weak self] sample in
             guard let self else { return }
             logSnapshot.updateFans(sample)
-            let defaultChanged = HUDPreferences.applyFanDetectionDefault(sample)
+            let availabilityChanged = HUDPreferences.applyFanAvailability(sample)
             let options = HUDPreferences.fanOptions
-            if defaultChanged {
+            if availabilityChanged {
                 enabledMetrics = HUDPreferences.visibleMetrics
                 hudWindow?.setFanOptions(options)
             }
             hudWindow?.updateFans(sample)
             fanMenuView?.update(sample: sample, options: options)
-            if defaultChanged { reconcileMonitoring() }
+            if availabilityChanged { reconcileMonitoring() }
         }
 
         // Battery
@@ -552,6 +552,7 @@ final class AppDelegate:
         hudVisibilityItem.target =
             self
 
+        HUDMenuLayout.reserveStateColumn(for: hudVisibilityItem)
         menu.addItem(
             hudVisibilityItem
         )
@@ -649,29 +650,7 @@ final class AppDelegate:
 
         // MARK: Metrics
 
-        func addMetricPadding() {
-            // Keep native menu checkmarks and keyboard handling while giving
-            // 24pt standard items the same 34pt pitch as the resource rows.
-            let padding = NSMenuItem()
-            padding.isEnabled = false
-            let view = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 5))
-            view.setAccessibilityElement(false)
-            padding.view = view
-            menu.addItem(padding)
-        }
-
-        func addMetric(_ metric: HUDMetric) {
-            addMetricPadding()
-            let item = NSMenuItem(title: metric.menuTitle, action: #selector(toggleMetric(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = metric.rawValue
-            HUDMenuLayout.reserveStateColumn(for: item)
-            item.state = enabledMetrics.contains(metric) ? .on : .off
-            item.isEnabled = HUDPreferences.alignment.allows(metric)
-            menu.addItem(item)
-            metricMenuItems[metric] = item
-            addMetricPadding()
-        }
+        var categories: [HUDCategoryMenuView] = []
         let fpsView = HUDFPSMenuView(options: HUDPreferences.fpsOptions, alignment: HUDPreferences.alignment)
         fpsView.onChange = { [weak self] options in
             guard let self else { return }
@@ -684,10 +663,7 @@ final class AppDelegate:
             }
         }
         fpsMenuView = fpsView
-        let fpsItem = NSMenuItem()
-        fpsItem.view = fpsView
-        menu.addItem(fpsItem)
-        var powerRows: [HUDResourceMenuView] = []
+        categories.append(fpsView)
         for group in HUDResourceGroup.allCases {
             let view = HUDResourceMenuView(group: group, options: HUDPreferences.resourceOptions(for: group))
             view.onChange = { [weak self] options in
@@ -703,30 +679,22 @@ final class AppDelegate:
                 Task { @MainActor [weak self] in self?.powerMonitor.helper.requestPowerAccess() }
             }
             resourceMenuViews[group] = view
-            if group.supportsPower {
-                powerRows.append(view)
-                if group == .ane {
-                    let package = HUDPackagePowerMenuView(options: HUDPreferences.packagePowerOptions)
-                    package.onChange = { [weak self] options in
-                        HUDPreferences.packagePowerOptions = options
-                        self?.hudWindow?.setPackagePowerOptions(options)
-                        self?.reconcileMonitoring()
-                        self?.updatePackagePowerMenu()
-                    }
-                    package.onPowerSetup = { [weak self] in
-                        self?.statusItem?.menu?.cancelTracking()
-                        Task { @MainActor [weak self] in self?.powerMonitor.helper.requestPowerAccess() }
-                    }
-                    packagePowerMenuView = package
-                    let item = NSMenuItem()
-                    item.view = HUDPowerGroupMenuView(rows: powerRows, package: package)
-                    menu.addItem(item)
-                    updatePackagePowerMenu()
+            categories.append(view)
+            if group == .ane {
+                let package = HUDPackagePowerMenuView(options: HUDPreferences.packagePowerOptions)
+                package.onChange = { [weak self] options in
+                    HUDPreferences.packagePowerOptions = options
+                    self?.hudWindow?.setPackagePowerOptions(options)
+                    self?.reconcileMonitoring()
+                    self?.updatePackagePowerMenu()
                 }
-            } else {
-                let item = NSMenuItem()
-                item.view = view
-                menu.addItem(item)
+                package.onPowerSetup = { [weak self] in
+                    self?.statusItem?.menu?.cancelTracking()
+                    Task { @MainActor [weak self] in self?.powerMonitor.helper.requestPowerAccess() }
+                }
+                packagePowerMenuView = package
+                categories.append(package)
+                updatePackagePowerMenu()
             }
         }
         let fanView = HUDFanMenuView(options: HUDPreferences.fanOptions,
@@ -739,9 +707,7 @@ final class AppDelegate:
             reconcileMonitoring()
         }
         fanMenuView = fanView
-        let fanItem = NSMenuItem()
-        fanItem.view = fanView
-        menu.addItem(fanItem)
+        categories.append(fanView)
         let batteryView = HUDResourceMenuView(batteryOptions: HUDPreferences.batteryOptions)
         batteryView.onBatteryChange = { [weak self] options in
             guard let self else { return }
@@ -750,9 +716,7 @@ final class AppDelegate:
             hudWindow?.setBatteryOptions(options)
             reconcileMonitoring()
         }
-        let batteryItem = NSMenuItem()
-        batteryItem.view = batteryView
-        menu.addItem(batteryItem)
+        categories.append(batteryView)
         let miscView = HUDMiscMenuView(options: HUDPreferences.miscOptions, alignment: HUDPreferences.alignment)
         miscMenuView = miscView
         miscView.onChange = { [weak self] options in
@@ -762,10 +726,17 @@ final class AppDelegate:
             hudWindow?.setMiscOptions(options)
             reconcileMonitoring()
         }
-        let miscItem = NSMenuItem()
-        miscItem.view = miscView
-        menu.addItem(miscItem)
-        addMetric(.deviceInfo)
+        categories.append(miscView)
+        let chipView = HUDDeviceInfoMenuView(selected: enabledMetrics.contains(.deviceInfo),
+                                             enabled: HUDPreferences.alignment.allows(.deviceInfo))
+        chipView.onChange = { [weak self] in self?.toggleDeviceInfo() }
+        deviceInfoMenuView = chipView
+        categories.append(chipView)
+        let categoryList = HUDCategoryListView(categories: categories)
+        categoryMenuView = categoryList
+        let categoryItem = NSMenuItem()
+        categoryItem.view = categoryList
+        menu.addItem(categoryItem)
 
         // Separator before Close App.
 
@@ -943,6 +914,11 @@ final class AppDelegate:
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        if menu === statusItem?.menu, let categories = categoryMenuView {
+            let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
+            let otherHeight = menu.size.height - categories.frame.height
+            categories.fit(availableHeight: (screen?.visibleFrame.height ?? 800) - otherHeight - 32)
+        }
         updateUpdaterMenu()
         updateLoginMenu()
         updateLoggingMenu()
@@ -1147,7 +1123,7 @@ final class AppDelegate:
 
     private func resetHUDOptions() {
         HUDPreferences.resetOptions()
-        HUDPreferences.applyFanDetectionDefault(fanMonitor.sample)
+        HUDPreferences.applyFanAvailability(fanMonitor.sample)
         // Restore display defaults without bypassing a denied or failed helper.
         if powerMonitor.helper.shouldTurnPowerOff {
             for group in HUDResourceGroup.allCases where group.supportsPower {
@@ -1197,11 +1173,8 @@ final class AppDelegate:
         fpsMenuView?.update(options: HUDPreferences.fpsOptions, alignment: alignment)
         miscMenuView?.update(alignment: alignment)
         updatePackagePowerMenu()
-        for metric in [HUDMetric.deviceInfo] {
-            guard let item = metricMenuItems[metric] else { continue }
-            item.isEnabled = alignment.allows(metric)
-            item.state = enabledMetrics.contains(metric) ? .on : .off
-        }
+        deviceInfoMenuView?.update(selected: enabledMetrics.contains(.deviceInfo),
+                                   enabled: alignment.allows(.deviceInfo))
         reconcileMonitoring()
     }
 
@@ -1224,67 +1197,15 @@ final class AppDelegate:
             )
     }
 
-    // MARK: - Metric Toggle
+    // MARK: - Chip & OS
 
-    @objc
-    private func toggleMetric(
-        _ sender: NSMenuItem
-    ) {
-
-        guard
-            let metric =
-                HUDMetric(
-                    rawValue:
-                        sender.tag
-                )
-        else {
-            return
-        }
-
-        guard HUDPreferences.alignment.allows(metric) else { return }
-
-        let isEnabled =
-            enabledMetrics
-                .contains(
-                    metric
-                )
-
-        let newState =
-            !isEnabled
-
-        if newState {
-
-            enabledMetrics.insert(
-                metric
-            )
-
-        } else {
-
-            enabledMetrics.remove(
-                metric
-            )
-        }
-
-        // Save preference.
-        HUDPreferences.setMetricEnabled(
-            metric,
-            enabled:
-                newState
-        )
-
-        // Update menu checkmark.
-        sender.state =
-            newState
-            ? .on
-            : .off
-
-        // Update HUD.
-        hudWindow?
-            .setMetricEnabled(
-                metric,
-                enabled:
-                    newState
-            )
+    private func toggleDeviceInfo() {
+        guard HUDPreferences.alignment.allows(.deviceInfo) else { return }
+        let enabled = !enabledMetrics.contains(.deviceInfo)
+        HUDPreferences.setMetricEnabled(.deviceInfo, enabled: enabled)
+        enabledMetrics = HUDPreferences.visibleMetrics
+        deviceInfoMenuView?.update(selected: enabled, enabled: true)
+        hudWindow?.setMetricEnabled(.deviceInfo, enabled: enabled)
         reconcileMonitoring()
     }
 

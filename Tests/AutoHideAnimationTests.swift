@@ -39,11 +39,11 @@ import AppKit
             forName: UserDefaults.argumentDomain)
         let menu = HUDAutoHideMenuView(selected: .fps, animated: true)
         let control: NSSegmentedControl = member(menu, "control")
-        let checkbox: NSButton = member(menu, "animatedControl")
+        let checkbox: HUDReadingCheckbox = member(menu, "animatedControl")
         let menuWindow = NSWindow(contentRect: menu.frame, styleMask: [], backing: .buffered, defer: false)
         menuWindow.contentView = menu
         menu.layoutSubtreeIfNeeded()
-        precondition(checkbox.title == "Animated" && checkbox.state == .on)
+        precondition(checkbox.title == "Animation" && checkbox.state == .on && checkbox.emphasisControl == nil)
         let selectorRect = control.alignmentRect(forFrame: control.frame)
         let checkboxRect = checkbox.alignmentRect(forFrame: checkbox.frame)
         precondition(checkboxRect.minX >= selectorRect.maxX + 8 && abs(checkboxRect.midY - selectorRect.midY) < 0.1)
@@ -110,6 +110,79 @@ import AppKit
         }
 
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        // Every mode pair must start at the current surface and move directly
+        // to its destination. In particular All -> FPS must never expose the
+        // expanded FPS rows when readings are unavailable.
+        for alignment in HUDAlignment.allCases {
+            for animated in [false, true] {
+                for source in HUDAutoHideMode.allCases {
+                    for destination in HUDAutoHideMode.allCases where source != destination {
+                        let hud = fixture(alignment, animated: false)
+                        let body: NSView = member(hud, "container")
+                        let panel: HUDPanel = member(hud, "panel")
+                        let arrow: NSImageView = member(hud, "collapsedFPSIndicator")
+                        let rows: [HUDMetric: NSView] = member(hud, "metricRows")
+                        hud.setAutoHideMode(destination)
+                        let expected = body.frame.size
+                        hud.setAutoHideMode(source)
+                        let start = body.frame.size
+                        let anchor = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
+                        hud.setAutoHideAnimated(animated)
+                        hud.setAutoHideMode(destination)
+                        let description = "\(alignment): \(source) -> \(destination), animation=\(animated)"
+                        func extent(_ size: NSSize) -> CGFloat {
+                            alignment == .horizontal ? size.width : size.height
+                        }
+                        if animated && !reduceMotion {
+                            precondition(body.frame.size == start, "Mode switch must not snap: \(description)")
+                            var previous = extent(start)
+                            var sawIntermediate = false
+                            for _ in 0..<25 {
+                                try? await Task.sleep(for: .milliseconds(20))
+                                let current = extent(body.frame.size)
+                                let end = extent(expected)
+                                precondition(current >= min(extent(start), end) && current <= max(extent(start), end),
+                                             "Mode switch overshot its destination: \(description)")
+                                precondition(end > extent(start) ? current >= previous : current <= previous,
+                                             "Mode switch reversed unexpectedly: \(description)")
+                                if current != extent(start) && current != end { sawIntermediate = true }
+                                if source == .all && destination == .fps {
+                                    precondition(!arrow.isHidden && rows[.fps]!.alphaValue == 0,
+                                                 "All -> FPS must reveal only the arrow: \(description)")
+                                }
+                                precondition(panel.frame.minX == anchor.x && panel.frame.maxY == anchor.y,
+                                             "Mode switch moved its anchor: \(description)")
+                                previous = current
+                            }
+                            precondition(sawIntermediate, "Missing animation: \(description)")
+                        } else {
+                            let timer: Timer? = member(hud, "modeAnimationTimer")
+                            precondition(timer == nil, "Instant mode switch must not leave an animation timer")
+                        }
+                        precondition(body.frame.size == expected, "Wrong final size: \(description)")
+                        precondition(hud.isAutomaticallyHidden == (destination == .all))
+                        precondition(panel.isVisible == (destination != .all))
+                        hud.shutdown()
+                    }
+                }
+            }
+
+            let interrupting = fixture(alignment, animated: false)
+            let body: NSView = member(interrupting, "container")
+            let compact = body.frame.size
+            interrupting.setAutoHideMode(.all)
+            interrupting.setAutoHideAnimated(true)
+            interrupting.setAutoHideMode(.off)
+            try? await Task.sleep(for: .milliseconds(100))
+            let partial = body.frame.size
+            interrupting.setAutoHideMode(.fps)
+            if !reduceMotion { precondition(body.frame.size == partial, "Rapid mode changes continue from the current frame") }
+            interrupting.setAutoHideAnimated(false)
+            precondition(body.frame.size == compact, "Disabling Animation finishes at the compact FPS arrow")
+            let timer: Timer? = member(interrupting, "modeAnimationTimer")
+            precondition(timer == nil)
+            interrupting.shutdown()
+        }
         for alignment in HUDAlignment.allCases {
             for scale in [HUDScale.small, .normal, .large] {
                 let hud = fixture(alignment, scale: scale, animated: true)
@@ -179,6 +252,6 @@ import AppKit
             precondition(finished == 1 && timer == nil, "Unchecking Animated finishes an FPS reveal immediately")
             fps.shutdown()
         }
-        print("PASS: independent Animated defaults/persistence/reset and menu geometry; instant FPS/All options; unchanged delay; static Off; compact handoff at 0.5×/1×/2×, reversal and mid-animation disable in both layouts")
+        print("PASS: shared Animation checkbox and independent preferences; every Off/FPS/All transition animated or instant; stable arrow reveal, rapid switching, unchanged delay, compact handoff at 0.5×/1×/2×, FPS recovery and mid-animation disable in both layouts")
     }
 }

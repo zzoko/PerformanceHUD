@@ -101,25 +101,19 @@ import AppKit
         battery.layoutSubtreeIfNeeded(); gpu.layoutSubtreeIfNeeded()
         let controls: [Int: NSButton] = member(battery, "controls")
         let gpuControls: [Int: NSButton] = member(gpu, "controls")
-        let flowControl: HUDBatteryFlowMenuControl? = member(battery, "flowControl")
-        for (control, gpuTag) in [(flowControl! as NSView, 4)] {
-            let actual = control.convert(control.bounds, to: battery)
-            let expected = gpuControls[gpuTag]!.convert(gpuControls[gpuTag]!.bounds, to: gpu)
-            check(abs(actual.minX - expected.minX) < 0.01, "Flow starts at the shared reading column")
-        }
-        let flowRect = flowControl!.convert(flowControl!.bounds, to: battery)
-        let temperatureRect = controls[1]!.convert(controls[1]!.bounds, to: battery)
-        let energyRect = controls[6]!.convert(controls[6]!.bounds, to: battery)
-        check(flowRect.maxX < temperatureRect.minX && temperatureRect.maxX < energyRect.minX,
-              "Inline flow choices fit beside Temperature and Energy")
-        check(battery.frame.width == gpu.frame.width, "Inline choices preserve menu width")
-        check(abs(energyRect.maxX - (battery.bounds.width - 20)) < 0.01, "Energy aligns to the right inset")
-        let selector: NSSegmentedControl = member(flowControl!, "selector")
-        let highlight: HUDHighlightLine = member(flowControl!, "highlight")
-        check(selector.frame.width >= selector.intrinsicContentSize.width - 1, "Flow segments fit without clipped labels")
-        check(highlight.frame.maxY <= flowRect.minY - 2,
-              "Charge emphasis strip is below the choices border")
-        check(battery.bounds.contains(highlight.frame), "Charge emphasis strip remains inside the clickable menu row")
+        let selector: NSSegmentedControl = member(battery, "flowControl") as NSSegmentedControl?
+            ?? { fatalError("Missing charge selector") }()
+        let highlight: NSButton = member(battery, "flowHighlight")
+        let temperatureRect = controls[1]!.frame
+        let energyRect = controls[6]!.frame
+        check(temperatureRect.minX == gpuControls[1]!.frame.minX && energyRect.minX == temperatureRect.minX,
+              "Battery checkboxes share the reading column")
+        check(temperatureRect.maxY < energyRect.minY, "Temperature and Energy have separate rows")
+        check(battery.frame.width == gpu.frame.width, "Category widths stay consistent")
+        check(selector.frame.width >= selector.intrinsicContentSize.width - 1, "Charge segments fit without clipped labels")
+        check(highlight.frame.minX > selector.frame.maxX && abs(highlight.frame.midY - selector.frame.midY) < 2,
+              "Charge emphasis is independently clickable beside the selector")
+        check(battery.bounds.contains(highlight.frame), "Charge emphasis stays inside the category")
         check((0..<3).map { selector.label(forSegment: $0) } == ["Always", "Auto", "Off"], "Flow uses three inline choices")
         check(selector.selectedSegment == 1 && (0..<3).allSatisfy { selector.isEnabled(forSegment: $0) },
               "Auto is selected and all flow choices are actionable")

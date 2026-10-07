@@ -42,12 +42,12 @@ import AppKit
         let master: NSButton = member(menu, "master")
         let mode: NSSegmentedControl = member(menu, "mode")
         let average: HUDReadingCheckbox = member(menu, "average")
-        check(master.isEnabled && !usage.isEnabled && usage.state == .off, "No fans disables only subordinate controls")
+        check(!master.isEnabled && master.state == .off && !usage.isEnabled && usage.state == .off, "No fans disables and unchecks the category and its controls")
         check(!average.isEnabled && average.state == .off, "No fans also dims and unchecks Average")
-        check(usage.toolTip == "No fans detected", "No-fan message")
+        check(usage.toolTip == "Not Available" && FanSample.noFans.message == "Not Available", "Menu and HUD share the no-fan message")
         check((0..<mode.segmentCount).map { mode.label(forSegment: $0)! } == ["Total", "RPM", "Both"] && mode.selectedSegment == 2, "Fan mode labels and Both default")
         menu.update(sample: two)
-        check(usage.isEnabled && usage.state == .on && mode.isEnabled, "Saved usage returns on detection")
+        check(master.isEnabled && master.state == .on && usage.isEnabled && usage.state == .on && mode.isEnabled, "Category and saved usage return on detection")
         let averageMode: NSSegmentedControl = member(menu, "averageMode")
         check(average.isEnabled && average.state == .on && averageMode.selectedSegment == 1, "Saved average returns on detection with Horizontal default")
         let single = FanSample(status: .ready, fans: [FanReading(id: 0, rpm: 0, maximumRPM: 6000)])
@@ -89,22 +89,28 @@ import AppKit
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         for sample in [FanSample.checking, .unavailable, single, two] {
-            check(!HUDPreferences.applyFanDetectionDefault(sample, in: defaults), "Checking, errors and detected fans must not disable FAN")
+            check(!HUDPreferences.applyFanAvailability(sample, in: defaults), "Checking, errors and detected fans must not disable FAN")
             check(defaults.object(forKey: "hud.metric.fans") == nil, "Hardware with fans retains the enabled default, including 0 RPM")
         }
-        check(HUDPreferences.applyFanDetectionDefault(.noFans, in: defaults), "Confirmed fanless hardware defaults FAN off")
+        check(HUDPreferences.applyFanAvailability(.noFans, in: defaults), "Confirmed fanless hardware defaults FAN off")
         check(defaults.object(forKey: "hud.metric.fans") as? Bool == false, "Persist the fanless default across launches")
-        check(!HUDPreferences.applyFanDetectionDefault(.noFans, in: defaults), "Repeated detection leaves the saved off choice alone")
+        check(!HUDPreferences.applyFanAvailability(.noFans, in: defaults), "Repeated detection leaves the saved off choice alone")
         defaults.set(true, forKey: "hud.metric.fans")
-        check(!HUDPreferences.applyFanDetectionDefault(.noFans, in: defaults) && defaults.bool(forKey: "hud.metric.fans"), "Manual FAN enabling remains available on fanless Macs")
+        check(HUDPreferences.applyFanAvailability(.noFans, in: defaults) && !defaults.bool(forKey: "hud.metric.fans"), "Existing enabled settings are forced off on fanless Macs")
         menu.update(sample: .noFans, options: .init(enabled: false))
-        check(master.state == .off && master.isEnabled, "The detected default updates the category checkmark without disabling it")
+        check(master.state == .off && !master.isEnabled, "Confirmed fanless hardware disables the category")
+        lastFanOptions = nil
         master.performClick(nil)
-        check(lastFanOptions?.enabled == true && master.state == .on && !usage.isEnabled, "The user can still enable FAN on fanless Macs")
+        master.sendAction(master.action, to: master.target)
+        check(lastFanOptions == nil && master.state == .off && !usage.isEnabled, "Fanless category rejects clicks and direct actions")
+        for status in [FanSample.checking, .unavailable] {
+            menu.update(sample: status, options: .init())
+            check(master.isEnabled && master.state == .on, "Unknown hardware or read failure cannot force the category off")
+        }
         menu.update(sample: two, options: .init())
         for key in ["hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted"] { defaults.set("test", forKey: key) }
         HUDPreferences.resetOptions(in: defaults)
-        check(HUDPreferences.applyFanDetectionDefault(.noFans, in: defaults) && !defaults.bool(forKey: "hud.metric.fans"), "Options reset reapplies the known fanless default")
+        check(HUDPreferences.applyFanAvailability(.noFans, in: defaults) && !defaults.bool(forKey: "hud.metric.fans"), "Options reset reapplies the known fanless default")
         check(defaults.object(forKey: "hud.fan.average") == nil && defaults.object(forKey: "hud.fan.averageMode") == nil, "Options reset includes average preferences")
         check(defaults.object(forKey: "hud.fan.rpmHighlighted") == nil, "Options reset clears RPM emphasis")
         let memMenu = HUDResourceMenuView(group: .ram, options: .init(enabled: true, temperature: false, totalUse: true, focusedApp: false))
@@ -118,16 +124,13 @@ import AppKit
         let memoryControls: [Int: NSButton] = member(memMenu, "controls")
         check(abs(average.frame.minX - memoryControls[5]!.convert(.zero, to: memMenu).x) < 1, "Average aligns under Details")
         check(abs(usage.frame.minX - memoryControls[7]!.convert(.zero, to: memMenu).x) < 1, "Fan Usage aligns under MEM Usage")
-        check(average.frame.maxX < averageMode.frame.minX && averageMode.frame.maxX < usage.frame.minX, "Fan controls do not overlap")
+        check(average.frame.maxX < averageMode.frame.minX && average.frame.maxY < usage.frame.minY,
+              "Fan controls occupy separate nonoverlapping rows")
         check(averageMode.frame.width >= averageMode.intrinsicContentSize.width, "Layout selector fits its labels")
-        mode.layoutSubtreeIfNeeded()
-        check(abs(mode.alignmentRect(forFrame: mode.frame).width - 145) < 0.01, "Underline does not widen native selector")
-        check(rpmHighlight.frame.minX > mode.frame.minX + mode.frame.width / 3
-              && rpmHighlight.frame.maxX <= mode.frame.minX + mode.frame.width * 2 / 3
-              && rpmHighlight.frame.width > mode.frame.width / 4,
-              "Underline spans only RPM, clear of Total and Both")
-        check(rpmHighlight.frame.maxY < mode.frame.midY && rpmHighlight.frame.minY >= 0, "Underline stays beneath labels inside the menu row: line=\(rpmHighlight.frame), selector=\(mode.frame), row=\(menu.frame)")
-        check(menu.hitTest(NSPoint(x: rpmHighlight.frame.midX, y: rpmHighlight.frame.midY)) === rpmHighlight, "Underline is independently clickable")
+        check(rpmHighlight.frame.minX > mode.frame.maxX && menu.bounds.contains(rpmHighlight.frame),
+              "RPM emphasis fits the common right column")
+        let hitPoint = menu.convert(NSPoint(x: rpmHighlight.frame.midX, y: rpmHighlight.frame.midY), to: menu.superview)
+        check(menu.hitTest(hitPoint) === rpmHighlight, "RPM emphasis is independently clickable")
 
         let hud = HUDWindowController()
         hud.setHUDEnabled(false)
@@ -190,7 +193,7 @@ import AppKit
                 }
             }
             hud.shutdown()
-            print("PASS: fan menu states, RPM-only underline placement/clicks, status Label style, RPM Reading/Emphasized Reading in both display modes")
+            print("PASS: fan menu states, RPM emphasis placement/clicks, status Label style, RPM Reading/Emphasized Reading in both display modes")
             return
         }
 

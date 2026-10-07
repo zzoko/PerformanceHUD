@@ -78,26 +78,22 @@ import AppKit
         let fpsWindow = NSWindow(contentRect: fpsMenu.frame, styleMask: [], backing: .buffered, defer: false)
         fpsWindow.contentView = fpsMenu
         fpsMenu.layoutSubtreeIfNeeded()
-        check(fpsSelector.frame.minX == 8 + HUDResourceMenuView.masterWidth + 8,
-              "FPS selector starts at the GPU options column")
+        check(abs(fpsSelector.alignmentRect(forFrame: fpsSelector.frame).minX - HUDCategoryLayout.modeLeading) < 1,
+              "FPS uses the shared mode column")
         check(fpsSelector.frame.maxX <= fpsMenu.bounds.maxX, "FPS selector fits its row")
         var selected: HUDFPSOptions?
         fpsMenu.onChange = { selected = $0 }
-        check(fpsHighlight.isEnabled && fpsHighlight.state == .on, "FPS underline starts available and on")
-        check(fpsMenu.hitTest(NSPoint(x: fpsHighlight.frame.midX, y: fpsHighlight.frame.midY)) === fpsHighlight,
-              "FPS underline receives its own click instead of toggling the category")
-        check(fpsHighlight.frame.maxY <= fpsSelector.frame.minY - 2 && fpsHighlight.frame.minY >= 0,
-              "FPS underline has a clear gap beneath the Value selector and fits inside the row")
-        check(fpsHighlight.frame.minX > fpsSelector.frame.minX
-              && fpsHighlight.frame.maxX <= fpsSelector.frame.minX + fpsSelector.frame.width / 3
-              && fpsHighlight.frame.width > fpsSelector.frame.width / 4
-              && fpsHighlight.frame.minX > fpsMaster.frame.maxX,
-              "FPS underline spans Value, clear of the category checkmark and History/Both buttons")
+        check(fpsHighlight.isEnabled && fpsHighlight.state == .on, "FPS emphasis starts available and on")
+        let hitPoint = fpsMenu.convert(NSPoint(x: fpsHighlight.frame.midX, y: fpsHighlight.frame.midY), to: fpsMenu.superview)
+        check(fpsMenu.hitTest(hitPoint) === fpsHighlight,
+              "FPS emphasis receives its own click instead of toggling the category")
+        check(fpsHighlight.frame.minX > fpsSelector.frame.maxX && fpsMenu.bounds.contains(fpsHighlight.frame),
+              "FPS emphasis has its own column clear of all mode buttons")
         fpsHighlight.performClick(nil)
         check(selected?.valueHighlighted == false && selected?.enabled == true && selected?.mode == .both,
-              "Underline turns emphasis off independently of visibility and mode")
+              "Emphasis turns emphasis off independently of visibility and mode")
         fpsHighlight.performClick(nil)
-        check(selected?.valueHighlighted == true, "Underline turns emphasis back on")
+        check(selected?.valueHighlighted == true, "Emphasis turns emphasis back on")
         fpsSelector.selectedSegment = 1
         _ = fpsSelector.sendAction(fpsSelector.action, to: fpsSelector.target)
         check(selected?.mode == .history, "History button updates options")
@@ -198,8 +194,45 @@ import AppKit
             }
         }
         styledHUD.shutdown()
+
+        // Changing hidden FPS content must not resize the HUD or move its arrow
+        // and first divider. Compare modes on the same live layout.
+        let collapsedBodies: [(Set<HUDMetric>, Bool)] = [([], false), ([], true), ([.cpuTotal], false),
+            ([.ramTotal], false), ([.fans], false), ([.battery], false), ([.deviceInfo], false),
+            ([.cpuTotal, .ramTotal, .battery], false)]
+        for scale in [HUDScale.small, HUDScale(rawValue: 0.51), HUDScale(rawValue: 0.75), .normal,
+                      HUDScale(rawValue: 1.01), HUDScale(rawValue: 1.25), .large] {
+            for (body, packageEnabled) in collapsedBodies {
+                let compactHUD = HUDWindowController()
+                compactHUD.setHUDEnabled(false)
+                compactHUD.setPackagePowerOptions(.init(enabled: packageEnabled))
+                for metric in HUDMetric.allCases { compactHUD.setMetricEnabled(metric, enabled: body.contains(metric)) }
+                compactHUD.setHUDScale(scale)
+                compactHUD.setAutoHideMode(.fps)
+                let panel: HUDPanel = member(compactHUD, "panel")
+                let host: NSView = member(compactHUD, "backgroundContentView")
+                let arrow: NSImageView = member(compactHUD, "collapsedFPSIndicator")
+                let dividers: [Int: NSView] = member(compactHUD, "groupDividers")
+                var reference: [CGFloat]?
+                for mode in [HUDFPSDisplayMode.value, .history, .both, .value, .both] {
+                    compactHUD.setFPSOptions(.init(enabled: true, mode: mode))
+                    panel.contentView?.layoutSubtreeIfNeeded()
+                    let visibleLines = dividers.sorted { $0.key < $1.key }.compactMap { _, divider -> CGFloat? in
+                        guard !divider.isHidden, let line = divider.subviews.first else { return nil }
+                        return host.bounds.maxY - line.convert(line.bounds, to: host).maxY
+                    }
+                    let geometry = [host.bounds.height, panel.frame.maxY, host.bounds.maxY - arrow.frame.maxY]
+                        + Array(visibleLines.prefix(1))
+                    if let reference {
+                        check(reference.count == geometry.count && zip(reference, geometry).allSatisfy { abs($0 - $1) < 0.01 },
+                              "Collapsed mode geometry changed: scale=\(scale.rawValue), body=\(body), package=\(packageEnabled), mode=\(mode), expected=\(reference), actual=\(geometry)")
+                    } else { reference = geometry }
+                }
+                compactHUD.shutdown()
+            }
+        }
         if CommandLine.arguments.contains("--controls-only") {
-            print("PASS: FPS mode preferences, emphasis save/reset, independent underline clicks, History/Horizontal states, matching FPS baselines in both layouts at six scales from 0.5× to 2×, preserved history and stable surface geometry")
+            print("PASS: FPS mode preferences, emphasis save/reset, independent emphasis button clicks, History/Horizontal states, matching FPS baselines in both layouts at six scales from 0.5× to 2×, preserved history and stable surface geometry")
             return
         }
 
