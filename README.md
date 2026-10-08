@@ -1,6 +1,6 @@
 # PerformanceHUD
 
-## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version.svg" alt="App version 2.1 — view changelog" width="56" height="30" align="top"></a>
+## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version.svg" alt="App version 2.2 — view changelog" width="56" height="30" align="top"></a>
 
 Download the ready-built app for **$3.99**, or build it yourself for free. Both offer the same features, with no subscription or feature unlocks.
 
@@ -9,7 +9,7 @@ Download the ready-built app for **$3.99**, or build it yourself for free. Both 
   <a href="docs/INSTALL.md#build-from-source"><img src="docs/images/build-from-source.svg" alt="Build it yourself — free, requires Xcode" width="250" height="64"></a>
 </p>
 
-Purchases support me and the continuation of maintaining PerformanceHUD. The paid app can be used personally or commercially, including in monetized videos and streams. Free source builds and modifications are for **personal, non-commercial use**. Resale and external redistribution are not permitted. See the [license](LICENSE) for details.
+Purchases encourage maintenance of PerformanceHUD. The paid app can be used personally or commercially, including in monetized videos and streams. Free source builds and modifications are for **personal, non-commercial use**. Resale and external redistribution are not permitted. See the [license](LICENSE) for details.
 
 If you prefer to build the app yourself but would still like to support it, **GitHub Sponsorships** will offer another way to contribute, it will be added later.
 
@@ -24,11 +24,11 @@ If you prefer to build the app yourself but would still like to support it, **Gi
 <details>
 <summary><strong>Take a closer look — features, screenshots &amp; controls</strong></summary>
 
-PerformanceHUD is a lightweight app that displays a performance overlay over games and apps. You can use it as just an FPS display, or also show CPU, GPU, and memory usage, temperatures, power readings, fan speeds, and battery information and more stats for a deeper overview of how your Mac is handling the workload.
+PerformanceHUD is a small app under 10 MB that displays a performance overlay over games and apps. You can use it as just an FPS display, or also show CPU, GPU, and memory usage, temperatures, power readings, fan speeds, and battery information and more stats for a deeper overview of how your Mac is handling the workload.
 
-The HUD is customized from the menu bar. You can choose which readings to display and highlight, swap between vertical and horizontal layouts, adjust the size and appearance, and move the overlay where you want it. You can also turn it on and off at any time, even if the game is already running, or log selected readings to a CSV for spreadsheets and graphs. Editable hotkeys let you show/hide the HUD, start/stop logging, and cycle appearance. There’s a built-in Controls Guide explaining in detail what each option in the menu does and how it works. In-app updates, optional Weekly or Monthly update checks, and optional startup at login are available from the menu.
+The HUD is customized from the menu bar. You can choose which readings to display and highlight, swap between vertical and horizontal layouts, adjust the size and appearance, and move the overlay where you want it. You can also turn it on and off at any time, even if the game is already running, or log selected readings to a CSV for spreadsheets and graphs. Editable hotkeys let you show/hide the HUD, start/stop logging, and cycle appearance. There’s a built-in Controls guide explaining in detail what each option in the menu does and how it works. In-app updates, optional Weekly or Monthly update checks, and optional startup at login are available from the menu.
 
-I’ve put a lot of thought into keeping the overlay easy to read and the controls organized, even as more features have been added. Attention to detail and making something genuinely useful that I would want to use myself and would improve my macOS experience have been the goal.
+I’ve put a lot of thought into keeping the overlay easy to read and the controls organized, even as more features have been added. Attention to detail and making something genuinely useful that I would want to use myself has been the goal.
 
 <table>
   <tr>
@@ -52,7 +52,6 @@ I’ve put a lot of thought into keeping the overlay easy to read and the contro
   </tr>
 </table>
 
-*Glass opacity varies with your macOS Liquid Glass setting.*
 
 <table>
   <tr>
@@ -76,10 +75,10 @@ I’ve put a lot of thought into keeping the overlay easy to read and the contro
   </tr>
 </table>
 
-*Glass opacity varies with your macOS Liquid Glass setting.*
+*Liquid Glass follows macOS by default; its strength can also be adjusted in the app.*
 
 <details>
-<summary>Watch PerformanceHUD in-game</summary>
+<summary>See PerformanceHUD in-game example (video from an older version of the app)</summary>
 
 [![Watch PerformanceHUD in-game on YouTube](https://img.youtube.com/vi/-b_t999Q9pQ/hqdefault.jpg)](https://youtu.be/-b_t999Q9pQ)
 

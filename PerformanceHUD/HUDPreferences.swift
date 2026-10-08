@@ -24,10 +24,10 @@ enum HUDPreferences {
     // and independent “Don’t show this again” choices stay.
     static func resetOptions(in store: UserDefaults = .standard) {
         var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.fps.valueHighlighted", "hud.autoHide", "hud.autoHide.mode", "hud.autoHide.animated",
-                    "hud.package.power", "hud.package.highlighted",
+                    "hud.glass.mode", "hud.glass.strength", "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
                     "hud.battery.power", "hud.battery.powerHighlighted", "hud.battery.flowMode",
-                    "hud.group.ram.details", "hud.fan.usage", "hud.fan.mode",
+                    "hud.group.ram.details", "hud.group.ram.pressure", "hud.group.ram.pressureMode", "hud.fan.usage", "hud.fan.mode",
                     "hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted", "hud.misc.readings"]
         keys += HUDMetric.allCases.map { metricKey($0) }
         for group in HUDResourceGroup.allCases {
@@ -199,6 +199,27 @@ enum HUDPreferences {
         }
     }
 
+    // MARK: - Liquid Glass
+
+    static var glassOptions: HUDGlassOptions {
+        get { glassOptions(in: defaults) }
+        set { setGlassOptions(newValue, in: defaults) }
+    }
+
+    static func glassOptions(in store: UserDefaults) -> HUDGlassOptions {
+        let mode = store.string(forKey: "hud.glass.mode").flatMap(HUDGlassMode.init(rawValue:)) ?? .system
+        let saved = (store.object(forKey: "hud.glass.strength") as? NSNumber)?.doubleValue
+        let strength = saved.flatMap { $0.isFinite ? HUDGlassOptions.clamped($0) : nil }
+        return HUDGlassOptions(mode: mode, strength: strength)
+    }
+
+    static func setGlassOptions(_ options: HUDGlassOptions, in store: UserDefaults) {
+        store.set(options.mode.rawValue, forKey: "hud.glass.mode")
+        if let strength = options.strength, strength.isFinite {
+            store.set(HUDGlassOptions.clamped(strength), forKey: "hud.glass.strength")
+        } else { store.removeObject(forKey: "hud.glass.strength") }
+    }
+
     // MARK: - Position
 
     static var hudPosition: CGPoint? {
@@ -341,9 +362,12 @@ enum HUDPreferences {
         store.set(options.flowMode.rawValue, forKey: "hud.battery.flowMode")
     }
 
-    static func resourceOptions(for group: HUDResourceGroup) -> HUDResourceOptions {
-        let total = group.supportsTotalUse && isMetricEnabled(group.totalMetric)
-        let app = group.appMetric.map { isMetricEnabled($0) } ?? false
+    static func resourceOptions(for group: HUDResourceGroup, in defaults: UserDefaults = .standard) -> HUDResourceOptions {
+        func selected(_ metric: HUDMetric) -> Bool {
+            defaults.object(forKey: metricKey(metric)) as? Bool ?? metric.defaultEnabled
+        }
+        let total = group.supportsTotalUse && selected(group.totalMetric)
+        let app = group.appMetric.map { selected($0) } ?? false
         let temperature = group.supportsTemperature
             && (defaults.object(forKey: "hud.group.\(group.rawValue).temperature") as? Bool ?? true)
         let power = group.supportsPower
@@ -354,23 +378,30 @@ enum HUDPreferences {
         // individually saved emphasis choices when updating the app.
         let highlights = defaults.stringArray(forKey: "hud.group.\(group.rawValue).highlighted")
             .map { $0.compactMap(HUDReadingKind.init(rawValue:)) } ?? []
+        let details = defaults.object(forKey: "hud.group.ram.details") as? Bool ?? true
         var options = HUDResourceOptions(enabled: enabled, temperature: temperature, totalUse: total, focusedApp: app, power: power,
-            details: defaults.object(forKey: "hud.group.ram.details") as? Bool ?? true,
+            details: details,
+            pressure: defaults.object(forKey: "hud.group.ram.pressure") as? Bool ?? details,
             highlighted: Set(highlights),
-            usageMode: defaults.string(forKey: "hud.group.\(group.rawValue).usageMode").flatMap(HUDUsageMode.init(rawValue:)))
+            usageMode: defaults.string(forKey: "hud.group.\(group.rawValue).usageMode").flatMap(HUDUsageMode.init(rawValue:)),
+            pressureMode: defaults.string(forKey: "hud.group.ram.pressureMode").flatMap(HUDMemoryPressureMode.init(storedValue:)) ?? .colorMeter)
         options.setUsagePresentation(visible: options.usageVisible, highlighted: options.usageHighlighted)
         return options
     }
 
-    static func setResourceOptions(_ options: HUDResourceOptions, for group: HUDResourceGroup) {
+    static func setResourceOptions(_ options: HUDResourceOptions, for group: HUDResourceGroup, in defaults: UserDefaults = .standard) {
         defaults.set(options.enabled, forKey: "hud.group.\(group.rawValue).enabled")
         defaults.set(options.selectedUsageMode.rawValue, forKey: "hud.group.\(group.rawValue).usageMode")
         defaults.set(options.highlighted.map(\.rawValue).sorted(), forKey: "hud.group.\(group.rawValue).highlighted")
         defaults.set(options.temperature && group.supportsTemperature, forKey: "hud.group.\(group.rawValue).temperature")
         defaults.set(options.power && group.supportsPower, forKey: "hud.group.\(group.rawValue).power")
-        if group == .ram { defaults.set(options.details, forKey: "hud.group.ram.details") }
-        setMetricEnabled(group.totalMetric, enabled: group.supportsTotalUse && options.totalUse)
-        if let appMetric = group.appMetric { setMetricEnabled(appMetric, enabled: options.focusedApp) }
+        if group == .ram {
+            defaults.set(options.details, forKey: "hud.group.ram.details")
+            defaults.set(options.pressure, forKey: "hud.group.ram.pressure")
+            defaults.set(options.pressureMode.rawValue, forKey: "hud.group.ram.pressureMode")
+        }
+        defaults.set(group.supportsTotalUse && options.totalUse, forKey: metricKey(group.totalMetric))
+        if let appMetric = group.appMetric { defaults.set(options.focusedApp, forKey: metricKey(appMetric)) }
     }
 
     static var visibleMetrics: Set<HUDMetric> {

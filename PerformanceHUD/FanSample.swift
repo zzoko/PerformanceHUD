@@ -26,7 +26,7 @@ nonisolated struct FanSample: Equatable, Sendable {
     var message: String? {
         switch status {
         case .checking: return "Checking fans…"
-        case .noFans: return "Not Available"
+        case .noFans: return "Not available"
         case .unavailable: return "Fan readings unavailable"
         case .ready: return nil
         }

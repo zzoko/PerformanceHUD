@@ -43,7 +43,6 @@ final class HUDBatteryIndicatorView: NSView {
 
     func setHorizontal(_ horizontal: Bool) {
         self.horizontal = horizontal
-        sharedReadingTrailingInset = nil
         needsDisplay = true
     }
 
@@ -87,26 +86,43 @@ final class HUDBatteryIndicatorView: NSView {
         HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: options.powerHighlighted)
     }
     private var powerReferenceWidth: CGFloat {
-        // Always reserve the emphasized width, independent of digits or sign.
+        // Vertical sizing keeps room for the full supported reading range.
         ("+1000.0 W" as NSString).size(withAttributes: [
             .font: HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: true)
         ]).width
     }
+    private var horizontalPowerWidth: CGFloat {
+        HUDStyle.horizontalColumnWidth(text: powerText, reference: HUDStyle.horizontalPowerReference, font: powerFont)
+    }
+    private var horizontalTemperatureWidth: CGFloat {
+        HUDStyle.horizontalColumnWidth(text: temperatureText, reference: HUDStyle.horizontalTemperatureReference,
+                                       font: temperatureFont)
+    }
+    private var horizontalIconWidth: CGFloat {
+        max(iconWidth, HUDStyle.horizontalColumnWidth(text: "", reference: HUDStyle.horizontalPercentageReference,
+            font: HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: false)))
+    }
+    private var horizontalGap: CGFloat { HUDStyle.metricColumnSpacing(scale: HUDScale(rawValue: Double(scale))) }
+    private var iconWidth: CGFloat { (34 * 0.85 + 0.5) * scale }
     var powerText: String {
         guard options.power, options.flowMode != .auto || flowVisibility.isVisible else { return "" }
         return BatteryPowerRate.text(power)
     }
 
     private var reservesPowerSpace: Bool {
-        // Vertical keeps fixed columns. Horizontal reclaims only Auto's hidden
-        // slot; visible readings still reserve a steady width as digits change.
+        // Vertical keeps fixed columns. Horizontal also reclaims Auto's slot
+        // when Charge is temporarily hidden.
         options.power && (!horizontal || options.flowMode != .auto || flowVisibility.isVisible)
     }
 
     var powerTextRect: NSRect {
         guard !powerText.isEmpty else { return .zero }
-        return inlineTextRect(powerText, font: powerFont,
-                              trailing: horizontal ? readingTrailingInset : verticalPowerTrailingInset)
+        if horizontal {
+            let trailing = horizontalReadingTrailingInset
+                + (options.temperature ? horizontalTemperatureWidth + horizontalGap : 0)
+            return inlineTextRect(powerText, font: powerFont, trailing: trailing)
+        }
+        return inlineTextRect(powerText, font: powerFont, trailing: verticalPowerTrailingInset)
     }
 
     var temperatureText: String {
@@ -117,8 +133,7 @@ final class HUDBatteryIndicatorView: NSView {
     var temperatureTextRect: NSRect {
         guard !temperatureText.isEmpty else { return .zero }
         if horizontal {
-            let trailing = readingTrailingInset + (reservesPowerSpace ? powerReferenceWidth + 8 * scale : 0)
-            return inlineTextRect(temperatureText, font: temperatureFont, trailing: trailing)
+            return inlineTextRect(temperatureText, font: temperatureFont, trailing: horizontalReadingTrailingInset)
         }
         return inlineTextRect(temperatureText, font: temperatureFont, trailing: verticalTemperatureTrailingInset)
     }
@@ -132,14 +147,8 @@ final class HUDBatteryIndicatorView: NSView {
                       width: size.width, height: size.height)
     }
 
-    private var sharedReadingTrailingInset: CGFloat?
     private var sharedVerticalPowerTrailingInset: CGFloat?
     private var sharedVerticalTemperatureTrailingInset: CGFloat?
-
-    func alignTrailingReading(trailingInset: CGFloat?) {
-        sharedReadingTrailingInset = trailingInset
-        needsDisplay = true
-    }
 
     func alignVerticalReadings(powerTrailingInset: CGFloat?, temperatureTrailingInset: CGFloat?) {
         sharedVerticalPowerTrailingInset = powerTrailingInset
@@ -171,13 +180,8 @@ final class HUDBatteryIndicatorView: NSView {
         return verticalTemperatureTrailingInset + temperatureWidth + 8 * scale
     }
 
-    // Reserve the icon/percentage column when no shared vertical columns exist.
-    private var readingTrailingInset: CGFloat {
-        guard options.charge else { return 2 * scale }
-        if let sharedReadingTrailingInset { return sharedReadingTrailingInset }
-        let usage = NSTextField(labelWithString: "100%")
-        usage.font = valueFont
-        return usage.intrinsicContentSize.width + 8 * scale + usage.alignmentRectInsets.right
+    private var horizontalReadingTrailingInset: CGFloat {
+        options.charge ? horizontalIconWidth + horizontalGap : 2 * scale
     }
 
     // Useful for standalone previews; the HUD itself has a fixed vertical width.
@@ -188,19 +192,15 @@ final class HUDBatteryIndicatorView: NSView {
 
     var minimumRowWidth: CGFloat {
         if horizontal {
-            let titleWidth = ("ADP" as NSString).size(withAttributes: [.font: sourceFont]).width
-            let temperatureWidth = ("149°C" as NSString).size(withAttributes: [.font: temperatureFont]).width
-            let iconWidth = (34 * 0.85 + 0.5) * scale
-            let extraLabelGap = reservesPowerSpace || options.temperature || options.charge
-                ? 8 * scale * (HUDStyle.horizontalLabelGapMultiplier - 1) : 0
-            let sharedColumnAdjustment = (reservesPowerSpace || options.temperature) && options.charge
-                ? readingTrailingInset - (iconWidth + 8 * scale) : 0
-            return 4 * scale + titleWidth
-                + extraLabelGap
-                + sharedColumnAdjustment
-                + (reservesPowerSpace ? 8 * scale + powerReferenceWidth : 0)
-                + (options.temperature ? 8 * scale + temperatureWidth : 0)
-                + (options.charge ? 8 * scale + iconWidth : 0)
+            let title = source == .battery ? "BAT" : "ADP"
+            let titleWidth = HUDStyle.horizontalColumnWidth(text: title, reference: "ADP", font: sourceFont)
+            let widths: [CGFloat] = [reservesPowerSpace ? horizontalPowerWidth : nil,
+                options.temperature ? horizontalTemperatureWidth : nil,
+                options.charge ? horizontalIconWidth : nil].compactMap { $0 }
+            let gaps = widths.isEmpty ? 0
+                : horizontalGap * (HUDStyle.horizontalLabelGapMultiplier + CGFloat(widths.count - 1))
+            return 2 * scale + titleWidth + gaps + widths.reduce(0, +)
+                + (options.charge ? 0 : 2 * scale)
         }
         // Keep the baseline reference independent of enabled readings. The full
         // row is fitted separately, after the controller's spacing expansion.

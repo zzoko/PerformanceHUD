@@ -6,6 +6,26 @@ import AppKit
     }
     @MainActor static func main() throws {
         _ = NSApplication.shared
+        let scales: [HUDScale] = CommandLine.arguments.contains("--normal-size") ? [.normal] : [.small, .normal, .large]
+        let suite = "PerformanceHUD.PressureTests.\(UUID().uuidString)"
+        let store = UserDefaults(suiteName: suite)!
+        defer { store.removePersistentDomain(forName: suite) }
+        var saved = HUDPreferences.resourceOptions(for: .ram, in: store)
+        precondition(saved.pressure && saved.pressureMode == .colorMeter, "Pressure Color meter is enabled by default")
+        for mode in HUDMemoryPressureMode.allCases {
+            saved.pressureMode = mode
+            HUDPreferences.setResourceOptions(saved, for: .ram, in: store)
+            precondition(HUDPreferences.resourceOptions(for: .ram, in: store) == saved, "Pressure preference round-trips")
+        }
+        HUDPreferences.resetOptions(in: store)
+        precondition(HUDPreferences.resourceOptions(for: .ram, in: store).pressureMode == .colorMeter, "Reset restores Color meter")
+        for (legacy, mode) in [("graph", HUDMemoryPressureMode.meter), ("colorGraph", .colorMeter)] {
+            store.set(legacy, forKey: "hud.group.ram.pressureMode")
+            precondition(HUDPreferences.resourceOptions(for: .ram, in: store).pressureMode == mode,
+                         "The previous experiment keeps the user's neutral/coloured selection")
+        }
+        store.set("unknown", forKey: "hud.group.ram.pressureMode")
+        precondition(HUDPreferences.resourceOptions(for: .ram, in: store).pressureMode == .colorMeter, "Unknown modes fall back to Color meter")
         UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "off",
             "hud.background": "dark", "hud.alignment": "vertical"], forName: UserDefaults.argumentDomain)
         let hud = HUDWindowController()
@@ -31,7 +51,7 @@ import AppKit
             hud.setAlignment(alignment)
             hud.setPackagePowerOptions(.init(enabled: false))
             for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
-            for scale in [HUDScale.small, .normal, .large] {
+            for scale in scales {
                 hud.setHUDScale(scale)
                 for mode in HUDUsageMode.allCases {
                     for details in [false, true] {
@@ -39,7 +59,8 @@ import AppKit
                             for emphasized in [false, true] {
                                 hud.setResourceOptions(.init(enabled: true, temperature: false,
                                     totalUse: showsUsage && mode != .app, focusedApp: showsUsage && mode != .total,
-                                    details: details, highlighted: emphasized ? [.details, .totalUse, .focusedApp] : [], usageMode: mode), for: .ram)
+                                    details: details, pressure: details, highlighted: emphasized ? [.details, .totalUse, .focusedApp] : [], usageMode: mode,
+                                    pressureMode: .text), for: .ram)
                                 let size = panel.frame.size
                                 configurations += 1
                                 for state in ["normal", "warning", "critical", ""] {
@@ -96,8 +117,8 @@ import AppKit
                                             check(HUDStyle.rowHeight(for: .ramTotal, scale: scale) == HUDStyle.rowHeight(scale: scale) + 3 * rowSpacing, "Total memory reserves three separate detail rows")
                                         }
                                         if alignment == .vertical {
-                                            check(pressure.isHidden == !details, "Details controls pressure visibility")
-                                            check(pressureTitle.isHidden == !details, "Details controls the pressure caption")
+                                            check(pressure.isHidden == !(details && mode != .app), "Pressure follows its own visibility and source")
+                                            check(pressureTitle.isHidden == !(details && mode != .app), "Pressure caption follows pressure visibility")
                                         }
                                     }
                                 }
@@ -107,6 +128,90 @@ import AppKit
                 }
             }
         }
+        let meter: HUDMemoryPressureMeterView = member(hud, "ramPressureMeter")
+        for scale in scales {
+            hud.setHUDScale(scale)
+            for appearance in [HUDBackground.light, .dark] {
+                hud.setBackground(appearance)
+                for alignment in HUDAlignment.allCases {
+                    hud.setAlignment(alignment)
+                    var options = HUDResourceOptions(enabled: true, temperature: false, totalUse: true,
+                                                     focusedApp: false, pressureMode: .text)
+                    hud.setResourceOptions(options, for: .ram)
+                    let size = panel.frame.size
+                    var compactMeterSize: NSSize?
+                    hud.updateMemoryPressure("critical")
+                    for mode in HUDMemoryPressureMode.allCases {
+                        options.pressureMode = mode
+                        hud.setResourceOptions(options, for: .ram)
+                        panel.contentView?.layoutSubtreeIfNeeded()
+                        if alignment == .horizontal && mode != .text {
+                            check(panel.frame.width < size.width && panel.frame.height == size.height,
+                                  "Horizontal meters reserve less width than pressure text")
+                            if let compactMeterSize {
+                                check(panel.frame.size == compactMeterSize, "Neutral and coloured meters reserve the same space")
+                            } else { compactMeterSize = panel.frame.size }
+                        } else {
+                            check(panel.frame.size == size, "Vertical pressure display modes retain their size")
+                        }
+                        check(meter.isHidden == (alignment == .horizontal || mode == .text), "Only Vertical meters appear")
+                        check(pressure.isHidden == (mode != .text), "Text and meter are mutually exclusive")
+                        check(pressure.stringValue == "critical", "Horizontal retains its pressure state in every display mode")
+                        if !meter.isHidden {
+                            let rect = meter.convert(meter.bounds, to: container)
+                            let textRect = pressure.convert(pressure.alignmentRect(forFrame: pressure.frame), from: pressure.superview)
+                            let right = pressure.convert(textRect, to: container).maxX
+                            check(abs(rect.maxX - right) < 0.5, "Meter is right aligned with the pressure text")
+                            check(abs(rect.width - 72.6 * CGFloat(scale.rawValue)) < 0.5
+                                  && abs(rect.height - 12 * CGFloat(scale.rawValue)) < 0.5, "Meter scales without enlarging its row")
+                            check(container.bounds.contains(rect), "Meter fits inside the HUD")
+                        }
+                    }
+                    options.details = false
+                    hud.setResourceOptions(options, for: .ram)
+                    check(meter.isHidden == (alignment == .horizontal), "Details off retains the pressure meter")
+                    options.pressure = false
+                    hud.setResourceOptions(options, for: .ram)
+                    check(meter.isHidden && pressure.isHidden, "Pressure off hides both pressure displays")
+                }
+            }
+        }
+        // Inspect the rendered segments: every state is distinguishable without colour.
+        hud.setAlignment(.vertical)
+        hud.setHUDScale(.normal)
+        for background in [HUDBackground.light, .dark] {
+            hud.setBackground(background)
+            for mode in [HUDMemoryPressureMode.meter, .colorMeter] {
+                hud.setResourceOptions(.init(enabled: true, temperature: false, totalUse: true,
+                                            focusedApp: false, pressureMode: mode), for: .ram)
+                panel.contentView?.layoutSubtreeIfNeeded()
+                for (state, count) in [("normal", 1), ("warning", 2), ("critical", 3), ("normal", 1), ("", 0)] {
+                    hud.updateMemoryPressure(state)
+                    check(meter.activeSegmentCount == count, "Pressure changes immediately to the current level")
+                    let bitmap = meter.bitmapImageRepForCachingDisplay(in: meter.bounds)!
+                    meter.cacheDisplay(in: meter.bounds, to: bitmap)
+                    let ratio = CGFloat(bitmap.pixelsWide) / meter.bounds.width
+                    for index in 0..<3 {
+                        let color = bitmap.colorAt(x: Int((CGFloat(11.1) + CGFloat(index) * 25.2) * ratio), y: bitmap.pixelsHigh / 2)!
+                            .usingColorSpace(.deviceRGB)!
+                        let active = index < count
+                        check(active ? color.alphaComponent > 0.6 : color.alphaComponent < 0.3,
+                              "Only the expected meter segments are filled")
+                        if count > 0 && !active { check(color.alphaComponent > 0.05, "Inactive segments remain visible") }
+                        if active && mode == .meter {
+                            check(abs(color.redComponent - color.greenComponent) < 0.02
+                                  && abs(color.greenComponent - color.blueComponent) < 0.02, "Neutral meter has no coloured tint")
+                        }
+                        if active && mode == .colorMeter {
+                            check(count == 1 ? color.greenComponent > color.redComponent
+                                : count == 2 ? min(color.redComponent, color.greenComponent) > color.blueComponent
+                                : color.redComponent > color.greenComponent, "All filled segments share the current pressure state's colour")
+                        }
+                    }
+                }
+            }
+        }
+        check(meter.currentLevel == nil, "Unavailable pressure remains blank")
         if CommandLine.arguments.contains("--preview") {
             hud.setAlignment(.vertical)
             hud.setHUDScale(.normal)
@@ -124,14 +229,19 @@ import AppKit
             hud.setBatteryOptions(.init(enabled: true, temperature: true, charge: true))
             hud.updateBattery(.init(percentage: 80, source: .powerAdapter, temperature: 33))
             hud.setMetricEnabled(.deviceInfo, enabled: true)
-            for appearance in [HUDBackground.dark] {
+            for appearance in [HUDBackground.light, .dark] {
                 hud.setBackground(appearance)
                 surface.isHidden = true
                 glass.layer?.backgroundColor = NSColor(calibratedWhite: appearance == .light ? 0.91 : 0.12, alpha: 1).cgColor
-                panel.contentView?.layoutSubtreeIfNeeded()
-                let bitmap = container.bitmapImageRepForCachingDisplay(in: container.bounds)!
-                container.cacheDisplay(in: container.bounds, to: bitmap)
-                try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-compact-memory-\(appearance.rawValue).png"))
+                for mode in HUDMemoryPressureMode.allCases {
+                    hud.setResourceOptions(.init(enabled: true, temperature: false, totalUse: true,
+                        focusedApp: false, pressureMode: mode), for: .ram)
+                    hud.updateMemoryPressure("warning")
+                    panel.contentView?.layoutSubtreeIfNeeded()
+                    let bitmap = container.bitmapImageRepForCachingDisplay(in: container.bounds)!
+                    container.cacheDisplay(in: container.bounds, to: bitmap)
+                    try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-memory-\(appearance.rawValue)-\(mode.rawValue).png"))
+                }
             }
         }
         hud.shutdown()

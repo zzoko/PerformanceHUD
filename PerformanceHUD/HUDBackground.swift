@@ -19,7 +19,7 @@ enum HUDBackground: String, CaseIterable {
         switch self {
         case .light: return "Light"
         case .dark: return "Dark"
-        case .system: return "Follow system"
+        case .system: return "Follow macOS"
         }
     }
 

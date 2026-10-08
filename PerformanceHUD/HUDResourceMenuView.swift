@@ -10,6 +10,8 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     private var options: HUDResourceOptions
     private var controls: [Int: NSButton] = [:]
     private var usageModeControl: NSSegmentedControl?
+    private var pressureModeControl: NSSegmentedControl?
+    private var alignment: HUDAlignment
     private var flowControl: NSSegmentedControl?
     private let flowHighlight = HUDEmphasisButton()
     private var flowLabel: NSTextField?
@@ -26,9 +28,10 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         refresh()
     }
 
-    init(group: HUDResourceGroup?, options: HUDResourceOptions) {
+    init(group: HUDResourceGroup?, options: HUDResourceOptions, alignment: HUDAlignment = .vertical) {
         self.group = group
         self.options = options
+        self.alignment = alignment
         super.init()
         let title = group?.title ?? "Battery"
         setAccessibilityLabel("\(title) display options")
@@ -40,7 +43,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         controls[0] = master
         setCategory(master)
 
-        let readings: [(Int, String)] = group == .ram ? [(5, "Details"), (7, "Use")]
+        let readings: [(Int, String)] = group == .ram ? [(8, "Pressure"), (5, "Details"), (7, "Use")]
             : group == .ane ? [(4, "Power")]
             : group == nil ? [(4, "Charge"), (1, "Temperature"), (6, "Energy")]
             : [(4, "Power"), (1, "Temperature"), (7, "Use")]
@@ -70,6 +73,15 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             button.onHighlight = { [weak self] in self?.highlightChanged(tag: tag) }
             controls[tag] = button
             var row = HUDCategoryMenuRow(reading: button)
+            if group == .ram && tag == 8 {
+                let control = NSSegmentedControl(labels: HUDMemoryPressureMode.allCases.map(\.title),
+                    trackingMode: .selectOne, target: self, action: #selector(pressureModeChanged(_:)))
+                control.font = .menuFont(ofSize: 0)
+                control.segmentStyle = .rounded
+                control.setAccessibilityLabel("Memory pressure display")
+                pressureModeControl = control
+                row.mode = control
+            }
             if tag == 7 {
                 let control = NSSegmentedControl(labels: ["Total", "App", "Both"], trackingMode: .selectOne,
                     target: self, action: #selector(usageModeChanged(_:)))
@@ -86,6 +98,18 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     required init?(coder: NSCoder) { fatalError("Use init(group:options:)") }
+
+    func update(alignment: HUDAlignment) {
+        self.alignment = alignment
+        refresh()
+    }
+
+    @objc private func pressureModeChanged(_ sender: NSSegmentedControl) {
+        guard sender.isEnabled, HUDMemoryPressureMode.allCases.indices.contains(sender.selectedSegment) else { return }
+        options.pressureMode = HUDMemoryPressureMode.allCases[sender.selectedSegment]
+        refresh()
+        onChange?(options)
+    }
 
     @objc private func flowModeChanged(_ sender: NSSegmentedControl) {
         guard options.enabled, HUDBatteryFlowMode.allCases.indices.contains(sender.selectedSegment) else { return }
@@ -129,6 +153,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         case 4: options.power = value
         case 5: options.details = value
         case 6: options.totalUse = value
+        case 8: options.pressure = value
         default: return
         }
         refresh()
@@ -138,6 +163,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
 
     private func highlightChanged(tag: Int) {
         guard let control = controls[tag], control.isEnabled, control.state == .on else { return }
+        if tag == 8 && options.pressureMode != .text { return }
         if group != nil && tag == 4 && !powerAvailability.allowsPowerToggle { return }
         if tag == 7 {
             options.setUsagePresentation(visible: true, highlighted: !options.usageHighlighted)
@@ -171,18 +197,22 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         case 1: return .temperature
         case 4: return .power
         case 5: return .details
+        case 8: return .pressure
         default: return nil
         }
     }
 
     private func refresh() {
+        pressureModeControl?.selectedSegment = HUDMemoryPressureMode.allCases.firstIndex(of: options.pressureMode) ?? 2
+        pressureModeControl?.isEnabled = options.showsPressure
         flowControl?.selectedSegment = HUDBatteryFlowMode.allCases.firstIndex(of: flowMode) ?? 1
         flowControl?.isEnabled = options.enabled
         flowLabel?.textColor = options.enabled ? .labelColor : .disabledControlTextColor
         flowHighlight.state = options.highlighted.contains(.power) ? .on : .off
         flowHighlight.isEnabled = options.enabled && flowMode != .off
         for (tag, value) in [(0, options.enabled), (1, options.temperature),
-                             (4, options.power), (5, options.details), (6, options.totalUse), (7, options.usageVisible)] {
+                             (4, options.power), (5, options.details), (6, options.totalUse), (7, options.usageVisible),
+                             (8, options.pressure)] {
             controls[tag]?.state = value ? .on : .off
             controls[tag]?.isEnabled = tag == 0 || options.enabled
             if let button = controls[tag] as? HUDReadingCheckbox, let kind = readingKind(for: tag) {
@@ -190,6 +220,8 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                 button.setAccessibilityValue(!value ? "Off" : button.emphasized ? "Highlighted" : "Faint")
             }
         }
+        controls[8]?.isEnabled = options.enabled && options.selectedUsageMode != .app
+        (controls[8] as? HUDReadingCheckbox)?.highlightAvailable = options.pressureMode == .text
         usageModeControl?.selectedSegment = HUDUsageMode.allCases.firstIndex(of: options.selectedUsageMode) ?? 0
         usageModeControl?.isEnabled = options.enabled
         if let usage = controls[7] as? HUDReadingCheckbox {

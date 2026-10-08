@@ -85,6 +85,8 @@ final class AppDelegate:
     private var fpsMenuView: HUDFPSMenuView?
     private var miscMenuView: HUDMiscMenuView?
     private var backgroundMenuView: HUDBackgroundMenuView?
+    private var glassMenuView: HUDGlassMenuView?
+    private var glassObservation: NSObjectProtocol?
     private var positionMenuView: HUDPositionMenuView?
 
     private var backgroundStatusItem: NSMenuItem?
@@ -127,6 +129,13 @@ final class AppDelegate:
         NSApp.setActivationPolicy(
             .accessory
         )
+
+        HUDGlassStyle.apply(HUDPreferences.glassOptions)
+        glassObservation = NotificationCenter.default.addObserver(
+            forName: HUDGlassStyle.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateGlassMenu() }
+        }
 
         csvLogger.onFailure = { [weak self] error, recovery in
             self?.updateLoggingMenu()
@@ -614,6 +623,7 @@ final class AppDelegate:
         let autoHideItem = NSMenuItem()
         autoHideItem.view = autoHideView
         menu.insertItem(autoHideItem, at: menu.index(of: sizeItem))
+        menu.insertItem(.separator(), at: menu.index(of: sizeItem))
         autoHideMenuView = autoHideView
 
         let alignmentView = HUDAlignmentMenuView(selected: HUDPreferences.alignment)
@@ -632,6 +642,18 @@ final class AppDelegate:
         backgroundItem.view = backgroundView
         menu.addItem(backgroundItem)
         self.backgroundMenuView = backgroundView
+
+        let glassView = HUDGlassMenuView(options: HUDPreferences.glassOptions,
+            systemStrength: HUDGlassStyle.systemStrength())
+        glassView.onChange = { [weak self] options in
+            HUDPreferences.glassOptions = options
+            HUDGlassStyle.apply(options)
+            self?.updateGlassMenu()
+        }
+        let glassItem = NSMenuItem()
+        glassItem.view = glassView
+        menu.addItem(glassItem)
+        glassMenuView = glassView
 
         let status = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         let retry = NSMenuItem(title: "Retry Glass Compatibility", action: #selector(retryGlassSession), keyEquivalent: "")
@@ -665,7 +687,8 @@ final class AppDelegate:
         fpsMenuView = fpsView
         categories.append(fpsView)
         for group in HUDResourceGroup.allCases {
-            let view = HUDResourceMenuView(group: group, options: HUDPreferences.resourceOptions(for: group))
+            let view = HUDResourceMenuView(group: group, options: HUDPreferences.resourceOptions(for: group),
+                                          alignment: HUDPreferences.alignment)
             view.onChange = { [weak self] options in
                 guard let self else { return }
                 HUDPreferences.setResourceOptions(options, for: group)
@@ -770,7 +793,7 @@ final class AppDelegate:
         let hotkeysItem = NSMenuItem(title: "Edit hotkeys…", action: #selector(editHotkeys), keyEquivalent: "")
         hotkeysItem.target = self
         menu.addItem(hotkeysItem)
-        let guideItem = NSMenuItem(title: "Controls Guide…", action: #selector(showControlsGuide), keyEquivalent: "")
+        let guideItem = NSMenuItem(title: "Controls guide…", action: #selector(showControlsGuide), keyEquivalent: "")
         guideItem.target = self
         menu.addItem(guideItem)
         menu.addItem(.separator())
@@ -914,6 +937,7 @@ final class AppDelegate:
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        updateGlassMenu()
         if menu === statusItem?.menu, let categories = categoryMenuView {
             let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
             let otherHeight = menu.size.height - categories.frame.height
@@ -1027,8 +1051,7 @@ final class AppDelegate:
             item?.keyEquivalentModifierMask = shortcut?.menuModifiers ?? []
         }
         hudVisibilityMenuItem?.toolTip = hotkeys.errors[.visibility]
-        backgroundMenuView?.toolTip = hotkeys.errors[.appearance]
-            ?? hotkeys.settings[.appearance].map { "Cycle appearance: \($0.displayName)" }
+        backgroundMenuView?.setShortcut(hotkeys.isActive(.appearance) ? hotkeys.settings[.appearance] : nil)
     }
 
     private func setHUDBackground(_ background: HUDBackground) {
@@ -1036,6 +1059,11 @@ final class AppDelegate:
         HUDPreferences.background = background
         hudWindow?.setBackground(background)
         backgroundMenuView?.select(background)
+    }
+
+    private func updateGlassMenu() {
+        glassMenuView?.update(options: HUDPreferences.glassOptions,
+            systemStrength: HUDGlassStyle.systemStrength())
     }
 
     // MARK: - Enable / Disable HUD
@@ -1123,6 +1151,7 @@ final class AppDelegate:
 
     private func resetHUDOptions() {
         HUDPreferences.resetOptions()
+        HUDGlassStyle.apply(HUDPreferences.glassOptions)
         HUDPreferences.applyFanAvailability(fanMonitor.sample)
         // Restore display defaults without bypassing a denied or failed helper.
         if powerMonitor.helper.shouldTurnPowerOff {
@@ -1172,6 +1201,7 @@ final class AppDelegate:
         hudWindow?.setAlignment(alignment)
         fpsMenuView?.update(options: HUDPreferences.fpsOptions, alignment: alignment)
         miscMenuView?.update(alignment: alignment)
+        resourceMenuViews[.ram]?.update(alignment: alignment)
         updatePackagePowerMenu()
         deviceInfoMenuView?.update(selected: enabledMetrics.contains(.deviceInfo),
                                    enabled: alignment.allows(.deviceInfo))
@@ -1351,9 +1381,10 @@ final class AppDelegate:
         else { logSnapshot.set(.gpuUsage, nil); totalGPUUsageMonitor?.stop(); hudWindow?.updateMetric(.gpuTotal, value: "") }
         if metrics.contains(.cpuTotal) { totalCPUUsageMonitor?.start() }
         else { logSnapshot.set(.cpuUsage, nil); totalCPUUsageMonitor?.stop(); hudWindow?.updateMetric(.cpuTotal, value: "") }
-        if metrics.contains(.ramTotal) { totalRAMUsageMonitor?.start() }
+        let memory = HUDPreferences.resourceOptions(for: .ram)
+        if metrics.contains(.ramTotal) && (memory.totalUse || memory.showsDetails) { totalRAMUsageMonitor?.start() }
         else { logSnapshot.updateMemory(nil, app: false); totalRAMUsageMonitor?.stop(); hudWindow?.updateRAM(.ramTotal, usage: nil) }
-        if metrics.contains(.ramTotal) { memoryPressureMonitor?.start() }
+        if metrics.contains(.ramTotal) && memory.showsPressure { memoryPressureMonitor?.start() }
         else { logSnapshot.setText(.memoryPressure, nil); memoryPressureMonitor?.stop(); hudWindow?.updateMemoryPressure("") }
         if metrics.contains(.battery) {
             batteryMonitor?.start(temperature: HUDPreferences.batteryOptions.temperature, power: HUDPreferences.batteryOptions.power)
@@ -1486,6 +1517,8 @@ final class AppDelegate:
         powerMonitor.stop()
         hudWindow?.shutdown()
         hotkeys.stop()
+        if let glassObservation { NotificationCenter.default.removeObserver(glassObservation) }
+        glassObservation = nil
 
         // FPS
         fpsMonitor?

@@ -117,9 +117,10 @@ struct HUDLogSelection {
         }
         if package.enabled { result.append(.socPower) }
         if let memory = resources[.ram], memory.enabled {
-            // The menu places Details before Usage; Total precedes App in Both.
+            // Match the independent Pressure, Details, and Use menu rows.
+            if memory.showsPressure { result.append(.memoryPressure) }
             if memory.showsDetails {
-                if memory.selectedUsageMode != .app { result += [.memoryPhysical, .memorySwap, .memoryPressure] }
+                if memory.selectedUsageMode != .app { result += [.memoryPhysical, .memorySwap] }
                 if memory.selectedUsageMode != .total { result.append(.memoryAppPhysical) }
             }
             if memory.totalUse { result.append(.memoryUsage) }

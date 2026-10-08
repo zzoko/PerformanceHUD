@@ -7,7 +7,7 @@ final class HUDPackagePowerMenuView: HUDCategoryMenuView {
     private var helperAvailability: PowerHelperAvailability = .idle
     private var options: HUDPackagePowerOptions
     private let master = HUDResourceMasterButton(title: "SOC", target: nil, action: nil)
-    private let readingLabel = NSTextField(labelWithString: "Combined Power")
+    private let readingLabel = NSTextField(labelWithString: "Combined power")
     private let highlight = HUDEmphasisButton()
 
     init(options: HUDPackagePowerOptions) {
@@ -21,7 +21,7 @@ final class HUDPackagePowerMenuView: HUDCategoryMenuView {
         readingLabel.font = .menuFont(ofSize: 0)
         highlight.target = self
         highlight.action = #selector(highlightChanged)
-        highlight.setAccessibilityLabel("Emphasize SOC Combined Power")
+        highlight.setAccessibilityLabel("Emphasize SOC Combined power")
         setRows([.init(reading: readingLabel, emphasis: highlight)])
         setState(options: options, helper: .idle)
     }

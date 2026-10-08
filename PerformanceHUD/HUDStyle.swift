@@ -49,6 +49,19 @@ enum HUDStyle {
 
     private static let baseMetricColumnSpacing: CGFloat = 8
     static let horizontalLabelGapMultiplier: CGFloat = 1.21
+    static let horizontalPowerReference = "999.9 W"
+    static let horizontalTemperatureReference = "149°C"
+    static let horizontalPercentageReference = "100%"
+
+    @MainActor
+    static func horizontalColumnWidth(text: String, reference: String, font: NSFont,
+                                      sizingFont: NSFont? = nil) -> CGFloat {
+        let value = NSTextField(labelWithString: text)
+        value.font = font
+        let sizing = NSTextField(labelWithString: reference)
+        sizing.font = sizingFont ?? font
+        return ceil(max(sizing.intrinsicContentSize.width, value.intrinsicContentSize.width))
+    }
 
     // Anchor the HUD inside a centered 16:9 viewport, including letterboxing.
     static func gameContentFrame(in screenFrame: NSRect) -> NSRect {

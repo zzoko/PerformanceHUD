@@ -2,13 +2,19 @@
 
 [← Back to README](../README.md)
 
+### v2.2
+
+- Added a **Liquid Glass** strength slider from Clear to Frosted, with live adjustment, remembered settings, and **Follow macOS** enabled by default. Unified the Appearance and Liquid Glass selectors.
+- Added an independent **Pressure** control with **Text / Meter / Color meter** choices and text emphasis, separate from memory Details. Color meter is selected by default; meter segments sit side by side in Vertical and stack in Horizontal, replacing its warning triangle.
+- Improved memory-pressure responsiveness with one-second sampling and aligned horizontal Battery readings with the CPU/GPU column layout.
+
 ### v2.1
 
 - Redesigned the menu’s category controls with aligned reading rows, consistent emphasis buttons, and individually selectable Misc options. Existing settings and category switches are preserved.
-- FAN is now disabled on fanless Macs, with a clear **Not Available** status.
+- FAN is now disabled on fanless Macs, with a clear **Not available** status.
 - Smoothed transitions between all Auto hide modes, including returning directly to the collapsed FPS arrow. The matching **Animation** checkbox keeps instant changes available.
 - Kept the collapsed FPS height and divider position steady when changing its display mode.
-- Updated the **Controls Guide** for the redesigned controls, removed the outdated illustration, and refreshed the documentation screenshots.
+- Updated the **Controls guide** for the redesigned controls, removed the outdated illustration, and refreshed the documentation screenshots.
 
 ### v2.0
 
@@ -35,7 +41,7 @@
 - Significantly reduced PerformanceHUD’s own glass-processing overhead by eliminating continuous screen capture and custom per-frame rendering. macOS now renders the glass directly.
 - **Screen Capture permission is no longer required** for the HUD’s glass effect.
 - Added a display-refresh compatibility workaround for the observed game FPS cap with native glass.
-- Updated the **Controls Guide** for logging and macOS Liquid Glass settings, and refreshed all six HUD and menu screenshots.
+- Updated the **Controls guide** for logging and macOS Liquid Glass settings, and refreshed all six HUD and menu screenshots.
 
 ### v1.7
 
@@ -45,21 +51,21 @@
 - SoC power emphasis now defaults to off.
 - Improved memory spacing in both layouts and fixed FPS text shifting vertically when switching layouts.
 - Made **Don’t show this again** choices for Auto hide and Reset all options independent and preserved across resets.
-- Updated the **Controls Guide**, refreshed all six HUD and menu screenshots, and updated the app version to **1.7**.
+- Updated the **Controls guide**, refreshed all six HUD and menu screenshots, and updated the app version to **1.7**.
 
 ### v1.6
 
 - Added **Auto hide → FPS / Off / All options** near the top of the menu, replacing the FPS category’s Static / Dynamic selector. FPS is the default and collapses only the FPS area; Off keeps everything visible; All options hides the whole HUD after three seconds without FPS readings and reveals it when readings return. Existing Static / Dynamic choices are preserved. Enable / Disable remains the master switch.
 - Matched FPS and whole-HUD transitions to a quicker **0.4-second animation** in both layouts, with rounded moving edges and a fixed capture footprint. Hidden vertical rows stay independent of the shrinking horizontal viewport, avoiding layout conflicts during collapse. Reduce Motion skips animations. All options keeps FPS detection active even with the FPS category unchecked, and pauses other readings and glass capture once hidden. Its explanation includes **Don’t show this again**.
 - Expanded **Size** from **0.5× to 2×**, with finer **0.01× steps** and the same 1× default, allowing more adjustment for different display scaling and fullscreen games.
-- Added separate **Reset → Position / Size** buttons, with **All options** below. Size returns to 1×; All options resets size, position, and the other HUD options after confirmation while preserving macOS permissions. Added **Don’t show this again** for reset confirmations, remembered across resets. Updated the Controls Guide to match.
+- Added separate **Reset → Position / Size** buttons, with **All options** below. Size returns to 1×; All options resets size, position, and the other HUD options after confirmation while preserving macOS permissions. Added **Don’t show this again** for reset confirmations, remembered across resets. Updated the Controls guide to match.
 - Fixed menu labels shifting sideways when switching to **Horizontal** alignment, and matched the reset shortcut hint’s text intensity to the native Enable / Disable shortcut.
 - Stabilized the left edge of the **60-second FPS history** as older samples leave the graph, preventing the brief gap or jump after the graph fills.
 - Softened glass transitions when changing size, layout, or appearance by briefly retaining the previous glass image and matching text colors while a fresh capture arrives. The HUD also waits briefly for its first usable glass frame when appearing, reducing checkerboard flashes. Capture delays or failures still fall back to the dark checkerboard, now with slightly larger squares.
 - Refined the HUD with **softer continuous corners** that scale consistently from 0.5× to 2×, including shadows, fallback glass, and collapse animations.
 - Fixed the reproduced **power-reading dropouts under sustained load**: the helper now keeps its power reader running continuously instead of restarting it every five samples, and allows more time for the first reading. Stalled readers still recover automatically, empty exits back off before retrying, and the reader is cleaned up when the helper stops. Validated under RDR2 load and Low Power Mode.
 - Fixed **HUD clipping in exclusive-fullscreen games** such as Metro Exodus when changing layout, size, or visible readings. The HUD now reapplies its current dimensions after macOS finishes changing the display mode, preventing an older window size from clipping the contents. Verified in both layouts.
-- Updated the **Controls Guide** for Auto hide, resets, sizing, and glass transitions. Added a compact version badge beside Download options in the README, linking to the changelog. Updated the app version to **1.6**.
+- Updated the **Controls guide** for Auto hide, resets, sizing, and glass transitions. Added a compact version badge beside Download options in the README, linking to the changelog. Updated the app version to **1.6**.
 
 ### v1.5
 
@@ -69,7 +75,7 @@
 - Kept the full expanded background-capture area fixed during FPS transitions, avoiding capture restarts as the visible HUD changes size. Returning readings can reverse an animation already in progress, and macOS **Reduce Motion** skips the animation.
 - Replaced **FAN 1 / FAN 2 / FAN AVG** labels with compact rounded-square badges in both layouts. Centred numbers identify individual fans; **A** identifies Average. The badges use a faint outline and scale with the HUD.
 - Unified fan bar widths across layouts and display modes. Total-only keeps the same bar size when aligned to the right in Vertical. Bars sit evenly between the badge and RPM text, and horizontal RPM values use the same trailing spacing as other readings. Live RPM updates retain stable HUD dimensions.
-- Updated the **Controls Guide** for the combined FPS controls, dynamic behaviour, and fan badges. Updated the app version to **1.5**.
+- Updated the **Controls guide** for the combined FPS controls, dynamic behaviour, and fan badges. Updated the app version to **1.5**.
 
 ### v1.4
 
@@ -79,7 +85,7 @@
 - Added optional **RPM highlighting** through the thin line beneath RPM and Both. It starts off, applies to individual and averaged readings, and remembers the choice while RPM is hidden.
 - Adapted fan rows to both layouts. Vertical uses a longer, right-aligned bar for Total alone and a shorter bar alongside RPM; Horizontal uses compact bars and faint dividers between fans. FAN labels match other category labels. Fan rows fit the existing vertical width, and live values and status changes keep stable dimensions to avoid unnecessary background-capture restarts.
 - Added read-only fan detection through AppleSMC, without requiring the power helper or changing cooling settings. On fanless Macs, **FAN defaults to off** for fresh settings and Options reset; it can still be enabled manually to show **No fans detected**, with Usage and Average unchecked and disabled. Manual category choices are preserved, and read failures do not turn FAN off. Missing readings remain distinct from a valid 0 RPM; averages require valid readings from all fans. Live RPM validation on a Mac with fans is still pending.
-- Added a scrollable, resizable **Controls Guide**, ordered to match the menu, covering reading controls, highlighting, layouts, memory-pressure symbols, fan controls and availability, Follow system, shortcuts, and the Power Helper. Includes a checkbox illustration showing normal and highlighted states.
+- Added a scrollable, resizable **Controls guide**, ordered to match the menu, covering reading controls, highlighting, layouts, memory-pressure symbols, fan controls and availability, Follow system, shortcuts, and the Power Helper. Includes a checkbox illustration showing normal and highlighted states.
 - Moved the app version into the guide header and removed the version row from the menu. Updated the app version to **1.4**.
 - Removed repeated explanatory tooltips now covered by the guide, while keeping current error and troubleshooting messages.
 - Shortened **Unified Memory** to **MEM** in the menu and guide headings; the guide still explains the full name.

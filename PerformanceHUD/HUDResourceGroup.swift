@@ -19,8 +19,30 @@ enum HUDUsageMode: String, CaseIterable {
     case total, app, both
 }
 
+nonisolated enum HUDMemoryPressureMode: String, CaseIterable, Sendable {
+    case text, meter, colorMeter
+
+    init?(storedValue: String) {
+        switch storedValue {
+        case "graph": self = .meter
+        case "colorGraph": self = .colorMeter
+        default:
+            guard let mode = Self(rawValue: storedValue) else { return nil }
+            self = mode
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .text: return "Text"
+        case .meter: return "Meter"
+        case .colorMeter: return "Color meter"
+        }
+    }
+}
+
 enum HUDReadingKind: String, CaseIterable {
-    case power, temperature, totalUse, focusedApp, details
+    case power, temperature, totalUse, focusedApp, details, pressure
 }
 
 enum HUDBatteryFlowMode: String, CaseIterable {
@@ -76,12 +98,15 @@ struct HUDResourceOptions: Equatable {
     var focusedApp: Bool
     var power: Bool = false
     var details: Bool = true
+    var pressure: Bool = true
     var highlighted: Set<HUDReadingKind> = []
     var usageMode: HUDUsageMode?
+    var pressureMode: HUDMemoryPressureMode = .colorMeter
 
     var usageVisible: Bool { totalUse || focusedApp }
     var detailsAvailable: Bool { enabled }
     var showsDetails: Bool { detailsAvailable && details }
+    var showsPressure: Bool { enabled && pressure && selectedUsageMode != .app }
     var usageHighlighted: Bool { !highlighted.isDisjoint(with: [.totalUse, .focusedApp]) }
     var selectedUsageMode: HUDUsageMode {
         usageMode ?? (totalUse && focusedApp ? .both : focusedApp ? .app : .total)
@@ -107,9 +132,8 @@ struct HUDResourceOptions: Equatable {
         guard enabled else { return [] }
         var metrics = Set<HUDMetric>()
         if group == .ram {
-            guard usageVisible || showsDetails else { return [] }
-            if selectedUsageMode != .app { metrics.insert(.ramTotal) }
-            if selectedUsageMode != .total { metrics.insert(.ram) }
+            if selectedUsageMode != .app && (usageVisible || showsDetails || showsPressure) { metrics.insert(.ramTotal) }
+            if selectedUsageMode != .total && (usageVisible || showsDetails) { metrics.insert(.ram) }
             return metrics
         }
         if focusedApp, let appMetric = group.appMetric { metrics.insert(appMetric) }

@@ -32,7 +32,7 @@ import AppKit
         let fans = FanSample(status: .ready, fans: [.init(id: 1, rpm: 4000, maximumRPM: 8000), .init(id: 0, rpm: 0, maximumRPM: 6000)])
         let expected: [HUDLogColumn] = [.fps, .gpuPower, .gpuTemperature, .gpuUsage, .gpuAppUsage,
             .cpuPower, .cpuTemperature, .cpuUsage, .anePower, .socPower,
-            .memoryPhysical, .memorySwap, .memoryPressure, .memoryAppPhysical, .memoryUsage, .memoryAppUsage,
+            .memoryPressure, .memoryPhysical, .memorySwap, .memoryAppPhysical, .memoryUsage, .memoryAppUsage,
             .fanUsage(0), .fanRPM(0), .fanUsage(1), .fanRPM(1), .powerSource,
             .batteryPower, .batteryTemperature, .batteryCharge, .lowPowerMode, .chip, .os]
         check(selection.columns(fanSample: fans) == expected, "Columns must follow menu order with individual fans sorted")

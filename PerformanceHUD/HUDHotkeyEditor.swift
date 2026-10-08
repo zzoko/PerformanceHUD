@@ -168,7 +168,7 @@ final class HUDHotkeyEditor: NSWindowController, NSWindowDelegate {
 
     private func cancelRecording() {
         recording = nil
-        setMessage("Appearance cycles Light → Dark → Follow system.")
+        setMessage("Appearance cycles Light → Dark → Follow macOS.")
         refresh()
     }
 

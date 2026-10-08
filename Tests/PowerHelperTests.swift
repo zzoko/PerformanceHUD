@@ -34,7 +34,7 @@ import Foundation
               && HUDAlignment.horizontal.allows(.battery), "horizontal retains main readings")
         for mode in HUDUsageMode.allCases {
             var options = HUDResourceOptions(enabled: true, temperature: false, totalUse: mode != .app,
-                                             focusedApp: mode != .total, details: false)
+                                             focusedApp: mode != .total, details: false, pressure: false)
             check(options.selectedUsageMode == mode, "existing usage choices migrate to the corresponding mode")
             options.setUsagePresentation(visible: true, highlighted: true)
             options.selectUsageMode(.both)
@@ -77,16 +77,21 @@ import Foundation
               "Details emphasis survives usage and mode changes")
         for mode in HUDUsageMode.allCases {
             for details in [false, true] {
-                for usage in [false, true] {
-                    for enabled in [false, true] {
-                        var options = HUDResourceOptions(enabled: enabled, temperature: false,
-                            totalUse: usage, focusedApp: false, details: details, usageMode: mode)
-                        options.setUsagePresentation(visible: usage, highlighted: false)
-                        let expected: Set<HUDMetric> = !enabled || (!details && !usage) ? []
-                            : mode == .total ? [.ramTotal] : mode == .app ? [.ram] : [.ram, .ramTotal]
-                        check(options.visibleMetrics(for: .ram) == expected,
-                              "independent Details/Usage keep the correct memory sources in every mode")
-                        check(options.showsDetails == (enabled && details), "Details follows only its own and the master checkbox")
+                for pressure in [false, true] {
+                    for usage in [false, true] {
+                        for enabled in [false, true] {
+                            var options = HUDResourceOptions(enabled: enabled, temperature: false,
+                                totalUse: usage, focusedApp: false, details: details, pressure: pressure, usageMode: mode)
+                            options.setUsagePresentation(visible: usage, highlighted: false)
+                            var expected: Set<HUDMetric> = !enabled || (!details && !usage) ? []
+                                : mode == .total ? [.ramTotal] : mode == .app ? [.ram] : [.ram, .ramTotal]
+                            if enabled && pressure && mode != .app { expected.insert(.ramTotal) }
+                            check(options.visibleMetrics(for: .ram) == expected,
+                                  "independent Details, Pressure and Use keep the correct memory sources in every mode")
+                            check(options.showsDetails == (enabled && details), "Details follows only its own and the master checkbox")
+                            check(options.showsPressure == (enabled && pressure && mode != .app),
+                                  "Pressure remains available with Use and Details off, except in App mode")
+                        }
                     }
                 }
             }

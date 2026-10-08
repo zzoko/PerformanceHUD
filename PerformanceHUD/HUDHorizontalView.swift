@@ -17,11 +17,10 @@ final class HUDHorizontalView: NSView {
         var tightLeading = false
         var leftAligned = false
         var fanMarker: String? = nil
-        var symbolName: String? = nil
-        var symbolVisible = true
         var barWidth: CGFloat? = nil
         var barFraction: Double? = nil
         var sizingFont: NSFont? = nil
+        var pressureMode: HUDMemoryPressureMode? = nil
     }
 
     let battery = HUDBatteryIndicatorView(frame: .zero)
@@ -46,6 +45,7 @@ final class HUDHorizontalView: NSView {
     private var dividers: [NSView] = []
     private var symbols: [String: NSImageView] = [:]
     private var bars: [String: HUDFanBarView] = [:]
+    private var pressureMeters: [String: HUDMemoryPressureMeterView] = [:]
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -68,6 +68,7 @@ final class HUDHorizontalView: NSView {
         labels.values.forEach { $0.isHidden = true }
         symbols.values.forEach { $0.isHidden = true }
         bars.values.forEach { $0.isHidden = true }
+        pressureMeters.values.forEach { $0.isHidden = true }
         dividers.forEach { $0.isHidden = true }
         battery.isHidden = !showsBattery
         battery.applyStyle(scale: scale, background: background)
@@ -110,13 +111,28 @@ final class HUDHorizontalView: NSView {
                         let followsLabel = section[index - 1].startsMetric && reading.metric != .fps && reading.metric != .fans
                         let labelGap = followsLabel && reading.resourceGroup == .ram && reading.text == "PHY"
                             ? 2 : HUDStyle.horizontalLabelGapMultiplier
-                        let bordersSymbol = reading.symbolName != nil || section[index - 1].symbolName != nil
-                        // A compact fixed slot: the triangle fits between the
-                        // readings without adding space when pressure changes.
-                        x += reading.tightLeading ? HUDStyle.memoryLabelValueSpacing * factor : gap * (bordersSymbol ? 0.25 : followsLabel ? labelGap : 1)
+                        x += reading.tightLeading ? HUDStyle.memoryLabelValueSpacing * factor : gap * (followsLabel ? labelGap : 1)
                     }
                 }
                 previousResource = reading.resourceGroup
+                if let mode = reading.pressureMode, mode != .text {
+                    let meter = pressureMeters[reading.id] ?? HUDMemoryPressureMeterView()
+                    if pressureMeters[reading.id] == nil {
+                        pressureMeters[reading.id] = meter
+                        meter.translatesAutoresizingMaskIntoConstraints = true
+                        addSubview(meter)
+                    }
+                    meter.isHidden = false
+                    meter.configure(mode: mode, scale: scale, background: background, stacked: true)
+                    meter.update(reading.text)
+                    let size = meter.intrinsicContentSize
+                    let capHeight = HUDStyle.readingFont(scale: scale, highlighted: false).capHeight
+                    meter.frame = NSRect(x: x,
+                                         y: baseline + (capHeight - size.height) / 2,
+                                         width: size.width, height: size.height)
+                    x += size.width
+                    continue
+                }
                 if let barWidth = reading.barWidth {
                     let bar = bars[reading.id] ?? HUDFanBarView()
                     if bars[reading.id] == nil { bars[reading.id] = bar; addSubview(bar) }
@@ -149,29 +165,6 @@ final class HUDHorizontalView: NSView {
                     x += side
                     continue
                 }
-                if let symbolName = reading.symbolName {
-                    let symbol = symbols[reading.id] ?? NSImageView()
-                    if symbols[reading.id] == nil { symbols[reading.id] = symbol; addSubview(symbol) }
-                    symbol.isHidden = !reading.symbolVisible
-                    symbol.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: reading.help)?
-                        .withSymbolConfiguration(.init(pointSize: reading.font.pointSize, weight: .regular))
-                    symbol.contentTintColor = reading.color
-                    symbol.setAccessibilityHelp(reading.help)
-                    let side = ceil(reading.font.pointSize + 2 * factor)
-                    symbol.imageScaling = .scaleProportionallyUpOrDown
-                    // SF Symbols include baseline padding. Center their alignment
-                    // rectangle on the capital letters, rather than the image canvas.
-                    // A small optical lift compensates for AppKit’s symbol placement.
-                    var opticalOffset: CGFloat = 0.75 * factor
-                    if let image = symbol.image, image.size.width > 0, image.size.height > 0 {
-                        let fit = min(side / image.size.width, side / image.size.height)
-                        opticalOffset += (image.size.height / 2 - image.alignmentRect.midY) * fit
-                    }
-                    symbol.frame = NSRect(x: x, y: baseline + (reading.font.capHeight - side) / 2 + opticalOffset,
-                                          width: side, height: side)
-                    x += side
-                    continue
-                }
                 let label: NSTextField
                 if let existing = labels[reading.id] { label = existing }
                 else {
@@ -187,9 +180,8 @@ final class HUDHorizontalView: NSView {
                 label.textColor = reading.color
                 label.setAccessibilityHelp(reading.help)
                 label.alignment = reading.startsMetric || reading.leftAligned ? .left : .right
-                let sizing = NSTextField(labelWithString: reading.reference)
-                sizing.font = reading.sizingFont ?? reading.font
-                let width = ceil(max(sizing.intrinsicContentSize.width, label.intrinsicContentSize.width))
+                let width = HUDStyle.horizontalColumnWidth(text: reading.text, reference: reading.reference,
+                    font: reading.font, sizingFont: reading.sizingFont)
                 let labelHeight = ceil(label.intrinsicContentSize.height)
                 if reading.tightLeading && reading.leftAligned, index > 0,
                    let title = labels[section[index - 1].id] {

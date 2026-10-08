@@ -7,6 +7,7 @@ import AppKit
 
     @MainActor static func main() throws {
         _ = NSApplication.shared
+        let scales = CommandLine.arguments.contains("--normal-size") ? [1.0] : [0.5, 1.0, 2.0]
         var failures = Set<String>()
         func check(_ value: Bool, _ reason: String) {
             if !value { failures.insert(reason) }
@@ -159,14 +160,14 @@ import AppKit
             let temperatureRect = view.temperatureTextRect
             check(view.powerText == "12.0 W", "Auto displays real charging watts")
             view.update(percentage: 80, source: .powerAdapter, temperature: 33, power: 0, now: 101)
-            check(view.minimumRowWidth == reservedWidth, "Auto preserves width during the idle delay")
+            check(!view.powerText.isEmpty, "Auto preserves the reading during the idle delay")
             view.update(percentage: 80, source: .powerAdapter, temperature: 33, power: 0, now: 104)
             check(view.powerText.isEmpty, "Auto hides idle text in both layouts")
             if horizontal {
                 let reclaimed = reservedWidth - view.minimumRowWidth
                 check(reclaimed > 0, "Horizontal Auto reclaims the hidden Charge slot")
-                check(abs(view.temperatureTextRect.maxX - temperatureRect.maxX - reclaimed) < 0.01,
-                      "Horizontal temperature closes the hidden Charge gap")
+                check(view.temperatureTextRect == temperatureRect,
+                      "Horizontal temperature stays beside the icon when Charge hides")
             } else {
                 check(view.minimumRowWidth == reservedWidth && view.temperatureTextRect == temperatureRect,
                       "Vertical Auto keeps its fixed columns")
@@ -174,7 +175,7 @@ import AppKit
             check(!(view.accessibilityValue() as? String ?? "").contains("Battery charge rate:"), "Accessibility follows hidden Auto text")
             view.update(percentage: 80, source: .battery, temperature: 33, power: -8, now: 105)
             check(view.powerText == "-8.0 W", "Auto immediately resumes for discharge")
-            check(view.minimumRowWidth == reservedWidth, "Returning Charge restores the original slot width")
+            if !horizontal { check(view.minimumRowWidth == reservedWidth, "Vertical Charge keeps its fixed width") }
             view.setOptions(.init(enabled: true, temperature: true, charge: true, flowMode: .off))
             view.update(percentage: 80, source: .battery, temperature: 33, power: -8, now: 106)
             check(view.powerText.isEmpty, "Off hides even active flow")
@@ -185,7 +186,7 @@ import AppKit
 
         // Exercise actual window resizing with only Battery enabled. No CPU/FPS
         // sample should be needed to apply an Auto transition to the HUD frame.
-        for factor in [0.5, 1.0, 2.0] {
+        for factor in scales {
             hud.setHUDScale(.init(rawValue: factor))
             hud.setAlignment(.horizontal)
             // Alignment reloads saved selections. Reapply this test's isolated
@@ -200,17 +201,17 @@ import AppKit
                     hud.updateBattery(.init(percentage: 80, source: .powerAdapter, temperature: 33, power: 12), now: 201)
                     let expandedWidth = panel.frame.width
                     check(expandedWidth > compactWidth, "Horizontal window expands when Auto Charge appears at \(factor)×")
-                    hud.updateBattery(.init(percentage: 80, source: .battery, temperature: 33, power: -100), now: 202)
-                    check(panel.frame.width == expandedWidth, "Visible Charge digits and sign do not resize the window")
+                    hud.updateBattery(.init(percentage: 80, source: .battery, temperature: 33, power: -24.3), now: 202)
+                    check(panel.frame.width == expandedWidth, "Readings that fit the shared column keep the same width")
                     hud.updateBattery(.init(percentage: 80, source: .powerAdapter, temperature: 33, power: 0), now: 203)
-                    check(panel.frame.width == expandedWidth, "Horizontal window holds its width through Auto's delay")
+                    check(panel.frame.width > compactWidth, "Horizontal window retains Charge through Auto's delay")
                     hud.updateBattery(.init(percentage: 80, source: .powerAdapter, temperature: 33, power: 0), now: 206)
                     check(panel.frame.width == compactWidth, "Horizontal window shrinks as soon as Auto Charge hides")
                     hud.setBatteryOptions(.init(enabled: true, temperature: temperature, charge: energy, flowMode: .off))
                     check(panel.frame.width == compactWidth, "Hidden Auto is as compact as Off with every remaining reading combination")
                     hud.setBatteryOptions(auto)
                     hud.updateBattery(.init(percentage: 80, source: .battery, temperature: 33, power: -8), now: 207)
-                    check(panel.frame.width == expandedWidth, "Returning Auto Charge restores the full horizontal frame")
+                    check(panel.frame.width > compactWidth, "Returning Auto Charge restores its horizontal space")
                 }
             }
             hud.setAlignment(.vertical)
@@ -222,7 +223,7 @@ import AppKit
         }
         for horizontal in [false, true] {
             view.setHorizontal(horizontal)
-            for factor in [0.5, 1.0, 2.0] {
+            for factor in scales {
                 let scale = HUDScale(rawValue: factor)
                 view.applyStyle(scale: scale, background: .dark)
                 for mask in 0..<8 {
@@ -232,7 +233,7 @@ import AppKit
                             power: mask & 1 != 0, powerHighlighted: emphasized)
                         view.setOptions(options)
                         let referenceWidth = view.minimumRowWidth
-                        let width: CGFloat
+                        var width: CGFloat
                         if horizontal {
                             width = referenceWidth
                         } else {
@@ -255,7 +256,12 @@ import AppKit
                             height: horizontal ? 21 * factor : HUDStyle.rowHeight(for: .battery, scale: scale))
                         for reading: Double? in [-1000, -24.3, 0, 24.3, 1000, nil] {
                             view.update(percentage: 80, source: .powerAdapter, temperature: 99.9, power: reading)
-                            check(abs(view.minimumRowWidth - referenceWidth) < 0.01, "Changing numbers never resize the row")
+                            if horizontal {
+                                width = view.minimumRowWidth
+                                view.setFrameSize(NSSize(width: width, height: view.frame.height))
+                            } else {
+                                check(abs(view.minimumRowWidth - referenceWidth) < 0.01, "Changing numbers never resize the vertical row")
+                            }
                             if options.power && reading != nil {
                                 let rect = view.powerTextRect
                                 check(view.bounds.insetBy(dx: -0.1, dy: -0.1).contains(rect), "Power fits its row at every scale")
@@ -268,9 +274,8 @@ import AppKit
                                 let temperatureRect = view.temperatureTextRect
                                 check(view.bounds.insetBy(dx: -0.1, dy: -0.1).contains(temperatureRect), "Temperature fits its row")
                                 if options.power, reading != nil {
-                                    check(horizontal ? temperatureRect.maxX + 7.9 * factor <= view.powerTextRect.minX
-                                                     : view.powerTextRect.maxX + 7.9 * factor <= temperatureRect.minX,
-                                          "Temperature is before watts in Horizontal and after watts in Vertical")
+                                    check(view.powerTextRect.maxX + 7.9 * factor <= temperatureRect.minX,
+                                          "Charge precedes Temperature in both layouts")
                                     check(abs(temperatureRect.minY - view.powerTextRect.minY) < 0.01,
                                           "Battery readings share one baseline")
                                 }
@@ -290,7 +295,40 @@ import AppKit
                 }
             }
         }
-        for factor in [0.5, 1.0, 2.0] {
+        // Compare Battery against the actual GPU/CPU horizontal layout, not
+        // against a second set of battery-specific spacing constants.
+        for emphasized in [false, true] {
+            let comparison = HUDHorizontalView(frame: .zero)
+            let readingFont = HUDStyle.readingFont(scale: .normal, highlighted: emphasized)
+            let usageFont = HUDStyle.readingFont(scale: .normal, highlighted: false)
+            let titleFont = HUDStyle.TextStyle.label.font(ofSize: 14)
+            for watts in [0.0, -24.3, 100.0] {
+                let power = BatteryPowerRate.text(watts)
+                let fields = [("title", "ADP", "ADP", titleFont),
+                    ("power", power, HUDStyle.horizontalPowerReference, readingFont),
+                    ("temperature", "36°C", HUDStyle.horizontalTemperatureReference, readingFont),
+                    ("use", "80%", HUDStyle.horizontalPercentageReference, usageFont)]
+                let readings: [HUDHorizontalView.Reading] = fields.map { role, text, reference, font in
+                    .init(id: role, text: text, reference: reference, font: font, color: .white,
+                          help: nil, startsMetric: role == "title", resourceGroup: .gpu)
+                }
+                let size = comparison.configure(sections: [readings], showsBattery: false, scale: .normal, background: .dark)
+                let labels: [String: NSTextField] = member(comparison, "labels")
+                view.setHorizontal(true)
+                view.applyStyle(scale: .normal, background: .dark)
+                view.setOptions(.init(enabled: true, temperature: true, charge: true,
+                    temperatureHighlighted: emphasized, power: true, powerHighlighted: emphasized))
+                view.update(percentage: 80, source: .powerAdapter, temperature: 36, power: watts)
+                view.frame = NSRect(x: 0, y: 0, width: view.minimumRowWidth, height: 21)
+                check(abs(view.minimumRowWidth - size.width - 2) < 0.01, "Battery uses the GPU/CPU total column width")
+                for (key, rect) in [("power", view.powerTextRect), ("temperature", view.temperatureTextRect)] {
+                    let label = labels[key]!
+                    let edge = label.alignmentRect(forFrame: label.frame).maxX
+                    check(abs(rect.maxX - edge - 2) < 0.01, "Battery \(key) has the same column position as GPU/CPU")
+                }
+            }
+        }
+        for factor in scales {
             hud.setHUDScale(.init(rawValue: factor))
             let fixedWidth = panel.frame.width
             for group in HUDResourceGroup.allCases {
@@ -364,26 +402,46 @@ import AppKit
         print("LIVE: net battery power=\(BatteryPowerRate.text(sample?.power)), source=\(sample?.source?.rawValue ?? "unavailable")")
         for failure in failures.sorted() { print("FAIL: \(failure)") }
         if !failures.isEmpty { exit(1) }
-        print("PASS: signed readings, Flow modes/idle transitions, persistence/migration/reset, independent emphasis, menu columns, fixed width and right-packed battery combinations at 0.5/1/2× in both layouts")
+        print("PASS: signed readings, Flow modes/idle transitions, persistence/migration/reset, independent emphasis, menu columns, fixed width and right-packed battery combinations at \(scales)× in both layouts")
 
         if CommandLine.arguments.contains("--preview") {
-            let canvas = NSView(frame: NSRect(x: 0, y: 0, width: 950, height: 215))
+            let canvas = NSView(frame: NSRect(x: 0, y: 0, width: 350, height: 140))
             canvas.wantsLayer = true
             canvas.layer?.backgroundColor = NSColor(calibratedWhite: 0.16, alpha: 1).cgColor
-            battery.frame.origin = NSPoint(x: 0, y: 0)
-            battery.appearance = NSAppearance(named: .darkAqua)
-            canvas.addSubview(battery)
-            for (index, horizontal) in [false, true].enumerated() {
+            let reference = HUDHorizontalView(frame: .zero)
+            let readings: [HUDHorizontalView.Reading] = [
+                ("title", "GPU", "GPU"), ("power", "0.0 W", HUDStyle.horizontalPowerReference),
+                ("temperature", "36°C", HUDStyle.horizontalTemperatureReference),
+                ("use", "80%", HUDStyle.horizontalPercentageReference)
+            ].map { role, text, sizing in
+                .init(id: role, text: text, reference: sizing,
+                    font: role == "title" ? HUDStyle.TextStyle.label.font(ofSize: 14)
+                        : HUDStyle.readingFont(scale: .normal, highlighted: false),
+                    color: .white, help: nil, startsMetric: role == "title", resourceGroup: .gpu)
+            }
+            let size = reference.configure(sections: [readings], showsBattery: false, scale: .normal, background: .dark)
+            reference.isHidden = false
+            reference.frame = NSRect(origin: NSPoint(x: 22, y: 105), size: size)
+            canvas.addSubview(reference)
+            for (index, watts) in [0.0, -24.3].enumerated() {
                 let preview = HUDBatteryIndicatorView(frame: .zero)
-                preview.setHorizontal(horizontal)
-                preview.setOptions(.init(enabled: true, temperature: true, charge: true))
-                preview.applyStyle(scale: .init(rawValue: 1.5), background: .dark)
-                preview.frame = NSRect(x: CGFloat(20 + index * 450), y: 70,
-                    width: max(280, horizontal ? preview.minimumRowWidth : preview.minimumAlignedRowWidth),
-                    height: horizontal ? 32 : 59)
-                preview.update(percentage: 80, source: .powerAdapter, temperature: 33, power: -12.4)
+                preview.setHorizontal(true)
+                preview.setOptions(.init(enabled: true, temperature: true, charge: true, power: true))
+                preview.applyStyle(scale: .normal, background: .dark)
+                preview.update(percentage: 80, source: .powerAdapter, temperature: 36, power: watts)
+                preview.frame = NSRect(x: 20, y: CGFloat(75 - index * 30), width: ceil(preview.minimumRowWidth), height: 21)
                 canvas.addSubview(preview)
             }
+            for (index, level) in ["normal", "warning", "critical"].enumerated() {
+                let meter = HUDMemoryPressureMeterView()
+                meter.translatesAutoresizingMaskIntoConstraints = true
+                meter.configure(mode: .colorMeter, scale: .normal, background: .dark)
+                meter.update(level)
+                meter.frame = NSRect(origin: NSPoint(x: CGFloat(20 + index * 100), y: 15), size: meter.intrinsicContentSize)
+                canvas.addSubview(meter)
+            }
+            let window = NSWindow(contentRect: canvas.frame, styleMask: [], backing: .buffered, defer: false)
+            window.contentView = canvas
             canvas.layoutSubtreeIfNeeded()
             let bitmap = canvas.bitmapImageRepForCachingDisplay(in: canvas.bounds)!
             canvas.cacheDisplay(in: canvas.bounds, to: bitmap)

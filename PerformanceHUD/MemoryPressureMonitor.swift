@@ -3,11 +3,20 @@ import Darwin
 
 @MainActor
 final class MemoryPressureMonitor {
-    nonisolated enum Level: Sendable {
+    nonisolated enum Level: Int, Sendable {
 
         case low
         case medium
         case high
+
+        init?(displayText: String) {
+            switch displayText {
+            case "normal": self = .low
+            case "warning": self = .medium
+            case "critical": self = .high
+            default: return nil
+            }
+        }
 
         var displayText: String {
 
@@ -26,29 +35,17 @@ final class MemoryPressureMonitor {
     }
 
     var onPressureUpdate: ((Level?) -> Void)?
-    private var source: (any DispatchSourceMemoryPressure)?
-    private var generation = UUID()
-    private let queue = DispatchQueue(label: "PerformanceHUD.MemoryPressure", qos: .utility)
+    private let poller = MetricPoller<Level>(label: "PerformanceHUD.MemoryPressure")
 
     func start() {
-        guard source == nil else { return }
-        let ticket = generation
-        onPressureUpdate?(Self.readCurrentPressure())
-        let source = DispatchSource.makeMemoryPressureSource(eventMask: [.normal, .warning, .critical], queue: queue)
-        source.setEventHandler { [weak self, weak source] in
-            guard let source else { return }
-            let event = source.data
-            let level: Level? = event.contains(.critical) ? .high : event.contains(.warning) ? .medium : event.contains(.normal) ? .low : nil
-            DispatchQueue.main.async {
-                guard let self, self.generation == ticket else { return }
-                self.onPressureUpdate?(level)
-            }
+        guard !poller.isRunning else { return }
+        // Read the current global state once per second, rather than retaining
+        // the last notification while waiting for another event to arrive.
+        poller.start(sample: { Self.readCurrentPressure() }) { [weak self] level in
+            self?.onPressureUpdate?(level)
         }
-        self.source = source
-        source.activate()
     }
-    func stop() { generation = UUID(); source?.cancel(); source = nil }
-    deinit { source?.cancel() }
+    func stop() { poller.stop() }
     // MARK: - Current Pressure
 
     nonisolated private static func readCurrentPressure()
@@ -76,7 +73,7 @@ final class MemoryPressureMonitor {
             }
 
         guard
-            result == 0
+            result == 0, size == MemoryLayout<Int32>.size
         else {
             return nil
         }

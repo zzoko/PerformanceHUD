@@ -62,7 +62,10 @@ final class HUDWindowController {
     private var bottomDividerHeightConstraint: NSLayoutConstraint?
 
     private var showsRAMDetails = HUDPreferences.resourceOptions(for: .ram).showsDetails
-    private var ramDetailBottomConstraints: [HUDMetric: NSLayoutConstraint] = [:]
+    private var showsRAMPressure = HUDPreferences.resourceOptions(for: .ram).showsPressure
+    private var ramDetailHeightConstraints: [HUDMetric: NSLayoutConstraint] = [:]
+    private var ramPressureAfterDetailsConstraint: NSLayoutConstraint?
+    private var ramPressureWithoutDetailsConstraint: NSLayoutConstraint?
     private var ramDetailLabels: [HUDMetric: NSTextField] = [:]
     private var ramDetailGroupSpacingConstraints: [HUDMetric: NSLayoutConstraint] = [:]
     private let fpsGraphView = HUDFPSGraphView()
@@ -77,6 +80,8 @@ final class HUDWindowController {
     private var ramSwapValueLabel: NSTextField?
     private var ramPressureValueLabel: NSTextField?
     private var ramPressureTitleLabel: NSTextField?
+    private let ramPressureMeter = HUDMemoryPressureMeterView()
+    private var memoryPressureMode = HUDPreferences.resourceOptions(for: .ram).pressureMode
     private let batteryIndicator = HUDBatteryIndicatorView(frame: .zero)
     private let miscView = HUDMiscView(frame: .zero)
     private var miscOptions = HUDPreferences.miscOptions
@@ -739,8 +744,11 @@ final class HUDWindowController {
             row.addSubview(physicalLabel)
             let detailTop = detailLabel.topAnchor.constraint(equalTo: valueLabel.bottomAnchor)
             ramDetailGroupSpacingConstraints[metric] = detailTop
+            let detailHeight = detailLabel.heightAnchor.constraint(equalToConstant: HUDStyle.ramDetailHeight(scale: hudScale))
+            ramDetailHeightConstraints[metric] = detailHeight
             NSLayoutConstraint.activate([
                 detailTop,
+                detailHeight,
                 physicalLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
                 physicalLabel.firstBaselineAnchor.constraint(equalTo: detailLabel.firstBaselineAnchor),
                 detailLabel.leadingAnchor.constraint(greaterThanOrEqualTo: physicalLabel.trailingAnchor),
@@ -768,8 +776,9 @@ final class HUDWindowController {
                     caption.font = HUDStyle.smallLabelFont(scale: hudScale)
                     caption.textColor = HUDStyle.TextStyle.label.color(background: textBackground)
                 }
-                let bottom = pressureValue.bottomAnchor.constraint(equalTo: row.bottomAnchor)
-                ramDetailBottomConstraints[metric] = bottom
+                let pressureAfterDetails = pressureValue.topAnchor.constraint(equalTo: swapValue.bottomAnchor)
+                ramPressureAfterDetailsConstraint = pressureAfterDetails
+                ramPressureWithoutDetailsConstraint = pressureValue.topAnchor.constraint(equalTo: valueLabel.bottomAnchor)
                 NSLayoutConstraint.activate([
                     swapTitle.leadingAnchor.constraint(equalTo: physicalLabel.leadingAnchor),
                     swapTitle.firstBaselineAnchor.constraint(equalTo: swapValue.firstBaselineAnchor),
@@ -777,22 +786,22 @@ final class HUDWindowController {
                     swapValue.heightAnchor.constraint(equalTo: detailLabel.heightAnchor),
                     swapValue.leadingAnchor.constraint(greaterThanOrEqualTo: swapTitle.trailingAnchor),
                     swapValue.trailingAnchor.constraint(equalTo: valueLabel.trailingAnchor),
-                    pressureValue.topAnchor.constraint(equalTo: swapValue.bottomAnchor),
+                    pressureAfterDetails,
                     pressureValue.heightAnchor.constraint(equalTo: detailLabel.heightAnchor),
                     pressureTitle.leadingAnchor.constraint(equalTo: physicalLabel.leadingAnchor),
                     pressureTitle.firstBaselineAnchor.constraint(equalTo: pressureValue.firstBaselineAnchor),
                     pressureValue.leadingAnchor.constraint(greaterThanOrEqualTo: pressureTitle.trailingAnchor),
-                    pressureValue.trailingAnchor.constraint(equalTo: valueLabel.trailingAnchor),
-                    bottom
+                    pressureValue.trailingAnchor.constraint(equalTo: valueLabel.trailingAnchor)
                 ])
                 ramSwapTitleLabel = swapTitle
                 ramSwapValueLabel = swapValue
                 ramPressureValueLabel = pressureValue
                 ramPressureTitleLabel = pressureTitle
-            } else {
-                let bottom = detailLabel.bottomAnchor.constraint(equalTo: row.bottomAnchor)
-                ramDetailBottomConstraints[metric] = bottom
-                bottom.isActive = true
+                row.addSubview(ramPressureMeter)
+                NSLayoutConstraint.activate([
+                    ramPressureMeter.trailingAnchor.constraint(equalTo: pressureValue.trailingAnchor),
+                    ramPressureMeter.centerYAnchor.constraint(equalTo: pressureTitle.centerYAnchor)
+                ])
             }
         }
 
@@ -1039,6 +1048,8 @@ final class HUDWindowController {
         }
         if group == .ram {
             showsRAMDetails = options.showsDetails
+            showsRAMPressure = options.showsPressure
+            memoryPressureMode = options.pressureMode
             for metric in [HUDMetric.ram, .ramTotal] {
                 if options.usageVisible { hiddenUtilizationMetrics.remove(metric) }
                 else { hiddenUtilizationMetrics.insert(metric) }
@@ -1183,7 +1194,7 @@ final class HUDWindowController {
         for label in deviceInfoLabels { label.font = HUDStyle.smallLabelFont(scale: scale) }
         ramSwapTitleLabel?.font = HUDStyle.smallLabelFont(scale: scale)
         ramSwapValueLabel?.font = ramDetailsFont
-        ramPressureValueLabel?.font = ramDetailsFont
+        ramPressureValueLabel?.font = ramPressureFont
         for constraint in ramDetailGroupSpacingConstraints.values {
             constraint.constant = 0
         }
@@ -1314,11 +1325,17 @@ final class HUDWindowController {
         readingFont(for: .ramTotal, kind: .details)
     }
 
+    private var ramPressureFont: NSFont {
+        readingFont(for: .ramTotal, kind: .pressure)
+    }
+
     private func updateReadingAppearance() {
         miscView.configure(options: miscOptions, scale: hudScale, background: textBackground)
+        ramPressureMeter.configure(mode: memoryPressureMode, scale: hudScale, background: textBackground)
         let detailValues = Array(ramDetailLabels.values)
-            + [ramSwapValueLabel, ramPressureValueLabel].compactMap { $0 }
+            + [ramSwapValueLabel].compactMap { $0 }
         for label in detailValues { label.font = ramDetailsFont }
+        ramPressureValueLabel?.font = ramPressureFont
         let detailTitles = Array(ramDetailTitleLabels.values)
             + [ramSwapTitleLabel, ramPressureTitleLabel].compactMap { $0 }
         for label in detailTitles { label.font = HUDStyle.smallLabelFont(scale: hudScale) }
@@ -1404,20 +1421,8 @@ final class HUDWindowController {
             temperatureTrailingInset: reference.flatMap { temperatureTrailingConstraints[$0]?.constant }.map { readingColumnRight - $0 })
     }
 
-    // Use the same reserved column in both layouts, independent of window width.
-    private var batteryReadingTrailingInset: CGFloat? {
-        guard let reference = [HUDMetric.gpuTotal, .cpuTotal].first(where: {
-            enabledMetrics.contains($0) && temperatureMetrics.contains($0) && !hiddenUtilizationMetrics.contains($0)
-        }) else { return nil }
-        let usage = NSTextField(labelWithString: "100%")
-        usage.font = readingFont(for: reference, kind: .totalUse)
-        return usage.intrinsicContentSize.width + HUDStyle.metricColumnSpacing(scale: hudScale)
-            + (valueLabels[reference]?.alignmentRectInsets.right ?? 0)
-    }
-
     private func refreshHorizontalReadings(forceLayout: Bool = false) {
         guard alignment == .horizontal else { return }
-        horizontalView.battery.alignTrailingReading(trailingInset: batteryReadingTrailingInset)
         var sections: [[HUDHorizontalView.Reading]] = []
         for metrics in metricGroups {
             var readings: [HUDHorizontalView.Reading] = []
@@ -1448,13 +1453,13 @@ final class HUDWindowController {
                         sizingFont: metric == .fps && !title ? HUDStyle.fpsValueFont(scale: hudScale, highlighted: true) : nil))
                 }
                 append(title, role: "title", reference: metric.hudTitle, title: true)
-                if powerMetrics.contains(metric) { append(powerLabels[metric], role: "power", reference: "999.9 W") }
-                if temperatureMetrics.contains(metric) { append(temperatureLabels[metric], role: "temperature", reference: "149°C") }
+                if powerMetrics.contains(metric) { append(powerLabels[metric], role: "power", reference: HUDStyle.horizontalPowerReference) }
+                if temperatureMetrics.contains(metric) { append(temperatureLabels[metric], role: "temperature", reference: HUDStyle.horizontalTemperatureReference) }
                 if metric != .ramTotal && !hiddenUtilizationMetrics.contains(metric) {
                     // App CPU can use multiple cores (>100%). Reserve its hardware
                     // limit so adding a digit cannot resize the HUD.
                     let reference = metric == .fps ? "9999" : metric == .cpu
-                        ? "\(ProcessInfo.processInfo.activeProcessorCount * 100)%" : "100%"
+                        ? "\(ProcessInfo.processInfo.activeProcessorCount * 100)%" : HUDStyle.horizontalPercentageReference
                     append(valueLabels[metric], role: "value", reference: reference)
                 }
                 if showsRAMDetails && (metric == .ram || metric == .ramTotal) {
@@ -1470,18 +1475,20 @@ final class HUDWindowController {
                     appendDetail("PHY", value: ramDetailLabels[metric]?.stringValue ?? "", reference: "999.99 GB",
                                  help: metric == .ram ? "Physical memory used by the focused app’s tracked process." : "System physical memory used.")
                     if metric == .ramTotal {
-                        let pressure = ramPressureValueLabel?.stringValue ?? ""
-                        let showsPressureSymbol = pressure == "warning" || pressure == "critical"
                         let swapValue = ramSwapValueLabel?.stringValue ?? ""
                         appendDetail("SWP", value: swapValue, reference: "999.99 GB", help: "System swap used.")
-                        // Keep the pressure slot even when normal, so state changes
-                        // cannot move RAM usage or resize the HUD.
-                        readings.append(.init(id: "ram.pressure", text: "", reference: "",
-                            font: ramDetailsFont, color: HUDStyle.titleColor(for: metric, background: textBackground),
-                            help: "Memory pressure: \(pressure).", startsMetric: false, resourceGroup: .ram, metric: metric,
-                            symbolName: pressure == "critical" ? "exclamationmark.triangle.fill" : "exclamationmark.triangle",
-                            symbolVisible: showsPressureSymbol))
                     }
+                }
+                if metric == .ramTotal && showsRAMPressure {
+                    let pressure = ramPressureValueLabel?.stringValue ?? ""
+                    // Text reserves the widest word; meters reserve their own
+                    // compact width. Neither changes with the pressure state.
+                    readings.append(.init(id: "ram.pressure", text: pressure, reference: "warning",
+                        font: ramPressureFont,
+                        color: HUDStyle.readingColor(background: textBackground),
+                        help: "Memory pressure: \(pressure).", startsMetric: false, resourceGroup: .ram, metric: metric,
+                        sizingFont: HUDStyle.readingFont(scale: hudScale, highlighted: true),
+                        pressureMode: memoryPressureMode))
                 }
                 if metric == .ramTotal && !hiddenUtilizationMetrics.contains(metric) {
                     append(valueLabels[metric], role: "value", reference: "100%")
@@ -1549,17 +1556,27 @@ final class HUDWindowController {
     private func metricRowHeight(_ metric: HUDMetric, scale: HUDScale) -> CGFloat {
         if metric == .misc { return miscView.height(scale: scale) }
         if metric == .fans { return fanView.height(scale: scale) }
-        if !showsRAMDetails && (metric == .ram || metric == .ramTotal) {
+        if metric == .ram || metric == .ramTotal {
+            let detailLines = showsRAMDetails ? (metric == .ramTotal ? 2 : 1) : 0
+            let pressureLines = metric == .ramTotal && showsRAMPressure ? 1 : 0
             return HUDStyle.rowHeight(scale: scale)
+                + CGFloat(detailLines + pressureLines) * HUDStyle.ramDetailHeight(scale: scale)
         }
         return HUDStyle.rowHeight(for: metric, scale: scale)
     }
 
     private func updateRAMDetailsVisibility() {
-        for constraint in ramDetailBottomConstraints.values { constraint.isActive = showsRAMDetails }
+        ramPressureAfterDetailsConstraint?.isActive = false
+        ramPressureWithoutDetailsConstraint?.isActive = false
+        if showsRAMDetails { ramPressureAfterDetailsConstraint?.isActive = true }
+        else { ramPressureWithoutDetailsConstraint?.isActive = true }
+        for constraint in ramDetailHeightConstraints.values { constraint.constant = HUDStyle.ramDetailHeight(scale: hudScale) }
         let labels = Array(ramDetailLabels.values) + Array(ramDetailTitleLabels.values)
-            + [ramSwapTitleLabel, ramSwapValueLabel, ramPressureTitleLabel, ramPressureValueLabel].compactMap { $0 }
+            + [ramSwapTitleLabel, ramSwapValueLabel].compactMap { $0 }
         for label in labels { label.isHidden = !showsRAMDetails }
+        ramPressureTitleLabel?.isHidden = !showsRAMPressure
+        ramPressureValueLabel?.isHidden = !showsRAMPressure || memoryPressureMode != .text
+        ramPressureMeter.isHidden = !showsRAMPressure || alignment != .vertical || memoryPressureMode == .text
         for metric in [HUDMetric.ram, .ramTotal] {
             rowHeightConstraints[metric]?.constant = metricRowHeight(metric, scale: hudScale)
         }
@@ -1983,8 +2000,8 @@ final class HUDWindowController {
             temperature: sample?.temperature, power: sample?.power, now: now)
         if alignment == .horizontal, enabledMetrics.contains(.battery),
            horizontalView.battery.frame.width != ceil(horizontalView.battery.minimumRowWidth) {
-            // Resize on the Auto visibility transition, including battery-only
-            // HUDs that have no other metric updates to refresh their layout.
+            // Fit the visible battery readings, including Auto transitions and
+            // battery-only HUDs with no other updates to refresh their layout.
             refreshHorizontalReadings()
         }
     }
@@ -2018,6 +2035,7 @@ final class HUDWindowController {
 
     func updateMemoryPressure(_ value: String) {
         ramPressureValueLabel?.stringValue = value
+        ramPressureMeter.update(value)
         refreshHorizontalReadings()
     }
 

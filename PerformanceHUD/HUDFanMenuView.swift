@@ -13,7 +13,7 @@ final class HUDFanMenuView: HUDCategoryMenuView {
     private let mode = NSSegmentedControl(labels: HUDFanMode.allCases.map(\.title),
                                          trackingMode: .selectOne, target: nil, action: nil)
     private let rpmHighlight = HUDEmphasisButton()
-    private let unavailableLabel = NSTextField(labelWithString: "Not Available")
+    private let unavailableLabel = NSTextField(labelWithString: "Not available")
 
     init(options: HUDFanOptions, sample: FanSample) {
         self.options = options
@@ -59,7 +59,7 @@ final class HUDFanMenuView: HUDCategoryMenuView {
 
     private func refresh() {
         let detected = !sample.fans.isEmpty
-        unavailableLabel.stringValue = sample.message ?? "Not Available"
+        unavailableLabel.stringValue = sample.message ?? "Not available"
         setRows(detected ? [.init(reading: average, mode: averageMode),
                             .init(reading: usage, mode: mode, emphasis: rpmHighlight)]
                          : [.init(reading: unavailableLabel, fullWidth: true)])

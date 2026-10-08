@@ -58,6 +58,41 @@ import AppKit
             }
         }
         verifyGeometry()
+        let pressureMode: NSSegmentedControl = member(memory, "pressureModeControl") as NSSegmentedControl?
+            ?? { fatalError("Missing pressure selector") }()
+        let memoryControls: [Int: NSButton] = member(memory, "controls")
+        check(memoryControls[8]!.frame.minY < memoryControls[5]!.frame.minY, "Pressure is above Details")
+        check((memoryControls[8] as! HUDReadingCheckbox).emphasisControl?.isEnabled == false,
+              "Default Color meter mode disables Pressure emphasis")
+        check(abs(pressureMode.frame.midY - memoryControls[8]!.frame.midY) < 1, "Pressure owns the style selector")
+        var memoryOptions = options
+        memory.onChange = { memoryOptions = $0 }
+        check(pressureMode.selectedSegment == 2 && pressureMode.isEnabled, "Pressure starts in Color meter mode")
+        pressureMode.selectedSegment = 2
+        pressureMode.sendAction(pressureMode.action, to: pressureMode.target)
+        check(memoryOptions.pressureMode == .colorMeter, "Pressure selector updates its preference")
+        memory.update(alignment: .horizontal)
+        check(pressureMode.isEnabled && pressureMode.selectedSegment == 2, "Horizontal supports the same pressure styles")
+        memory.update(alignment: .vertical)
+        check(pressureMode.isEnabled && pressureMode.selectedSegment == 2, "Vertical restores the selection")
+        memoryControls[5]!.performClick(nil)
+        check(pressureMode.isEnabled && memoryOptions.pressureMode == .colorMeter, "Details off leaves Pressure enabled")
+        memoryControls[8]!.performClick(nil)
+        check(!pressureMode.isEnabled && !memoryOptions.pressure && !memoryOptions.details, "Pressure can turn off independently")
+        memoryControls[8]!.performClick(nil)
+        memoryControls[5]!.performClick(nil)
+        let memoryUse: NSSegmentedControl = member(memory, "usageModeControl") as NSSegmentedControl?
+            ?? { fatalError("Missing memory source") }()
+        memoryUse.selectedSegment = 1
+        memoryUse.sendAction(memoryUse.action, to: memoryUse.target)
+        check(!pressureMode.isEnabled, "App-only memory has no system pressure display")
+        memoryUse.selectedSegment = 2
+        memoryUse.sendAction(memoryUse.action, to: memoryUse.target)
+        check(pressureMode.isEnabled, "Total memory restores the pressure control")
+        memoryControls[0]!.performClick(nil)
+        check(!pressureMode.isEnabled, "Memory category off disables pressure mode")
+        memoryControls[0]!.performClick(nil)
+        verifyGeometry()
         let menu = NSMenu()
         let item = NSMenuItem()
         item.view = list

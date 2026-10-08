@@ -6,7 +6,7 @@ import AppKit
         func makeMenu(checked: Bool, enabled: Bool, reserve: Bool) -> NSMenu {
             let menu = NSMenu()
             menu.autoenablesItems = false
-            for title in ["Disable", "Power Helper", "Controls Guide…", "Quit"] {
+            for title in ["Disable", "Power Helper", "Controls guide…", "Quit"] {
                 menu.addItem(NSMenuItem(title: title, action: nil, keyEquivalent: ""))
             }
             let chip = NSMenuItem(title: "Chip & OS", action: nil, keyEquivalent: "")

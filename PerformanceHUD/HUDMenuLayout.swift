@@ -13,10 +13,19 @@ enum HUDMenuLayout {
     static let labelLeading: CGFloat = 30
     static let spacing: CGFloat = 10
 
-    static var labelWidth: CGFloat {
-        let label = NSTextField(labelWithString: "Appearance")
+    // Reserve the glass endpoint label before the shared slider value column.
+    static var sliderValueSpacing: CGFloat {
+        let label = NSTextField(labelWithString: "Frosted")
         label.font = .menuFont(ofSize: 0)
-        return ceil(label.intrinsicContentSize.width)
+        return spacing + ceil(label.intrinsicContentSize.width) + spacing
+    }
+
+    static var labelWidth: CGFloat {
+        ["Appearance", "Liquid Glass"].map { title in
+            let label = NSTextField(labelWithString: title)
+            label.font = .menuFont(ofSize: 0)
+            return ceil(label.intrinsicContentSize.width)
+        }.max() ?? 0
     }
 
     static var actionOptionsWidth: CGFloat {
@@ -32,7 +41,7 @@ enum HUDMenuLayout {
     // A shared width keeps Background, Alignment, and the Size track aligned.
     // Measure the actual segmented controls so every title fits at menu font size.
     static var backgroundOptionsWidth: CGFloat {
-        [HUDBackground.menuOptions.map(\.menuTitle), ["Vertical", "Horizontal"]].map { titles in
+        [["Light", "Dark", "Follow macOS"], ["Strength", "Follow macOS"], ["Vertical", "Horizontal"]].map { titles in
             let control = NSSegmentedControl(labels: titles, trackingMode: .selectOne, target: nil, action: nil)
             control.segmentStyle = .rounded
             control.font = .menuFont(ofSize: 0)

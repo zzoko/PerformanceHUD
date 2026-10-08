@@ -18,6 +18,7 @@ enum HUDCategoryLayout {
     static var emphasisLeading: CGFloat { modeLeading + modeWidth + 12 }
     static var width: CGFloat { emphasisLeading + 24 + 14 }
     static let rowHeight: CGFloat = 28
+    static let modeHeight: CGFloat = 24
     static let padding: CGFloat = 6
 }
 
@@ -53,6 +54,15 @@ class HUDCategoryMenuView: NSView {
     }
 
     func setRows(_ newRows: [HUDCategoryMenuRow]) {
+        for row in newRows {
+            if let control = row.mode as? NSSegmentedControl {
+                // Normalize native bezel sizing before applying the shared row frame.
+                control.controlSize = .regular
+                control.font = .menuFont(ofSize: 0)
+                control.segmentStyle = .rounded
+                control.sizeToFit()
+            }
+        }
         let oldViews = rows.flatMap { [$0.reading, $0.mode, $0.emphasisView].compactMap { $0 } }
         let newViews = newRows.flatMap { [$0.reading, $0.mode, $0.emphasisView].compactMap { $0 } }
         if oldViews.map(ObjectIdentifier.init) != newViews.map(ObjectIdentifier.init) {
@@ -82,8 +92,9 @@ class HUDCategoryMenuView: NSView {
                 height: height)
             if let mode = row.mode {
                 // Apply native alignment insets so every selector's visible bezel shares a column.
-                mode.frame = mode.frame(forAlignmentRect: NSRect(x: grid.modeLeading, y: y + 2,
-                                                                 width: grid.modeWidth, height: 24))
+                mode.frame = mode.frame(forAlignmentRect: NSRect(x: grid.modeLeading,
+                    y: y + (grid.rowHeight - grid.modeHeight) / 2,
+                    width: grid.modeWidth, height: grid.modeHeight))
             }
             row.emphasisView?.frame = NSRect(x: grid.emphasisLeading, y: y + 3, width: 22, height: 22)
         }

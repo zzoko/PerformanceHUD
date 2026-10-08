@@ -10,7 +10,7 @@ final class HUDSizeMenuView: NSView {
     init(selectedScale: HUDScale) {
         self.selectedScale = selectedScale
         let width = HUDMenuLayout.labelLeading + HUDMenuLayout.labelWidth + HUDMenuLayout.spacing
-            + HUDMenuLayout.backgroundOptionsWidth + 12 + 44 + 12
+            + HUDMenuLayout.backgroundOptionsWidth + HUDMenuLayout.sliderValueSpacing + 44 + 12
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 28))
 
         let label = NSTextField(labelWithString: "Size")
@@ -31,12 +31,13 @@ final class HUDSizeMenuView: NSView {
 
         valueLabel.font = .monospacedDigitSystemFont(ofSize: NSFont.menuFont(ofSize: 0).pointSize, weight: .regular)
         valueLabel.textColor = .secondaryLabelColor
-        valueLabel.alignment = .right
+        valueLabel.alignment = .center
 
         let stack = NSStackView(views: [label, slider, valueLabel])
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.spacing = HUDMenuLayout.spacing
+        stack.setCustomSpacing(HUDMenuLayout.sliderValueSpacing, after: slider)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -77,19 +78,20 @@ final class HUDSizeMenuView: NSView {
 /// A stepped native slider with a filled track instead of a separate knob.
 @MainActor
 final class HUDFillSlider: NSSlider {
+    var valueStep: Double = 0.01
     override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsets() }
 
     override func draw(_ dirtyRect: NSRect) {
         let track = NSRect(x: bounds.minX, y: bounds.midY - 6, width: bounds.width, height: 12)
         let path = NSBezierPath(roundedRect: track, xRadius: 6, yRadius: 6)
-        NSColor.labelColor.withAlphaComponent(0.16).setFill()
+        NSColor.labelColor.withAlphaComponent(isEnabled ? 0.16 : 0.08).setFill()
         path.fill()
         let fraction = max(0, min(1, (doubleValue - minValue) / (maxValue - minValue)))
         guard fraction > 0 else { return }
         NSGraphicsContext.saveGraphicsState()
         path.addClip()
         let fill = NSRect(x: track.minX, y: track.minY, width: track.width * fraction, height: track.height)
-        NSColor.labelColor.withAlphaComponent(0.62).setFill()
+        NSColor.labelColor.withAlphaComponent(isEnabled ? 0.62 : 0.20).setFill()
         NSBezierPath(roundedRect: fill, xRadius: 6, yRadius: 6).fill()
         NSGraphicsContext.restoreGraphicsState()
     }
@@ -98,7 +100,8 @@ final class HUDFillSlider: NSSlider {
         guard bounds.width > 0 else { return }
         let location = convert(event.locationInWindow, from: nil)
         let fraction = max(0, min(1, (location.x - bounds.minX) / bounds.width))
-        doubleValue = HUDScale(rawValue: minValue + fraction * (maxValue - minValue)).rawValue
+        let value = minValue + fraction * (maxValue - minValue)
+        doubleValue = min(maxValue, max(minValue, (value / valueStep).rounded() * valueStep))
         needsDisplay = true
         sendAction(action, to: target)
     }
