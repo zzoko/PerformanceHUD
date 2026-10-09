@@ -11,7 +11,7 @@ import AppKit
         let store = UserDefaults(suiteName: suite)!
         defer { store.removePersistentDomain(forName: suite) }
         let fresh = HUDPreferences.resourceOptions(for: .ram, in: store)
-        precondition(fresh.pressure && fresh.pressureMode == .colorMeter, "Fresh settings enable Pressure with Color meter")
+        precondition(fresh.pressure && fresh.pressureMode == .colorHistory, "Fresh settings enable Pressure with B2 Colored graph")
         store.set(false, forKey: "hud.group.ram.details")
         var saved = HUDPreferences.resourceOptions(for: .ram, in: store)
         precondition(!saved.pressure, "Existing hidden Details migrates to hidden Pressure")
@@ -25,7 +25,7 @@ import AppKit
         HUDPreferences.resetOptions(in: store)
         saved = HUDPreferences.resourceOptions(for: .ram, in: store)
         precondition(saved.details && saved.pressure, "Reset restores both defaults")
-        precondition(saved.pressureMode == .colorMeter, "Reset restores Color meter")
+        precondition(saved.pressureMode == .colorHistory, "Reset restores B2 Colored graph")
         precondition(!saved.highlighted.contains(.pressure), "Pressure emphasis defaults off")
 
         var options = HUDResourceOptions(enabled: true, temperature: false, totalUse: true, focusedApp: false)
@@ -35,25 +35,63 @@ import AppKit
         let controls: [Int: NSButton] = member(menu, "controls")
         let modes: NSSegmentedControl = member(menu, "pressureModeControl") as NSSegmentedControl?
             ?? { fatalError("Missing pressure modes") }()
+        let styles: NSSegmentedControl = member(menu, "pressureStyleControl") as NSSegmentedControl?
+            ?? { fatalError("Missing pressure styles") }()
+        precondition((0..<4).map { styles.label(forSegment: $0)! } == ["A1", "A2", "B1", "B2"], "Pressure style labels match the meter/history families")
         precondition(controls[8]!.frame.minY < controls[5]!.frame.minY, "Pressure precedes Details")
         precondition(abs(modes.frame.midY - controls[8]!.frame.midY) < 1, "Modes belong to Pressure")
         let bold = (controls[8] as! HUDReadingCheckbox).emphasisControl!
-        precondition(modes.selectedSegment == 2 && !bold.isEnabled, "Pressure starts in Color meter with emphasis disabled")
+        precondition(modes.selectedSegment == 1 && styles.selectedSegment == 3 && !bold.isEnabled,
+                     "Pressure starts in Graph style B2 with emphasis disabled")
         modes.selectedSegment = 0
         modes.sendAction(modes.action, to: modes.target)
         precondition(bold.isEnabled, "Text enables pressure emphasis")
         bold.performClick(nil)
         precondition(options.highlighted == [.pressure], "Pressure bold does not bold Details")
-        for index in [1, 2] {
-            modes.selectedSegment = index
-            modes.sendAction(modes.action, to: modes.target)
-            precondition(!bold.isEnabled && bold.state == .on, "Meters disable and remember text emphasis")
+        precondition(!styles.isEnabled, "Text disables the numbered graph styles")
+        modes.selectedSegment = 1
+        modes.sendAction(modes.action, to: modes.target)
+        for index in 0..<4 {
+            styles.selectedSegment = index
+            styles.sendAction(styles.action, to: styles.target)
+            precondition(options.pressureMode == HUDMemoryPressureMode.graphStyles[index], "Number selects the matching style")
+            precondition(!bold.isEnabled && bold.state == .on, "Graphics disable and remember text emphasis")
             bold.performClick(nil)
             precondition(options.highlighted == [.pressure], "Disabled emphasis cannot change the saved choice")
         }
+        styles.selectedSegment = 2
+        styles.sendAction(styles.action, to: styles.target)
+        menu.update(alignment: .horizontal)
+        precondition(styles.selectedSegment == 0 && options.pressureMode == .history,
+                     "Horizontal selects style 1 for style 3")
+        menu.update(alignment: .vertical)
+        precondition(styles.selectedSegment == 2, "Vertical restores style 3")
+        styles.selectedSegment = 3
+        styles.sendAction(styles.action, to: styles.target)
+        menu.update(alignment: .horizontal)
+        precondition(styles.selectedSegment == 1 && options.pressureMode == .colorHistory,
+                     "Horizontal shows the colored meter without replacing the remembered history choice")
+        for index in [2, 3] {
+            precondition(!styles.isEnabled(forSegment: index), "History styles are disabled in Horizontal")
+            styles.selectedSegment = index
+            styles.sendAction(styles.action, to: styles.target)
+            precondition(options.pressureMode == .colorHistory && styles.selectedSegment == 1,
+                         "Disabled history segments cannot change the selection")
+        }
+        menu.update(alignment: .vertical)
+        precondition(styles.selectedSegment == 3, "Vertical restores style 4")
         modes.selectedSegment = 0
         modes.sendAction(modes.action, to: modes.target)
         precondition(bold.isEnabled && bold.state == .on, "Returning to Text restores emphasis")
+        HUDPreferences.setResourceOptions(options, for: .ram, in: store)
+        var remembered = HUDPreferences.resourceOptions(for: .ram, in: store)
+        precondition(remembered.pressureMode == .text && remembered.selectedPressureGraphStyle == .colorHistory,
+                     "Text remembers the chosen history style across launches")
+        remembered.selectPressureMode(remembered.selectedPressureGraphStyle)
+        precondition(remembered.pressureMode == .colorHistory, "Graph returns to the remembered style")
+        HUDPreferences.resetOptions(in: store)
+        precondition(HUDPreferences.resourceOptions(for: .ram, in: store).selectedPressureGraphStyle == .colorHistory,
+                     "Reset restores the default history style")
         controls[5]!.performClick(nil)
         precondition(!options.details && options.pressure && modes.isEnabled, "Details cannot hide Pressure")
         controls[8]!.performClick(nil)
@@ -74,6 +112,7 @@ import AppKit
         let pressure: NSTextField = member(hud, "ramPressureValueLabel")
         let title: NSTextField = member(hud, "ramPressureTitleLabel")
         let meter: HUDMemoryPressureMeterView = member(hud, "ramPressureMeter")
+        let history: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
         let horizontal: HUDHorizontalView = member(hud, "horizontalView")
         for alignment in HUDAlignment.allCases {
             hud.setAlignment(alignment)
@@ -129,9 +168,11 @@ import AppKit
                                     precondition(rows[metric]!.isHidden == !visible.contains(metric), "Only requested memory sources appear")
                                 }
                                 if alignment == .vertical {
-                                    precondition(meter.isHidden == (!showsPressure || mode == .text), "Pressure meter is independent")
+                                    precondition(meter.isHidden == (!showsPressure || mode == .text || mode.isHistory), "Pressure meter is independent")
+                                    precondition(history.isHidden == (!showsPressure || !mode.isHistory), "History follows its own style")
                                     if visible.contains(.ramTotal) {
-                                        let expected = 21 + (details ? 36 : 0) + (showsPressure ? 18 : 0)
+                                        let expected: CGFloat = 21 + (details ? 36 : 0) + (showsPressure ? 18 : 0)
+                                            + (showsPressure && mode.isHistory ? 12.375 : 0)
                                         precondition(abs(rows[.ramTotal]!.frame.height - CGFloat(expected)) < 0.5, "Hidden rows reclaim their height")
                                         if showsPressure {
                                             let rect = pressure.convert(pressure.bounds, to: rows[.ramTotal]!)
@@ -139,10 +180,16 @@ import AppKit
                                         }
                                     }
                                 } else {
+                                    precondition(history.isHidden, "Horizontal never displays pressure history")
                                     let labels: [String: NSTextField] = member(horizontal, "labels")
                                     let meters: [String: HUDMemoryPressureMeterView] = member(horizontal, "pressureMeters")
                                     precondition((labels["ram.pressure"]?.isHidden == false) == (showsPressure && mode == .text), "Horizontal pressure text follows its checkbox")
                                     precondition((meters["ram.pressure"]?.isHidden == false) == (showsPressure && mode != .text), "Horizontal meter follows its checkbox")
+                                    if showsPressure && mode != .text, let horizontalMeter = meters["ram.pressure"] {
+                                        let renderedMode: HUDMemoryPressureMode = member(horizontalMeter, "mode")
+                                        precondition(renderedMode == mode.resolved(for: .horizontal),
+                                                     "Horizontal renders the matching neutral or coloured meter")
+                                    }
                                 }
                                 let selection = HUDLogSelection(fps: false, resources: [.ram: option],
                                     package: .init(enabled: false), fans: .init(enabled: false),

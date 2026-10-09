@@ -18,7 +18,8 @@ final class FanMonitor {
         guard !poller.isRunning, needsProbe || (readings && sample.status != .noFans) else { return }
         lastProbe = ProcessInfo.processInfo.systemUptime
         let reader = SMCTemperatureReader()
-        poller.start(interval: 1, sample: { reader.readFans() }, deliver: { [weak self] result in
+        let readSample: @Sendable () -> FanSample? = { reader.readFans() }
+        poller.start(interval: 1, sample: readSample, deliver: { [weak self] result in
             guard let self else { return }
             sample = (result ?? .unavailable).preservingTopology(from: sample)
             onUpdate?(sample)

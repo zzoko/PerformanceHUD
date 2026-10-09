@@ -53,7 +53,7 @@ final class HUDMemoryPressureMeterView: NSView {
         let neutral = HUDStyle.readingColor(background: background)
         let colors = [
             NSColor(srgbRed: 0.29, green: 0.90, blue: 0.46, alpha: 1),
-            NSColor(srgbRed: 1, green: 0.85, blue: 0.24, alpha: 1),
+            HUDStyle.warningYellow,
             NSColor(srgbRed: 1, green: 0.39, blue: 0.36, alpha: 1)
         ]
         let gap = (stacked ? 2 : 3) * scale

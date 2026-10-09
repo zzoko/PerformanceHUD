@@ -126,11 +126,16 @@ final class HUDHorizontalView: NSView {
                     meter.configure(mode: mode, scale: scale, background: background, stacked: true)
                     meter.update(reading.text)
                     let size = meter.intrinsicContentSize
+                    // Centre the compact bars in a normal-pressure word slot.
+                    // This padding is stable across states and text emphasis.
+                    let normalFont = HUDStyle.readingFont(scale: scale, highlighted: false)
+                    let slotWidth = max(size.width, HUDStyle.horizontalColumnWidth(
+                        text: "normal", reference: "normal", font: normalFont))
                     let capHeight = HUDStyle.readingFont(scale: scale, highlighted: false).capHeight
-                    meter.frame = NSRect(x: x,
+                    meter.frame = NSRect(x: x + (slotWidth - size.width) / 2,
                                          y: baseline + (capHeight - size.height) / 2,
                                          width: size.width, height: size.height)
-                    x += size.width
+                    x += slotWidth
                     continue
                 }
                 if let barWidth = reading.barWidth {
@@ -180,6 +185,12 @@ final class HUDHorizontalView: NSView {
                 label.textColor = reading.color
                 label.setAccessibilityHelp(reading.help)
                 label.alignment = reading.startsMetric || reading.leftAligned ? .left : .right
+                if reading.metric == .fans, index > 0, section[index - 1].fanMarker != nil,
+                   section.indices.contains(index + 1), section[index + 1].barWidth != nil {
+                    // Split the reserved RPM column's spare space equally
+                    // between the fan icon and its following bar.
+                    label.alignment = .center
+                }
                 let width = HUDStyle.horizontalColumnWidth(text: reading.text, reference: reading.reference,
                     font: reading.font, sizingFont: reading.sizingFont)
                 let labelHeight = ceil(label.intrinsicContentSize.height)
@@ -191,14 +202,6 @@ final class HUDHorizontalView: NSView {
                     let unusedWidth = width - label.intrinsicContentSize.width
                     title.frame.origin.x += unusedWidth
                     label.alignment = .right
-                }
-                if reading.metric == .fans, index > 0,
-                   let bar = bars[section[index - 1].id], !bar.isHidden {
-                    // RPM ends at the same trailing column as other readings.
-                    // Split its unused reserved width around the bar so both
-                    // visible gaps remain equal without resizing the window.
-                    let unusedWidth = max(0, width - label.intrinsicContentSize.width)
-                    bar.frame.origin.x += unusedWidth / 2
                 }
                 if let compactFPSWidth, !reading.startsMetric {
                     x = max(x, sectionStart + compactFPSWidth - width - label.alignmentRectInsets.right)

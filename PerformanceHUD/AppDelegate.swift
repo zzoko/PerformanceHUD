@@ -494,6 +494,9 @@ final class AppDelegate:
             self?.logSnapshot.setText(.memoryPressure, level?.displayText)
             self?.hudWindow?.updateMemoryPressure(level?.displayText ?? "")
         }
+        monitor.onHistoryUpdate = { [weak self] sample in
+            self?.hudWindow?.updateMemoryPressureHistory(sample)
+        }
 
         self.memoryPressureMonitor =
             monitor
@@ -1384,8 +1387,14 @@ final class AppDelegate:
         let memory = HUDPreferences.resourceOptions(for: .ram)
         if metrics.contains(.ramTotal) && (memory.totalUse || memory.showsDetails) { totalRAMUsageMonitor?.start() }
         else { logSnapshot.updateMemory(nil, app: false); totalRAMUsageMonitor?.stop(); hudWindow?.updateRAM(.ramTotal, usage: nil) }
-        if metrics.contains(.ramTotal) && memory.showsPressure { memoryPressureMonitor?.start() }
-        else { logSnapshot.setText(.memoryPressure, nil); memoryPressureMonitor?.stop(); hudWindow?.updateMemoryPressure("") }
+        if metrics.contains(.ramTotal) && memory.showsPressure {
+            memoryPressureMonitor?.start(includeHistory: HUDPreferences.alignment == .vertical && memory.pressureMode.isHistory)
+        } else {
+            logSnapshot.setText(.memoryPressure, nil)
+            memoryPressureMonitor?.stop()
+            hudWindow?.updateMemoryPressure("")
+            hudWindow?.clearMemoryPressureHistory()
+        }
         if metrics.contains(.battery) {
             batteryMonitor?.start(temperature: HUDPreferences.batteryOptions.temperature, power: HUDPreferences.batteryOptions.power)
         }

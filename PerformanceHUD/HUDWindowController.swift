@@ -58,9 +58,6 @@ final class HUDWindowController {
     private var groupDividers: [Int: NSView] = [:]
     private var dividerHeightConstraints: [Int: NSLayoutConstraint] = [:]
 
-    private var bottomDivider: NSView?
-    private var bottomDividerHeightConstraint: NSLayoutConstraint?
-
     private var showsRAMDetails = HUDPreferences.resourceOptions(for: .ram).showsDetails
     private var showsRAMPressure = HUDPreferences.resourceOptions(for: .ram).showsPressure
     private var ramDetailHeightConstraints: [HUDMetric: NSLayoutConstraint] = [:]
@@ -81,6 +78,9 @@ final class HUDWindowController {
     private var ramPressureValueLabel: NSTextField?
     private var ramPressureTitleLabel: NSTextField?
     private let ramPressureMeter = HUDMemoryPressureMeterView()
+    private let ramPressureHistory = HUDMemoryPressureHistoryView()
+    private var ramPressureHistoryTrailingConstraint: NSLayoutConstraint?
+    private var ramPressureHistoryBottomConstraint: NSLayoutConstraint?
     private var memoryPressureMode = HUDPreferences.resourceOptions(for: .ram).pressureMode
     private let batteryIndicator = HUDBatteryIndicatorView(frame: .zero)
     private let miscView = HUDMiscView(frame: .zero)
@@ -451,10 +451,24 @@ final class HUDWindowController {
             }
         }
 
-        let divider = createDivider()
-        bottomDivider = divider.view
-        bottomDividerHeightConstraint = divider.height
-        divider.view.isHidden = true
+        // Overlay the Pressure row and its lower gap. Row sizing reserves the
+        // extra history height; the overlay cannot alter the stack's width.
+        if let pressureValue = ramPressureValueLabel {
+            backgroundContentView.addSubview(ramPressureHistory)
+            let trailing = ramPressureHistory.trailingAnchor.constraint(equalTo: stackView.trailingAnchor,
+                                                                         constant: 3.5 * CGFloat(hudScale.rawValue))
+            // Extend to the centre of the next section divider, including the
+            // same gap when that divider is not currently visible. The extra
+            // 3.5 pt lies outside the plot and holds the endpoint halo at zero.
+            let bottom = ramPressureHistory.bottomAnchor.constraint(equalTo: pressureValue.bottomAnchor,
+                                                                      constant: pressureHistoryBottomExtension)
+            ramPressureHistoryTrailingConstraint = trailing
+            ramPressureHistoryBottomConstraint = bottom
+            NSLayoutConstraint.activate([
+                trailing, bottom,
+                ramPressureHistory.topAnchor.constraint(equalTo: pressureValue.topAnchor)
+            ])
+        }
     }
 
     private func createDivider() -> (view: NSView, height: NSLayoutConstraint) {
@@ -499,17 +513,7 @@ final class HUDWindowController {
             if groupIsVisible { lastVisibleGroup = index }
         }
 
-        let fansAreLast = lastVisibleGroup.map { verticalMetricGroups[$0] == [.fans] } ?? false
-        let showBottomDivider = fansAreLast
-        bottomDivider?.isHidden = !showBottomDivider
-        let bottomHeight = HUDStyle.dividerHeight(scale: hudScale, afterFPS: lastVisibleGroup == 0)
-        bottomDividerHeightConstraint?.constant = bottomHeight
-        (bottomDivider as? HUDSampleDividerView)?.applyStyle(
-            scale: hudScale, background: textBackground,
-            afterFPS: lastVisibleGroup == 0,
-            connectsToHistory: lastVisibleGroup == 0 && enabledMetrics.contains(.fpsGraph))
-        return (visibleDividerCount + (showBottomDivider ? 1 : 0),
-                totalDividerHeight + (showBottomDivider ? bottomHeight : 0))
+        return (visibleDividerCount, totalDividerHeight)
     }
 
     private func createRow(
@@ -1012,6 +1016,7 @@ final class HUDWindowController {
 
     func setAlignment(_ alignment: HUDAlignment) {
         self.alignment = alignment
+        if alignment == .horizontal { ramPressureHistory.clear() }
         enabledMetrics = HUDPreferences.visibleMetrics
         for (metric, row) in metricRows { row.isHidden = !enabledMetrics.contains(metric) }
         updateLayout()
@@ -1050,6 +1055,7 @@ final class HUDWindowController {
             showsRAMDetails = options.showsDetails
             showsRAMPressure = options.showsPressure
             memoryPressureMode = options.pressureMode
+            if !showsRAMPressure || !memoryPressureMode.isHistory { ramPressureHistory.clear() }
             for metric in [HUDMetric.ram, .ramTotal] {
                 if options.usageVisible { hiddenUtilizationMetrics.remove(metric) }
                 else { hiddenUtilizationMetrics.insert(metric) }
@@ -1332,6 +1338,11 @@ final class HUDWindowController {
     private func updateReadingAppearance() {
         miscView.configure(options: miscOptions, scale: hudScale, background: textBackground)
         ramPressureMeter.configure(mode: memoryPressureMode, scale: hudScale, background: textBackground)
+        ramPressureHistory.configure(mode: memoryPressureMode, scale: hudScale, background: textBackground,
+                                     width: pressureHistoryWidth)
+        ramPressureHistoryTrailingConstraint?.constant = 3.5 * CGFloat(hudScale.rawValue)
+        ramPressureHistoryBottomConstraint?.constant = pressureHistoryBottomExtension
+        fanView.setPreferredBarWidth(pressureHistoryWidth - 4 * CGFloat(hudScale.rawValue))
         let detailValues = Array(ramDetailLabels.values)
             + [ramSwapValueLabel].compactMap { $0 }
         for label in detailValues { label.font = ramDetailsFont }
@@ -1386,6 +1397,45 @@ final class HUDWindowController {
     }
 
     // MARK: - Layout
+
+    private var pressureHistoryBottomExtension: CGFloat {
+        pressureHistoryBaseBottomExtension(scale: hudScale) + pressureHistoryExtraHeight(scale: hudScale)
+    }
+
+    private func pressureHistoryBaseBottomExtension(scale: HUDScale) -> CGFloat {
+        // Section dividers draw a 0.5 pt line 5 pt above their bottom edge.
+        HUDStyle.rowSpacing(scale: scale) + HUDStyle.dividerHeight(scale: scale, afterFPS: false)
+            + (0.25 - 5 + 3.5) * CGFloat(scale.rawValue)
+    }
+
+    private func pressureHistoryExtraHeight(scale: HUDScale) -> CGFloat {
+        guard alignment == .vertical, showsRAMPressure, memoryPressureMode.isHistory else { return 0 }
+        // Enlarge the numeric plot by 50%, keeping its top and the caption in
+        // place. The enclosing row gains the same amount so its divider follows.
+        let originalPlotHeight = HUDStyle.ramDetailHeight(scale: scale)
+            + pressureHistoryBaseBottomExtension(scale: scale) - 7 * CGFloat(scale.rawValue)
+        return originalPlotHeight * 0.5
+    }
+
+    private var pressureHistoryWidth: CGFloat {
+        // Match the left edge of 0.0 W in the complete CPU/SOC reading columns,
+        // even when individual readings are hidden or contain wider live values.
+        let references: [(String, NSFont)] = [
+            ("0.0 W", powerFont(for: .cpuTotal)),
+            ("149°C", temperatureFont(for: .cpuTotal)),
+            ("100%", readingFont(for: .cpuTotal, kind: .totalUse))
+        ]
+        let readingsWidth = references.reduce(CGFloat.zero) { width, reference in
+            let label = NSTextField(labelWithString: reference.0)
+            label.font = reference.1
+            return width + label.intrinsicContentSize.width
+        }
+        // Keep the watt-aligned left guide while extending the right guide to
+        // the divider edge, with the halo safely inside the HUD's outer padding.
+        let readingInset = valueLabels[.ramTotal]?.alignmentRectInsets.right ?? 0
+        return readingsWidth + 2 * HUDStyle.metricColumnSpacing(scale: hudScale)
+            + readingInset + 4 * CGFloat(hudScale.rawValue)
+    }
 
     private func updateReadingPositions() {
         guard readingColumnRight > 0 else { return }
@@ -1481,14 +1531,14 @@ final class HUDWindowController {
                 }
                 if metric == .ramTotal && showsRAMPressure {
                     let pressure = ramPressureValueLabel?.stringValue ?? ""
-                    // Text reserves the widest word; meters reserve their own
-                    // compact width. Neither changes with the pressure state.
+                    // Text reserves the widest word; meters are centred in a
+                    // normal-width slot. Neither changes with pressure state.
                     readings.append(.init(id: "ram.pressure", text: pressure, reference: "warning",
                         font: ramPressureFont,
                         color: HUDStyle.readingColor(background: textBackground),
                         help: "Memory pressure: \(pressure).", startsMetric: false, resourceGroup: .ram, metric: metric,
                         sizingFont: HUDStyle.readingFont(scale: hudScale, highlighted: true),
-                        pressureMode: memoryPressureMode))
+                        pressureMode: memoryPressureMode.resolved(for: .horizontal)))
                 }
                 if metric == .ramTotal && !hiddenUtilizationMetrics.contains(metric) {
                     append(valueLabels[metric], role: "value", reference: "100%")
@@ -1536,17 +1586,19 @@ final class HUDWindowController {
                       startsMetric: true, metric: .fans, fanMarker: fan.iconMarker)
             ]
             if fanOptions.usage {
-                if fanOptions.mode.showsBar {
-                    values.append(.init(id: "fan.\(fan.id).bar", text: "", reference: "",
-                        font: font, color: color, help: "\(fan.title) speed relative to maximum",
-                        startsMetric: false, metric: .fans, barWidth: HUDFanBarView.horizontalSize.width, barFraction: fan.fraction))
-                }
                 if fanOptions.mode.showsRPM {
                     values.append(.init(id: "fan.\(fan.id).rpm", text: fan.rpmText, reference: "99999 RPM",
                         font: HUDStyle.readingFont(scale: hudScale, highlighted: fanOptions.rpmHighlighted),
                         color: (fanOptions.rpmHighlighted ? HUDStyle.TextStyle.emphasizedReading : .reading).color(background: textBackground),
                         help: nil, startsMetric: false, metric: .fans,
                         sizingFont: HUDStyle.readingFont(scale: hudScale, highlighted: true)))
+                }
+                if fanOptions.mode.showsBar {
+                    values.append(.init(id: "fan.\(fan.id).bar", text: "", reference: "",
+                        font: font, color: color, help: "\(fan.title) speed relative to maximum",
+                        startsMetric: false, metric: .fans,
+                        barWidth: pressureHistoryWidth / CGFloat(hudScale.rawValue) - 4,
+                        barFraction: fan.fraction))
                 }
             }
             return values
@@ -1561,6 +1613,7 @@ final class HUDWindowController {
             let pressureLines = metric == .ramTotal && showsRAMPressure ? 1 : 0
             return HUDStyle.rowHeight(scale: scale)
                 + CGFloat(detailLines + pressureLines) * HUDStyle.ramDetailHeight(scale: scale)
+                + (metric == .ramTotal ? pressureHistoryExtraHeight(scale: scale) : 0)
         }
         return HUDStyle.rowHeight(for: metric, scale: scale)
     }
@@ -1576,7 +1629,8 @@ final class HUDWindowController {
         for label in labels { label.isHidden = !showsRAMDetails }
         ramPressureTitleLabel?.isHidden = !showsRAMPressure
         ramPressureValueLabel?.isHidden = !showsRAMPressure || memoryPressureMode != .text
-        ramPressureMeter.isHidden = !showsRAMPressure || alignment != .vertical || memoryPressureMode == .text
+        ramPressureMeter.isHidden = !showsRAMPressure || alignment != .vertical || memoryPressureMode == .text || memoryPressureMode.isHistory
+        ramPressureHistory.isHidden = !showsRAMPressure || alignment != .vertical || !memoryPressureMode.isHistory
         for metric in [HUDMetric.ram, .ramTotal] {
             rowHeightConstraints[metric]?.constant = metricRowHeight(metric, scale: hudScale)
         }
@@ -1662,7 +1716,7 @@ final class HUDWindowController {
                 + packageHeight + dividers.height
                 + (CGFloat(bodyMetrics.count) + dividerCount) * HUDStyle.rowSpacing(scale: hudScale))).height
 
-        // The vertical footprint depends only on scale, not the selected
+        // The vertical width depends only on scale, not the selected
         // categories, readings, emphasis, or current values. FPS Value alone
         // retains its deliberately compact presentation.
         let fpsOnly = enabledMetrics == [.fps] && !showsPackagePower
@@ -1745,7 +1799,7 @@ final class HUDWindowController {
                 let divider = firstGroup.flatMap { groupDividers[$0] }
                 let firstBody = stackView.arrangedSubviews.first { view in
                     !view.isHidden && view !== metricRows[.fps] && view !== metricRows[.fpsGraph]
-                        && !groupDividers.values.contains(where: { $0 === view }) && view !== bottomDivider
+                        && !groupDividers.values.contains(where: { $0 === view })
                 }
                 if let first = divider ?? firstBody, let host = stackView.superview {
                     fpsPresentationAnchor = first
@@ -1812,7 +1866,6 @@ final class HUDWindowController {
         for divider in groupDividers.values {
             (divider as? HUDSampleDividerView)?.setHistoryVisibility(progress)
         }
-        (bottomDivider as? HUDSampleDividerView)?.setHistoryVisibility(progress)
         // A quiet arrow points toward the space where FPS will return. Cross-fade
         // it near the end of collapse so it does not overlap the regular FPS row.
         collapsedFPSIndicator.image = NSImage(systemSymbolName: horizontal ? "arrow.right" : "arrow.down",
@@ -2038,6 +2091,13 @@ final class HUDWindowController {
         ramPressureMeter.update(value)
         refreshHorizontalReadings()
     }
+
+    func updateMemoryPressureHistory(_ sample: MemoryPressureMonitor.Sample) {
+        guard showsRAMPressure, alignment == .vertical, memoryPressureMode.isHistory else { return }
+        ramPressureHistory.append(sample)
+    }
+
+    func clearMemoryPressureHistory() { ramPressureHistory.clear() }
 
     func updateRAM(_ metric: HUDMetric, usage: RAMUsageSample?) {
         guard metric == .ram || metric == .ramTotal else { return }

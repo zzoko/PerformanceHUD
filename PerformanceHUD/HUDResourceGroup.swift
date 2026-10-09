@@ -20,7 +20,19 @@ enum HUDUsageMode: String, CaseIterable {
 }
 
 nonisolated enum HUDMemoryPressureMode: String, CaseIterable, Sendable {
-    case text, meter, colorMeter
+    case text, meter, colorMeter, history, colorHistory
+
+    static let graphStyles: [Self] = [.meter, .colorMeter, .history, .colorHistory]
+    var isHistory: Bool { self == .history || self == .colorHistory }
+
+    func resolved(for alignment: HUDAlignment) -> Self {
+        guard alignment == .horizontal else { return self }
+        switch self {
+        case .history: return .meter
+        case .colorHistory: return .colorMeter
+        default: return self
+        }
+    }
 
     init?(storedValue: String) {
         switch storedValue {
@@ -37,6 +49,8 @@ nonisolated enum HUDMemoryPressureMode: String, CaseIterable, Sendable {
         case .text: return "Text"
         case .meter: return "Meter"
         case .colorMeter: return "Color meter"
+        case .history: return "Graph"
+        case .colorHistory: return "Colored graph"
         }
     }
 }
@@ -101,7 +115,18 @@ struct HUDResourceOptions: Equatable {
     var pressure: Bool = true
     var highlighted: Set<HUDReadingKind> = []
     var usageMode: HUDUsageMode?
-    var pressureMode: HUDMemoryPressureMode = .colorMeter
+    var pressureMode: HUDMemoryPressureMode = .colorHistory
+    var pressureGraphStyle: HUDMemoryPressureMode = .colorHistory
+
+    var selectedPressureGraphStyle: HUDMemoryPressureMode {
+        pressureMode != .text ? pressureMode : (pressureGraphStyle == .text ? .colorHistory : pressureGraphStyle)
+    }
+
+    mutating func selectPressureMode(_ mode: HUDMemoryPressureMode) {
+        if pressureMode != .text { pressureGraphStyle = pressureMode }
+        pressureMode = mode
+        if mode != .text { pressureGraphStyle = mode }
+    }
 
     var usageVisible: Bool { totalUse || focusedApp }
     var detailsAvailable: Bool { enabled }

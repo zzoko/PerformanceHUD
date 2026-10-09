@@ -249,7 +249,7 @@ final class HUDBatteryIndicatorView: NSView {
         guard options.charge, let percentage else { return }
         let iconScale = scale * 0.85
         let foreground = HUDStyle.valueColor(background: background)
-        let fillColor: NSColor = lowPower ? .systemYellow : foreground
+        let fillColor: NSColor = lowPower ? HUDStyle.warningYellow : foreground
         let filledTextColor = lowPower || background != .light
             ? NSColor(white: 0.12, alpha: 1) : NSColor(white: 0.98, alpha: 1)
         let body = NSRect(x: bounds.maxX - 34 * iconScale - 0.5 * scale, y: rowMidY - 8.5 * iconScale,

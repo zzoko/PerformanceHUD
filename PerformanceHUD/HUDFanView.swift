@@ -9,6 +9,13 @@ final class HUDFanView: NSView {
     private var options = HUDFanOptions()
     private var scale = HUDScale.normal
     private var background = HUDBackground.dark
+    private var preferredBarWidth: CGFloat?
+
+    func setPreferredBarWidth(_ width: CGFloat) {
+        guard preferredBarWidth != width else { return }
+        preferredBarWidth = width
+        needsDisplay = true
+    }
 
     private var readings: [FanDisplayReading] { sample.displayReadings(averaged: options.averages(in: .vertical)) }
     var rowCount: Int { max(1, readings.count) }
@@ -23,10 +30,10 @@ final class HUDFanView: NSView {
         let reserved = HUDFanIcon.side * factor
             + gap + 4 * factor
             + ("99999 RPM" as NSString).size(withAttributes: [.font: font]).width + gap
-        // Reserve the same columns in every mode so hiding RPM only moves the
-        // bar; its width stays unchanged across readings and emphasis changes.
-        let target = HUDFanBarView.verticalSize.width
-        return min(target * factor, max(0, bounds.width - reserved))
+        // Reserve the same columns in every mode so the right-aligned bar keeps
+        // its width across visibility changes, readings and RPM emphasis.
+        let target = preferredBarWidth ?? HUDFanBarView.verticalSize.width * factor
+        return min(target, max(0, bounds.width - reserved))
     }
 
     func update(sample: FanSample, options: HUDFanOptions, scale: HUDScale, background: HUDBackground) {
@@ -61,20 +68,19 @@ final class HUDFanView: NSView {
             HUDFanIcon.draw(in: NSRect(x: 2 * factor, y: y + (rowHeight - labelWidth) / 2,
                                       width: labelWidth, height: labelWidth), marker: fan.iconMarker, color: color)
             guard options.usage else { continue }
+            let width = barWidth
+            let barLeft = bounds.width - width
             if options.mode.showsRPM {
                 let text = fan.rpmText as NSString
                 let size = text.size(withAttributes: rpmAttributes)
-                text.draw(at: NSPoint(x: bounds.width - size.width - 2 * factor, y: y + (rowHeight - size.height) / 2), withAttributes: rpmAttributes)
+                let x = options.mode.showsBar
+                    ? (2 * factor + labelWidth + barLeft - size.width) / 2
+                    : bounds.width - 2 * factor - size.width
+                text.draw(at: NSPoint(x: x, y: y + (rowHeight - size.height) / 2), withAttributes: rpmAttributes)
             }
             if options.mode.showsBar {
-                let left = 2 * factor + labelWidth
-                let rpmText = fan.rpmText.isEmpty ? "99999 RPM" : fan.rpmText
-                let rpmWidth = (rpmText as NSString).size(withAttributes: rpmAttributes).width
-                let right = bounds.width - 2 * factor - (options.mode.showsRPM ? rpmWidth : 0)
-                let width = barWidth
                 let height = HUDFanBarView.verticalSize.height * factor
-                let x = options.mode.showsRPM ? (left + right - width) / 2 : right - width
-                let rect = NSRect(x: x,
+                let rect = NSRect(x: barLeft,
                                   y: y + (rowHeight - height) / 2, width: width, height: height)
                 HUDFanBarView.drawBar(in: rect, color: color, fraction: fan.fraction)
             }

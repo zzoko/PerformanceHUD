@@ -70,7 +70,7 @@ final class HUDFanMenuView: HUDCategoryMenuView {
         let message = sample.message
         usage.toolTip = message
         usage.setAccessibilityHelp(message)
-        mode.selectedSegment = HUDFanMode.allCases.firstIndex(of: options.mode) ?? 2
+        mode.selectedSegment = HUDFanMode.allCases.firstIndex(of: options.mode) ?? 0
         mode.isEnabled = usage.isEnabled && options.usage
         rpmHighlight.state = options.rpmHighlighted ? .on : .off
         rpmHighlight.isEnabled = mode.isEnabled && options.mode.showsRPM

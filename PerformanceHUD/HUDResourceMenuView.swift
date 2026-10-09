@@ -11,6 +11,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     private var controls: [Int: NSButton] = [:]
     private var usageModeControl: NSSegmentedControl?
     private var pressureModeControl: NSSegmentedControl?
+    private var pressureStyleControl: NSSegmentedControl?
     private var alignment: HUDAlignment
     private var flowControl: NSSegmentedControl?
     private let flowHighlight = HUDEmphasisButton()
@@ -74,7 +75,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             controls[tag] = button
             var row = HUDCategoryMenuRow(reading: button)
             if group == .ram && tag == 8 {
-                let control = NSSegmentedControl(labels: HUDMemoryPressureMode.allCases.map(\.title),
+                let control = NSSegmentedControl(labels: ["Text", "Graph"],
                     trackingMode: .selectOne, target: self, action: #selector(pressureModeChanged(_:)))
                 control.font = .menuFont(ofSize: 0)
                 control.segmentStyle = .rounded
@@ -92,6 +93,13 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                 row.mode = control
             }
             rows.append(row)
+            if group == .ram && tag == 8 {
+                let styles = NSSegmentedControl(labels: ["A1", "A2", "B1", "B2"],
+                    trackingMode: .selectOne, target: self, action: #selector(pressureStyleChanged(_:)))
+                styles.setAccessibilityLabel("Pressure style: A1 Meter, A2 Colored meter, B1 Graph, B2 Colored graph")
+                pressureStyleControl = styles
+                rows.append(.init(reading: NSView(), mode: styles))
+            }
         }
         setRows(rows)
         refresh()
@@ -105,8 +113,18 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     @objc private func pressureModeChanged(_ sender: NSSegmentedControl) {
-        guard sender.isEnabled, HUDMemoryPressureMode.allCases.indices.contains(sender.selectedSegment) else { return }
-        options.pressureMode = HUDMemoryPressureMode.allCases[sender.selectedSegment]
+        guard sender.isEnabled, (0...1).contains(sender.selectedSegment) else { return }
+        options.selectPressureMode(sender.selectedSegment == 0 ? .text : options.selectedPressureGraphStyle)
+        refresh()
+        onChange?(options)
+    }
+
+    @objc private func pressureStyleChanged(_ sender: NSSegmentedControl) {
+        guard sender.isEnabled, HUDMemoryPressureMode.graphStyles.indices.contains(sender.selectedSegment),
+              sender.isEnabled(forSegment: sender.selectedSegment) else { refresh(); return }
+        let mode = HUDMemoryPressureMode.graphStyles[sender.selectedSegment]
+        guard alignment != .horizontal || !mode.isHistory else { refresh(); return }
+        options.selectPressureMode(mode)
         refresh()
         onChange?(options)
     }
@@ -203,8 +221,14 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     private func refresh() {
-        pressureModeControl?.selectedSegment = HUDMemoryPressureMode.allCases.firstIndex(of: options.pressureMode) ?? 2
+        pressureModeControl?.selectedSegment = options.pressureMode == .text ? 0 : 1
         pressureModeControl?.isEnabled = options.showsPressure
+        let style = options.selectedPressureGraphStyle.resolved(for: alignment)
+        pressureStyleControl?.selectedSegment = HUDMemoryPressureMode.graphStyles.firstIndex(of: style) ?? 3
+        pressureStyleControl?.isEnabled = options.showsPressure && options.pressureMode != .text
+        for (index, mode) in HUDMemoryPressureMode.graphStyles.enumerated() {
+            pressureStyleControl?.setEnabled(alignment != .horizontal || !mode.isHistory, forSegment: index)
+        }
         flowControl?.selectedSegment = HUDBatteryFlowMode.allCases.firstIndex(of: flowMode) ?? 1
         flowControl?.isEnabled = options.enabled
         flowLabel?.textColor = options.enabled ? .labelColor : .disabledControlTextColor

@@ -128,8 +128,7 @@ enum HUDMetric: Int, CaseIterable, Hashable {
              .aneTotal,
              .ramTotal,
              .fans,
-             .battery,
-             .deviceInfo:
+             .battery:
 
             return true
 

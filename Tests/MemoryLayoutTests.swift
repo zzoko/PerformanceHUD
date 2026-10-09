@@ -11,21 +11,21 @@ import AppKit
         let store = UserDefaults(suiteName: suite)!
         defer { store.removePersistentDomain(forName: suite) }
         var saved = HUDPreferences.resourceOptions(for: .ram, in: store)
-        precondition(saved.pressure && saved.pressureMode == .colorMeter, "Pressure Color meter is enabled by default")
+        precondition(saved.pressure && saved.pressureMode == .colorHistory, "Pressure B2 is enabled by default")
         for mode in HUDMemoryPressureMode.allCases {
-            saved.pressureMode = mode
+            saved.selectPressureMode(mode)
             HUDPreferences.setResourceOptions(saved, for: .ram, in: store)
             precondition(HUDPreferences.resourceOptions(for: .ram, in: store) == saved, "Pressure preference round-trips")
         }
         HUDPreferences.resetOptions(in: store)
-        precondition(HUDPreferences.resourceOptions(for: .ram, in: store).pressureMode == .colorMeter, "Reset restores Color meter")
+        precondition(HUDPreferences.resourceOptions(for: .ram, in: store).pressureMode == .colorHistory, "Reset restores B2")
         for (legacy, mode) in [("graph", HUDMemoryPressureMode.meter), ("colorGraph", .colorMeter)] {
             store.set(legacy, forKey: "hud.group.ram.pressureMode")
             precondition(HUDPreferences.resourceOptions(for: .ram, in: store).pressureMode == mode,
                          "The previous experiment keeps the user's neutral/coloured selection")
         }
         store.set("unknown", forKey: "hud.group.ram.pressureMode")
-        precondition(HUDPreferences.resourceOptions(for: .ram, in: store).pressureMode == .colorMeter, "Unknown modes fall back to Color meter")
+        precondition(HUDPreferences.resourceOptions(for: .ram, in: store).pressureMode == .colorHistory, "Unknown modes fall back to B2")
         UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "off",
             "hud.background": "dark", "hud.alignment": "vertical"], forName: UserDefaults.argumentDomain)
         let hud = HUDWindowController()
@@ -129,6 +129,7 @@ import AppKit
             }
         }
         let meter: HUDMemoryPressureMeterView = member(hud, "ramPressureMeter")
+        let history: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
         for scale in scales {
             hud.setHUDScale(scale)
             for appearance in [HUDBackground.light, .dark] {
@@ -151,10 +152,15 @@ import AppKit
                             if let compactMeterSize {
                                 check(panel.frame.size == compactMeterSize, "Neutral and coloured meters reserve the same space")
                             } else { compactMeterSize = panel.frame.size }
+                        } else if alignment == .vertical && mode.isHistory {
+                            check(panel.frame.width == size.width
+                                  && abs(panel.frame.height - size.height - 12.375 * CGFloat(scale.rawValue)) < 1,
+                                  "Vertical history adds the taller plot's height only")
                         } else {
-                            check(panel.frame.size == size, "Vertical pressure display modes retain their size")
+                            check(panel.frame.size == size, "Text and meters retain the compact size")
                         }
-                        check(meter.isHidden == (alignment == .horizontal || mode == .text), "Only Vertical meters appear")
+                        check(meter.isHidden == (alignment == .horizontal || mode == .text || mode.isHistory), "Only Vertical meters appear")
+                        check(history.isHidden == (alignment == .horizontal || !mode.isHistory), "History is Vertical only")
                         check(pressure.isHidden == (mode != .text), "Text and meter are mutually exclusive")
                         check(pressure.stringValue == "critical", "Horizontal retains its pressure state in every display mode")
                         if !meter.isHidden {
@@ -166,13 +172,22 @@ import AppKit
                                   && abs(rect.height - 12 * CGFloat(scale.rawValue)) < 0.5, "Meter scales without enlarging its row")
                             check(container.bounds.contains(rect), "Meter fits inside the HUD")
                         }
+                        if !history.isHidden {
+                            let rect = history.convert(history.bounds, to: container)
+                            let plot = history.convert(history.plotBounds, to: container)
+                            check(abs(plot.maxX - (container.bounds.maxX - HUDStyle.horizontalPadding(scale: scale))) < 0.5,
+                                  "History reaches the divider's right edge")
+                            check(rect.width > 72.6 * CGFloat(scale.rawValue), "History extends beyond the meter towards the power column")
+                            check(container.bounds.contains(rect), "History fade fits inside existing HUD bounds")
+                        }
                     }
                     options.details = false
+                    options.pressureMode = .colorMeter
                     hud.setResourceOptions(options, for: .ram)
                     check(meter.isHidden == (alignment == .horizontal), "Details off retains the pressure meter")
                     options.pressure = false
                     hud.setResourceOptions(options, for: .ram)
-                    check(meter.isHidden && pressure.isHidden, "Pressure off hides both pressure displays")
+                    check(meter.isHidden && pressure.isHidden && history.isHidden, "Pressure off hides every pressure display")
                 }
             }
         }
@@ -212,6 +227,33 @@ import AppKit
             }
         }
         check(meter.currentLevel == nil, "Unavailable pressure remains blank")
+        let spacingPreview = HUDHorizontalView(frame: .zero)
+        for scale in scales {
+            let regularFont = HUDStyle.readingFont(scale: scale, highlighted: false)
+            var normal = HUDHorizontalView.Reading(id: "pressure", text: "normal", reference: "normal",
+                font: regularFont, color: .white, help: nil, startsMetric: false, pressureMode: .text)
+            let normalSize = spacingPreview.configure(sections: [[normal]], showsBattery: false,
+                                                      scale: scale, background: .dark)
+            for mode in [HUDMemoryPressureMode.meter, .colorMeter] {
+                normal.pressureMode = mode
+                let size = spacingPreview.configure(sections: [[normal]], showsBattery: false,
+                                                    scale: scale, background: .dark)
+                let meters: [String: HUDMemoryPressureMeterView] = member(spacingPreview, "pressureMeters")
+                let rect = meters["pressure"]!.frame
+                check(size == normalSize, "Horizontal meters occupy the same slot as the word normal")
+                check(rect.minX > 0 && abs(rect.minX - (size.width - rect.maxX)) < 0.01,
+                      "Horizontal meters have equal breathing room on both sides")
+                for state in ["warning", "critical", ""] {
+                    let reading = HUDHorizontalView.Reading(id: "pressure", text: state, reference: "warning",
+                        font: HUDStyle.readingFont(scale: scale, highlighted: true), color: .white,
+                        help: nil, startsMetric: false, pressureMode: mode)
+                    let changed = spacingPreview.configure(sections: [[reading]], showsBattery: false,
+                                                           scale: scale, background: .dark)
+                    check(changed == size && meters["pressure"]!.frame == rect,
+                          "State and text emphasis cannot move or resize a horizontal meter")
+                }
+            }
+        }
         if CommandLine.arguments.contains("--preview") {
             hud.setAlignment(.vertical)
             hud.setHUDScale(.normal)

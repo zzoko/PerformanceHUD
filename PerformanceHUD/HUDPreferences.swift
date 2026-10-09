@@ -27,7 +27,7 @@ enum HUDPreferences {
                     "hud.glass.mode", "hud.glass.strength", "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
                     "hud.battery.power", "hud.battery.powerHighlighted", "hud.battery.flowMode",
-                    "hud.group.ram.details", "hud.group.ram.pressure", "hud.group.ram.pressureMode", "hud.fan.usage", "hud.fan.mode",
+                    "hud.group.ram.details", "hud.group.ram.pressure", "hud.group.ram.pressureMode", "hud.group.ram.pressureGraphStyle", "hud.fan.usage", "hud.fan.mode",
                     "hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted", "hud.misc.readings"]
         keys += HUDMetric.allCases.map { metricKey($0) }
         for group in HUDResourceGroup.allCases {
@@ -323,7 +323,7 @@ enum HUDPreferences {
     static var fanOptions: HUDFanOptions {
         get { HUDFanOptions(enabled: isMetricEnabled(.fans),
             usage: defaults.object(forKey: "hud.fan.usage") as? Bool ?? true,
-            mode: defaults.string(forKey: "hud.fan.mode").flatMap(HUDFanMode.init(rawValue:)) ?? .both,
+            mode: defaults.string(forKey: "hud.fan.mode").flatMap(HUDFanMode.init(rawValue:)) ?? .bar,
             average: defaults.object(forKey: "hud.fan.average") as? Bool ?? true,
             averageMode: defaults.string(forKey: "hud.fan.averageMode").flatMap(HUDFanAverageMode.init(rawValue:)) ?? .horizontal,
             rpmHighlighted: defaults.bool(forKey: "hud.fan.rpmHighlighted")) }
@@ -384,7 +384,8 @@ enum HUDPreferences {
             pressure: defaults.object(forKey: "hud.group.ram.pressure") as? Bool ?? details,
             highlighted: Set(highlights),
             usageMode: defaults.string(forKey: "hud.group.\(group.rawValue).usageMode").flatMap(HUDUsageMode.init(rawValue:)),
-            pressureMode: defaults.string(forKey: "hud.group.ram.pressureMode").flatMap(HUDMemoryPressureMode.init(storedValue:)) ?? .colorMeter)
+            pressureMode: defaults.string(forKey: "hud.group.ram.pressureMode").flatMap(HUDMemoryPressureMode.init(storedValue:)) ?? .colorHistory,
+            pressureGraphStyle: defaults.string(forKey: "hud.group.ram.pressureGraphStyle").flatMap(HUDMemoryPressureMode.init(storedValue:)) ?? .colorHistory)
         options.setUsagePresentation(visible: options.usageVisible, highlighted: options.usageHighlighted)
         return options
     }
@@ -399,6 +400,7 @@ enum HUDPreferences {
             defaults.set(options.details, forKey: "hud.group.ram.details")
             defaults.set(options.pressure, forKey: "hud.group.ram.pressure")
             defaults.set(options.pressureMode.rawValue, forKey: "hud.group.ram.pressureMode")
+            defaults.set(options.selectedPressureGraphStyle.rawValue, forKey: "hud.group.ram.pressureGraphStyle")
         }
         defaults.set(group.supportsTotalUse && options.totalUse, forKey: metricKey(group.totalMetric))
         if let appMetric = group.appMetric { defaults.set(options.focusedApp, forKey: metricKey(appMetric)) }

@@ -45,7 +45,7 @@ import AppKit
         check(!master.isEnabled && master.state == .off && !usage.isEnabled && usage.state == .off, "No fans disables and unchecks the category and its controls")
         check(!average.isEnabled && average.state == .off, "No fans also dims and unchecks Average")
         check(usage.toolTip == "Not available" && FanSample.noFans.message == "Not available", "Menu and HUD share the no-fan message")
-        check((0..<mode.segmentCount).map { mode.label(forSegment: $0)! } == ["Total", "RPM", "Both"] && mode.selectedSegment == 2, "Fan mode labels and Both default")
+        check((0..<mode.segmentCount).map { mode.label(forSegment: $0)! } == ["Total", "RPM", "Both"] && mode.selectedSegment == 0, "Fan mode labels and Total default")
         menu.update(sample: two)
         check(master.isEnabled && master.state == .on && usage.isEnabled && usage.state == .on && mode.isEnabled, "Category and saved usage return on detection")
         let averageMode: NSSegmentedControl = member(menu, "averageMode")
@@ -64,6 +64,8 @@ import AppKit
         }
         var lastFanOptions: HUDFanOptions?
         menu.onChange = { lastFanOptions = $0 }
+        check(HUDFanOptions().mode == .bar && !rpmHighlight.isEnabled, "Total is the default and disables RPM emphasis")
+        selectFanMode(2)
         check(rpmHighlight.state == .off && rpmHighlight.isEnabled, "RPM emphasis defaults off and is available in Both")
         rpmHighlight.performClick(nil)
         check(lastFanOptions?.rpmHighlighted == true && lastFanOptions?.mode == .both, "Emphasis click preserves Both mode")
@@ -176,7 +178,7 @@ import AppKit
                     view.cacheDisplay(in: view.bounds, to: image)
                     try! image.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: prefix + name + ".png"))
                 }
-                menu.update(sample: two, options: .init(rpmHighlighted: true))
+                menu.update(sample: two, options: .init(mode: .both, rpmHighlighted: true))
                 render(menuCanvas, name: "-menu")
                 let fps = HUDFPSMenuView(options: .init(enabled: true, mode: .both), alignment: .vertical)
                 render(fps, name: "-fps-menu")
@@ -187,7 +189,7 @@ import AppKit
                     view.update(sample: .noFans, options: .init(), scale: .normal, background: background)
                     render(view, name: "-status" + suffix, light: light)
                     for highlighted in [false, true] {
-                        view.update(sample: single, options: .init(rpmHighlighted: highlighted), scale: .normal, background: background)
+                        view.update(sample: single, options: .init(mode: .both, rpmHighlighted: highlighted), scale: .normal, background: background)
                         render(view, name: (highlighted ? "-emphasized" : "-reading") + suffix, light: light)
                     }
                 }
@@ -200,7 +202,7 @@ import AppKit
         for alignment in HUDAlignment.allCases {
             hud.setAlignment(alignment)
             for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
-            for scale in HUDScale.allCases {
+            for scale in (CommandLine.arguments.contains("--normal-size") ? [.normal] : HUDScale.allCases) {
                 hud.setHUDScale(scale)
                 for count in [0, 1, 2, 4, 16] {
                     for display in HUDFanMode.allCases {
@@ -214,10 +216,20 @@ import AppKit
                                 let size = panel.frame.size
                                 let expectedRows = count == 0 ? 0 : options.averages(in: alignment) ? 1 : count
                                 if alignment == .vertical {
+                                    let stack: NSStackView = member(hud, "stackView")
+                                    let rows: [HUDMetric: NSView] = member(hud, "metricRows")
+                                    check(stack.arrangedSubviews.last(where: { !$0.isHidden }) === rows[.fans], "No divider follows FAN when it is the last category")
                                     check(fanView.rowCount == max(1, expectedRows), "Correct averaged/individual vertical rows")
                                     check(abs(fanView.frame.height - fanView.height(scale: scale)) <= 0.5, "All fan rows fit")
-                                    let maxBarWidth = HUDFanBarView.verticalSize.width
-                                    check(fanView.barWidth > 0 && fanView.barWidth <= maxBarWidth * scale.rawValue, "Bar fits inside existing vertical columns")
+                                    let graph: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
+                                    let target = graph.intrinsicContentSize.width - 4 * CGFloat(scale.rawValue)
+                                    check(abs(fanView.barWidth - target) < 0.01, "Fan bar matches the pressure history plot width")
+                                    let widestRPM = ("99999 RPM" as NSString).size(withAttributes: [
+                                        .font: HUDStyle.readingFont(scale: scale, highlighted: true)]).width
+                                    let rpmLeft = fanView.bounds.width - fanView.barWidth
+                                        - HUDStyle.metricColumnSpacing(scale: scale) - widestRPM
+                                    check(rpmLeft > (2 + HUDFanIcon.side) * CGFloat(scale.rawValue),
+                                          "The widest RPM fits between the fan icon and the wider bar")
                                 } else {
                                     let labels: [String: NSTextField] = member(horizontal, "labels")
                                     let symbols: [String: NSImageView] = member(horizontal, "symbols")
@@ -225,6 +237,24 @@ import AppKit
                                     check(icons.count == expectedRows, "Correct averaged/individual horizontal fan icons")
                                     check(icons.values.allSatisfy { $0.image != nil && $0.frame.width == HUDFanIcon.side * scale.rawValue
                                         && $0.frame.height == HUDFanIcon.side * scale.rawValue }, "Icons retain their compact square size")
+                                    if display == .both {
+                                        let bars: [String: HUDFanBarView] = member(horizontal, "bars")
+                                        for (id, bar) in bars where !bar.isHidden {
+                                            guard let rpm = labels[id.replacingOccurrences(of: ".bar", with: ".rpm")] else {
+                                                fatalError("Both needs RPM beside its bar")
+                                            }
+                                            let icon = symbols[id.replacingOccurrences(of: ".bar", with: ".title")]!
+                                            let textRect = rpm.alignmentRect(forFrame: rpm.frame)
+                                            let halfTextWidth = rpm.intrinsicContentSize.width / 2
+                                            let leftGap = textRect.midX - halfTextWidth - icon.frame.maxX
+                                            let rightGap = bar.frame.minX - textRect.midX - halfTextWidth
+                                            check(rpm.alignment == .center && leftGap > 0 && abs(leftGap - rightGap) < 0.5,
+                                                  "Both centres RPM with equal visible spacing to its icon and bar")
+                                            let graph: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
+                                            check(abs(bar.frame.width - (graph.intrinsicContentSize.width - 4 * CGFloat(scale.rawValue))) < 0.01,
+                                                  "Horizontal and vertical bars share the pressure graph width")
+                                        }
+                                    }
                                     if count == 1 { check(icons.values.first?.accessibilityLabel() == "FAN 1", "Single fan keeps an accessible label") }
                                     if count == 0, let status = labels["fan.status"] {
                                         check(status.font == HUDStyle.smallLabelFont(scale: scale), "No fan status uses the small Label font")
@@ -283,9 +313,9 @@ import AppKit
         check(dividers.filter { !$0.isHidden }.map { $0.frame.width } == [1.5, 0.5, 1.5], "Bold FAN boundaries, faint internal divider")
         for alignment in HUDAlignment.allCases {
             hud.setAlignment(alignment)
-            hud.setFanOptions(.init(average: false))
+            hud.setFanOptions(.init(mode: .both, average: false))
             let unhighlightedSize = panel.frame.size
-            hud.setFanOptions(.init(average: false, rpmHighlighted: true))
+            hud.setFanOptions(.init(mode: .both, average: false, rpmHighlighted: true))
             check(panel.frame.size == unhighlightedSize, "RPM emphasis does not resize the HUD")
             if alignment == .horizontal {
                 let labels: [String: NSTextField] = member(horizontal, "labels")
@@ -322,6 +352,8 @@ import AppKit
                 snapshot(horizontal, at: path + (useAverage ? "-horizontal-average.png" : "-horizontal-individual.png"))
             }
             let view = HUDFanView(frame: NSRect(x: 0, y: 0, width: HUDStyle.verticalValueColumnRight(scale: .normal), height: 21))
+            let history: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
+            view.setPreferredBarWidth(history.intrinsicContentSize.width - 4)
             view.update(sample: two, options: .init(averageMode: .both), scale: .normal, background: .dark)
             snapshot(view, at: path + "-vertical-average.png")
             view.frame.size.height = view.height(scale: .normal) * 2 + HUDStyle.rowSpacing(scale: .normal)
@@ -336,7 +368,7 @@ import AppKit
             snapshot(menuCanvas, at: path + "-menu-single.png")
             rpmHighlight.performClick(nil)
             snapshot(menuCanvas, at: path + "-menu-highlighted.png")
-            view.update(sample: single, options: .init(rpmHighlighted: true), scale: .normal, background: .dark)
+            view.update(sample: single, options: .init(mode: .both, rpmHighlighted: true), scale: .normal, background: .dark)
             snapshot(view, at: path + "-vertical-highlighted.png")
 
         }

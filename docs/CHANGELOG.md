@@ -2,6 +2,14 @@
 
 [← Back to README](../README.md)
 
+### v2.3
+
+- Added memory-pressure history graphs for Vertical mode, with a fixed 0–100 scale, a 30-second history, a current-reading dot, and a fading fill. **Text / Graph** offers neutral and colored meters (**A1 / A2**) and history graphs (**B1 / B2**). History graphs use a taller pressure row and switch to the matching meter in Horizontal mode.
+- Refined fan layout: **Both** places RPM between the fan badge and a wider bar, with balanced spacing in both layouts. Fan bars align with the memory-pressure history width.
+- New settings default to colored pressure history (**B2**, or **A2** in Horizontal), fan **Total** (bar only), and **Chip & OS** off. Existing saved choices are preserved.
+- Matched the Low Power Mode battery yellow to pressure yellow and removed the divider below FAN when it is the last visible category.
+- Updated the Controls guide and documentation screenshots.
+
 ### v2.2
 
 - Added a **Liquid Glass** strength slider from Clear to Frosted, with live adjustment, remembered settings, and **Follow macOS** enabled by default. Unified the Appearance and Liquid Glass selectors.

@@ -24,6 +24,22 @@ import Foundation
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         precondition(deliveries.count == stoppedCount + 1, "Restart samples immediately")
         monitor.stop()
-        print("PASS: live pressure, one-second cadence, idempotent start, stop and restart")
+        var history: [MemoryPressureMonitor.Sample] = []
+        monitor.onHistoryUpdate = { history.append($0) }
+        monitor.start()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        precondition(history.isEmpty, "Text and meter do not sample numeric history")
+        monitor.start(includeHistory: true)
+        monitor.start(includeHistory: true)
+        RunLoop.current.run(until: Date().addingTimeInterval(1.2))
+        precondition((1...2).contains(history.count), "Enabling history starts one sampler, not two")
+        precondition(history.allSatisfy { $0.numericValue.map { $0.isFinite && (0...100).contains($0) } == true },
+                     "The live numeric pressure source is available and in range")
+        monitor.start(includeHistory: false)
+        let previousCount = history.count
+        RunLoop.current.run(until: Date().addingTimeInterval(1.2))
+        precondition(history.count == previousCount, "Returning to meter cancels queued numeric samples")
+        monitor.stop()
+        print("PASS: live state and numeric pressure, one-second cadence, demand changes, stop and restart")
     }
 }

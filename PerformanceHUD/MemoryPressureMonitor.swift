@@ -34,18 +34,42 @@ final class MemoryPressureMonitor {
         }
     }
 
-    var onPressureUpdate: ((Level?) -> Void)?
-    private let poller = MetricPoller<Level>(label: "PerformanceHUD.MemoryPressure")
+    nonisolated struct Sample: Sendable {
+        let time: TimeInterval
+        let level: Level?
+        let numericValue: Double?
+    }
 
-    func start() {
-        guard !poller.isRunning else { return }
+    var onPressureUpdate: ((Level?) -> Void)?
+    var onHistoryUpdate: ((Sample) -> Void)?
+    private let poller = MetricPoller<Sample>(label: "PerformanceHUD.MemoryPressure")
+    private var includesHistory = false
+
+    func start(includeHistory: Bool = false) {
+        guard !poller.isRunning || includesHistory != includeHistory else { return }
+        includesHistory = includeHistory
         // Read the current global state once per second, rather than retaining
         // the last notification while waiting for another event to arrive.
-        poller.start(sample: { Self.readCurrentPressure() }) { [weak self] level in
-            self?.onPressureUpdate?(level)
+        poller.start(sample: {
+            Sample(time: ProcessInfo.processInfo.systemUptime, level: Self.readCurrentPressure(),
+                   numericValue: includeHistory ? Self.readNumericPressure() : nil)
+        }) { [weak self] sample in
+            guard let sample else { return }
+            self?.onPressureUpdate?(sample.level)
+            if includeHistory { self?.onHistoryUpdate?(sample) }
         }
     }
     func stop() { poller.stop() }
+
+    // Read-only numeric backing value used for pressure history. This is not RAM
+    // usage percentage or a replacement for macOS's separate pressure state.
+    nonisolated private static func readNumericPressure() -> Double? {
+        var value: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        guard sysctlbyname("kern.memorystatus_level", &value, &size, nil, 0) == 0,
+              size == MemoryLayout<Int32>.size, (0...100).contains(value) else { return nil }
+        return Double(100 - value)
+    }
     // MARK: - Current Pressure
 
     nonisolated private static func readCurrentPressure()

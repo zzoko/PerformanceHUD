@@ -60,21 +60,30 @@ import AppKit
         verifyGeometry()
         let pressureMode: NSSegmentedControl = member(memory, "pressureModeControl") as NSSegmentedControl?
             ?? { fatalError("Missing pressure selector") }()
+        let pressureStyle: NSSegmentedControl = member(memory, "pressureStyleControl") as NSSegmentedControl?
+            ?? { fatalError("Missing pressure style selector") }()
         let memoryControls: [Int: NSButton] = member(memory, "controls")
         check(memoryControls[8]!.frame.minY < memoryControls[5]!.frame.minY, "Pressure is above Details")
         check((memoryControls[8] as! HUDReadingCheckbox).emphasisControl?.isEnabled == false,
-              "Default Color meter mode disables Pressure emphasis")
+              "Default Colored graph mode disables Pressure emphasis")
         check(abs(pressureMode.frame.midY - memoryControls[8]!.frame.midY) < 1, "Pressure owns the style selector")
         var memoryOptions = options
         memory.onChange = { memoryOptions = $0 }
-        check(pressureMode.selectedSegment == 2 && pressureMode.isEnabled, "Pressure starts in Color meter mode")
-        pressureMode.selectedSegment = 2
-        pressureMode.sendAction(pressureMode.action, to: pressureMode.target)
+        check(pressureMode.selectedSegment == 1 && pressureStyle.selectedSegment == 3 && pressureMode.isEnabled,
+              "Pressure starts in Graph, style B2")
+        check(pressureStyle.frame.minY > pressureMode.frame.maxY && pressureStyle.frame.maxY < memoryControls[5]!.frame.minY,
+              "Graph styles are below Text/Graph and above Details")
+        check(abs(pressureMode.frame.width - pressureStyle.frame.width) < 0.5, "Pressure selectors share the same total width")
+        pressureStyle.selectedSegment = 1
+        pressureStyle.sendAction(pressureStyle.action, to: pressureStyle.target)
         check(memoryOptions.pressureMode == .colorMeter, "Pressure selector updates its preference")
         memory.update(alignment: .horizontal)
-        check(pressureMode.isEnabled && pressureMode.selectedSegment == 2, "Horizontal supports the same pressure styles")
+        check(pressureMode.isEnabled && pressureStyle.selectedSegment == 1
+              && !pressureStyle.isEnabled(forSegment: 2) && !pressureStyle.isEnabled(forSegment: 3),
+              "Horizontal supports meters and disables only the history styles")
         memory.update(alignment: .vertical)
-        check(pressureMode.isEnabled && pressureMode.selectedSegment == 2, "Vertical restores the selection")
+        check(pressureMode.isEnabled && pressureStyle.selectedSegment == 1
+              && pressureStyle.isEnabled(forSegment: 2) && pressureStyle.isEnabled(forSegment: 3), "Vertical restores all styles")
         memoryControls[5]!.performClick(nil)
         check(pressureMode.isEnabled && memoryOptions.pressureMode == .colorMeter, "Details off leaves Pressure enabled")
         memoryControls[8]!.performClick(nil)

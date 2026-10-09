@@ -1,6 +1,6 @@
 # PerformanceHUD
 
-## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version.svg" alt="App version 2.2 — view changelog" width="56" height="30" align="top"></a>
+## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version.svg" alt="App version 2.3 — view changelog" width="56" height="30" align="top"></a>
 
 Download the ready-built app for **$3.99**, or build it yourself for free. Both offer the same features, with no subscription or feature unlocks.
 
@@ -24,11 +24,13 @@ If you prefer to build the app yourself but would still like to support it, **Gi
 <details>
 <summary><strong>Take a closer look — features, screenshots &amp; controls</strong></summary>
 
-PerformanceHUD is a small app under 10 MB that displays a performance overlay over games and apps. You can use it as just an FPS display, or also show CPU, GPU, and memory usage, temperatures, power readings, fan speeds, and battery information and more stats for a deeper overview of how your Mac is handling the workload.
+PerformanceHUD is a small app under 10 MB that displays a customizable performance overlay over games and apps. It's a highly versatile tool,  you can use it while gaming, show performance and system information for benchmark videos, or record readings to CSV for later analysis. It can display FPS, CPU, GPU and memory statistics, fan speeds, battery information, and details about the focused app.
 
-The HUD is customized from the menu bar. You can choose which readings to display and highlight, swap between vertical and horizontal layouts, adjust the size and appearance, and move the overlay where you want it. You can also turn it on and off at any time, even if the game is already running, or log selected readings to a CSV for spreadsheets and graphs. Editable hotkeys let you show/hide the HUD, start/stop logging, and cycle appearance. There’s a built-in Controls guide explaining in detail what each option in the menu does and how it works. In-app updates, optional Weekly or Monthly update checks, and optional startup at login are available from the menu.
+The default layout offers a balanced selection of useful metrics, but the overlay is designed to be highly configurable. You can choose which readings to show, emphasize key values, switch layouts, and select different display styles where supported. Show all the stats available at all times, or use it as a small unobtrusive FPS-only overlay that can automatically hide itself when out of the game. My priority has been to make useful information easy to read without distracting from what’s behind it.
 
-I’ve put a lot of thought into keeping the overlay easy to read and the controls organized, even as more features have been added. Attention to detail and making something genuinely useful that I would want to use myself has been the goal.
+All settings are available directly in the menu bar. You can show or hide the HUD at any time, including while a game is running. Editable hotkeys let you toggle the HUD, start or stop logging, and change appearance without leaving your current app. The built-in Controls guide explains each option and how it works. In-app updates, optional weekly or monthly update checks, and optional startup at login are also available from the menu.
+
+I’ve put a lot of thought into keeping the overlay readable and the controls organized as more features have been added. The goal is to make a useful, thoughtfully designed tool that i would actually want to use myself.
 
 <table>
   <tr>
