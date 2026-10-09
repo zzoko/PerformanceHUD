@@ -1,8 +1,9 @@
 import AppKit
 
 @main struct FanTests {
+    static var context = "setup"
     static func check(_ value: @autoclosure () -> Bool, _ message: String) {
-        precondition(value(), message)
+        precondition(value(), "\(message) [\(context)]")
     }
     @MainActor static func member<T>(_ object: Any, _ name: String) -> T {
         Mirror(reflecting: object).children.first { $0.label == name }!.value as! T
@@ -208,6 +209,8 @@ import AppKit
                     for display in HUDFanMode.allCases {
                         for averageMode in HUDFanAverageMode.allCases {
                             for averaged in [false, true] {
+                                let configuration = "alignment=\(alignment), scale=\(scale.rawValue), fans=\(count), mode=\(display), average=\(averaged), averageMode=\(averageMode)"
+                                context = configuration
                                 let options = HUDFanOptions(enabled: true, usage: true, mode: display, average: averaged, averageMode: averageMode)
                                 hud.setFanOptions(options)
                                 let sample = FanSample(status: count == 0 ? .noFans : .ready, fans: (0..<count).map { FanReading(id: $0, rpm: 0, maximumRPM: 6000) })
@@ -223,7 +226,8 @@ import AppKit
                                     check(abs(fanView.frame.height - fanView.height(scale: scale)) <= 0.5, "All fan rows fit")
                                     let graph: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
                                     let target = graph.intrinsicContentSize.width - 4 * CGFloat(scale.rawValue)
-                                    check(abs(fanView.barWidth - target) < 0.01, "Fan bar matches the pressure history plot width")
+                                    check(abs(fanView.barWidth - target) < 0.01,
+                                          "Fan bar matches the pressure history plot width: actual=\(fanView.barWidth), target=\(target), bounds=\(fanView.bounds)")
                                     let widestRPM = ("99999 RPM" as NSString).size(withAttributes: [
                                         .font: HUDStyle.readingFont(scale: scale, highlighted: true)]).width
                                     let rpmLeft = fanView.bounds.width - fanView.barWidth
@@ -265,16 +269,19 @@ import AppKit
                                 }
                                 if count == 0 {
                                     for status in [FanSample.checking, .noFans, .unavailable] {
+                                        context = "\(configuration), status=\(status.status)"
                                         hud.updateFans(status)
                                         check(panel.frame.size == size, "Status message changes do not resize the window")
                                     }
                                     continue
                                 }
                                 for rpm: Double? in [0, 1, 2720, 9999, 99_999, nil] {
+                                    context = "\(configuration), rpm=\(String(describing: rpm))"
                                     let update = FanSample(status: .ready, fans: sample.fans.map { FanReading(id: $0.id, rpm: rpm, maximumRPM: 6000) })
                                     hud.updateFans(update)
                                     check(panel.frame.size == size, "RPM changes never resize the window")
                                 }
+                                context = "\(configuration), read failure"
                                 hud.updateFans(.unavailable.preservingTopology(from: sample))
                                 check(panel.frame.size == size, "Read failures never resize the window")
                             }
@@ -293,6 +300,7 @@ import AppKit
             let widthWithoutFans = panel.frame.width
             var totalBarWidth: CGFloat?
             for mode in HUDFanMode.allCases {
+                context = "vertical MEM and FAN, scale=\(scale.rawValue), mode=\(mode)"
                 hud.setFanOptions(.init(mode: mode, average: false))
                 hud.updateFans(two)
                 panel.contentView?.layoutSubtreeIfNeeded()
@@ -309,9 +317,11 @@ import AppKit
         hud.setMetricEnabled(.battery, enabled: true)
         hud.setFanOptions(.init(average: false))
         hud.updateFans(two)
+        context = "horizontal MEM, two fans, and BAT boundaries"
         let dividers: [NSView] = member(horizontal, "dividers")
         check(dividers.filter { !$0.isHidden }.map { $0.frame.width } == [1.5, 0.5, 1.5], "Bold FAN boundaries, faint internal divider")
         for alignment in HUDAlignment.allCases {
+            context = "RPM emphasis, alignment=\(alignment), scale=1, mode=both"
             hud.setAlignment(alignment)
             hud.setFanOptions(.init(mode: .both, average: false))
             let unhighlightedSize = panel.frame.size

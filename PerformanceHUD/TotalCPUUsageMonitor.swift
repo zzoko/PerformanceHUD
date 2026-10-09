@@ -13,7 +13,7 @@ final class TotalCPUUsageMonitor {
     func stop() { poller.stop() }
 }
 
-nonisolated private final class TotalCPUSampler: @unchecked Sendable {
+nonisolated final class TotalCPUSampler: @unchecked Sendable {
     private var previousLoad: host_cpu_load_info_data_t?
     // MARK: - Sample
 
@@ -107,6 +107,8 @@ nonisolated private final class TotalCPUSampler: @unchecked Sendable {
     private func readCPULoad()
         -> host_cpu_load_info_data_t?
     {
+        let host = mach_host_self()
+        defer { mach_port_deallocate(mach_task_self_, host) }
 
         var info =
             host_cpu_load_info_data_t()
@@ -134,7 +136,7 @@ nonisolated private final class TotalCPUSampler: @unchecked Sendable {
                 ) { reboundPointer in
 
                     host_statistics(
-                        mach_host_self(),
+                        host,
                         HOST_CPU_LOAD_INFO,
                         reboundPointer,
                         &count

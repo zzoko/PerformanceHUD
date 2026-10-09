@@ -15,7 +15,7 @@ final class TotalRAMUsageMonitor {
     func stop() { poller.stop() }
 }
 
-nonisolated private enum TotalRAMUsageMonitorReader {
+nonisolated enum TotalRAMUsageMonitorReader {
     static func read() -> RAMUsageSample? {
         let physicalMemory = Double(ProcessInfo.processInfo.physicalMemory)
         guard let statistics = readVMStatistics(), physicalMemory > 0 else { return nil }
@@ -39,6 +39,8 @@ nonisolated private enum TotalRAMUsageMonitorReader {
     static func readVMStatistics()
         -> vm_statistics64_data_t?
     {
+        let host = mach_host_self()
+        defer { mach_port_deallocate(mach_task_self_, host) }
 
         var statistics =
             vm_statistics64_data_t()
@@ -66,7 +68,7 @@ nonisolated private enum TotalRAMUsageMonitorReader {
                 ) { reboundPointer in
 
                     host_statistics64(
-                        mach_host_self(),
+                        host,
                         HOST_VM_INFO64,
                         reboundPointer,
                         &count

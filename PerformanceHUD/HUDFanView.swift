@@ -27,11 +27,12 @@ final class HUDFanView: NSView {
         let factor = CGFloat(scale.rawValue)
         let font = HUDStyle.readingFont(scale: scale, highlighted: true)
         let gap = HUDStyle.metricColumnSpacing(scale: scale)
-        let reserved = HUDFanIcon.side * factor
-            + gap + 4 * factor
+        let reserved = (2 + HUDFanIcon.side) * factor
+            + gap
             + ("99999 RPM" as NSString).size(withAttributes: [.font: font]).width + gap
         // Reserve the same columns in every mode so the right-aligned bar keeps
-        // its width across visibility changes, readings and RPM emphasis.
+        // its width across visibility changes, readings and RPM emphasis. Match
+        // the icon's actual 2pt leading inset, with one gap on each side of RPM.
         let target = preferredBarWidth ?? HUDFanBarView.verticalSize.width * factor
         return min(target, max(0, bounds.width - reserved))
     }

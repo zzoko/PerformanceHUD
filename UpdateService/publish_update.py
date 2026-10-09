@@ -86,7 +86,11 @@ def feed_releases(data):
         if not re.fullmatch(r"[0-9]+", build) or not signature or not 0 < length <= MAX_ASSET:
             raise RuntimeError("The live update feed contains invalid release metadata.")
         seen.add(file)
-        releases.append(dict(file=file, build=build, version=version, length=length, signature=signature))
+        release = dict(file=file, build=build, version=version, length=length, signature=signature)
+        description = item.find("description")
+        if description is not None:
+            release["notes"] = (description.get(NS + "format", "html"), description.text or "")
+        releases.append(release)
     return releases
 
 
@@ -193,6 +197,19 @@ class Publisher:
                 raise RuntimeError(f"The saved archive has the wrong size: {file}")
             self.run(self.tools / "sign_update", "--account", KEY_ACCOUNT, "--verify",
                      destination, release["signature"])
+            # generate_appcast removes descriptions unless companion notes exist.
+            # Prefer the already-verified feed; local notes can recover releases
+            # whose descriptions were dropped by an earlier publisher version.
+            if "notes" in release:
+                notes_format, notes = release["notes"]
+                suffix = {"plain-text": ".txt", "markdown": ".md"}.get(notes_format, ".html")
+                destination.with_suffix(suffix).write_text(notes, encoding="utf-8")
+            else:
+                for suffix in (".html", ".txt", ".md", ".markdown"):
+                    local_notes = local.with_suffix(suffix)
+                    if local_notes.is_file():
+                        shutil.copy2(local_notes, destination.with_suffix(suffix))
+                        break
             entries.append({key: release[key] for key in ("file", "build", "version")})
             entries[-1]["sha256"] = hashlib.sha256(destination.read_bytes()).hexdigest()
         (self.stage / "src/releases.json").write_text(json.dumps(entries, indent=2) + "\n")
@@ -227,14 +244,14 @@ class Publisher:
         self.deployment_attempted = True
         self.run(*command, cwd=self.stage)
         expected = (self.stage / "assets/appcast.xml").read_bytes()
-        for attempt in range(6):
+        for attempt in range(30):
             try:
                 if self.fetch_feed(self.stage / "after-upload.xml") == expected:
                     break
             except (OSError, RuntimeError):
-                if attempt == 5:
+                if attempt == 29:
                     raise
-            if attempt == 5:
+            if attempt == 29:
                 raise RuntimeError("Cloudflare accepted the upload, but its live feed is not confirmed yet.")
             time.sleep(2)
         # Verify the actual served ZIP, including its redirect/ticket route.

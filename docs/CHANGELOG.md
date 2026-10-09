@@ -2,6 +2,13 @@
 
 [← Back to README](../README.md)
 
+### v2.4
+
+- Fixed accumulating macOS host-port references while sampling total CPU and memory usage.
+- Corrected fan-bar alignment at smaller HUD sizes while keeping room for the RPM reading.
+- Preserved older releases’ notes when preparing a new in-app update, and allowed more time to confirm an uploaded update becomes available.
+- Added a single command for running the regression tests, including checks for resource cleanup and release-note preservation.
+
 ### v2.3
 
 - Added memory-pressure history graphs for Vertical mode, with a fixed 0–100 scale, a 30-second history, a current-reading dot, and a fading fill. **Text / Graph** offers neutral and colored meters (**A1 / A2**) and history graphs (**B1 / B2**). History graphs use a taller pressure row and switch to the matching meter in Horizontal mode.

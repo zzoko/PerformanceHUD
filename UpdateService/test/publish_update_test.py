@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -20,6 +21,15 @@ def feed(version="2.1", build="9", file="PerformanceHUD-2.1-9.zip"):
             f'<sparkle:shortVersionString>{version}</sparkle:shortVersionString>'
             f'<enclosure url="{publisher.BASE}/download/{file}" length="7" '
             f'sparkle:edSignature="test-signature"/></item></channel></rss>').encode()
+
+
+def feed_with_notes(notes, notes_format=None):
+    root = ET.fromstring(feed())
+    description = ET.SubElement(root.find("./channel/item"), "description")
+    description.text = notes
+    if notes_format is not None:
+        description.set(publisher.NS + "format", notes_format)
+    return ET.tostring(root)
 
 
 class PublisherTests(unittest.TestCase):
@@ -122,6 +132,39 @@ class PublisherTests(unittest.TestCase):
             save.assert_called_once()
             self.assertTrue(p.deployment_attempted)
 
+    def test_delayed_live_feed_succeeds_after_old_six_attempt_window(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(publisher, "ROOT", Path(temp)):
+            p = self.make_publisher(Path(temp))
+            with patch.object(p, "run"), \
+                    patch.object(p, "fetch_feed", side_effect=[b"previous"] * 7 + [feed()]) as fetch, \
+                    patch.object(publisher, "download", return_value=b"archive") as download, \
+                    patch.object(publisher.time, "sleep") as sleep, \
+                    patch.object(p, "remember_published") as save:
+                p.publish(b"previous")
+            self.assertEqual(fetch.call_count, 8, "One pre-upload check plus seven confirmation attempts")
+            self.assertEqual(sleep.call_count, 6)
+            self.assertTrue(all(call.args == (2,) for call in sleep.call_args_list))
+            download.assert_called_once_with("/download/PerformanceHUD-2.1-9.zip", publisher.MAX_ASSET)
+            save.assert_called_once()
+
+    def test_exhausted_confirmation_retries_do_not_record_success(self):
+        for response in (b"previous", OSError("Service unavailable")):
+            with self.subTest(response=response), tempfile.TemporaryDirectory() as temp, \
+                    patch.object(publisher, "ROOT", Path(temp)):
+                p = self.make_publisher(Path(temp))
+                with patch.object(p, "run"), \
+                        patch.object(p, "fetch_feed", side_effect=[b"previous"] + [response] * 30) as fetch, \
+                        patch.object(publisher, "download") as download, \
+                        patch.object(publisher.time, "sleep") as sleep, \
+                        patch.object(p, "remember_published") as save:
+                    with self.assertRaises(OSError if isinstance(response, OSError) else RuntimeError):
+                        p.publish(b"previous")
+                self.assertEqual(fetch.call_count, 31, "One pre-upload check plus thirty confirmation attempts")
+                self.assertEqual(sleep.call_count, 29)
+                download.assert_not_called()
+                save.assert_not_called()
+                self.assertTrue(p.deployment_attempted, "A failed confirmation must still report a possible live upload")
+
     def test_bad_served_archive_does_not_record_success(self):
         with tempfile.TemporaryDirectory() as temp, patch.object(publisher, "ROOT", Path(temp)):
             p = self.make_publisher(Path(temp))
@@ -142,6 +185,67 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[-1], "test-signature")
             self.assertEqual(entries[0]["sha256"], publisher.hashlib.sha256(b"archive").hexdigest())
             self.assertEqual(json.loads((p.stage / "src/releases.json").read_text()), entries)
+
+    def test_previous_local_notes_are_restored_when_feed_lost_description(self):
+        for suffix in (".html", ".txt", ".md", ".markdown"):
+            with self.subTest(suffix=suffix), tempfile.TemporaryDirectory() as temp, \
+                    patch.object(publisher, "ROOT", Path(temp)):
+                p = self.make_publisher(Path(temp))
+                local = Path(temp) / "assets/packages/PerformanceHUD-2.1-9.zip"
+                local.parent.mkdir(parents=True)
+                local.write_bytes(b"archive")
+                notes = "Previously published notes: 2 < 3 & café\n"
+                local.with_suffix(suffix).write_text(notes, encoding="utf-8")
+                with patch.object(p, "run"), patch.object(publisher, "download") as fetch:
+                    p.restore_releases(feed())
+                fetch.assert_not_called()
+                restored = p.stage / "assets/packages" / local.with_suffix(suffix).name
+                self.assertEqual(restored.read_text(encoding="utf-8"), notes)
+
+    def test_previous_notes_can_be_recovered_from_verified_feed_without_local_files(self):
+        cases = [(None, ".html", "<pre>Fixes &amp; improvements — café</pre>"),
+                 ("plain-text", ".txt", "Literal <tags> & punctuation\n"),
+                 ("markdown", ".md", "# Fixes\n\n- **Preserve** formatting\n"),
+                 ("../../unsafe", ".html", "Unknown formats use Sparkle's HTML fallback")]
+        for notes_format, suffix, notes in cases:
+            with self.subTest(notes_format=notes_format), tempfile.TemporaryDirectory() as temp, \
+                    patch.object(publisher, "ROOT", Path(temp)):
+                p = self.make_publisher(Path(temp))
+                data = feed_with_notes(notes, notes_format)
+                with patch.object(p, "run"), patch.object(publisher, "download", return_value=b"archive") as fetch:
+                    entries = p.restore_releases(data)
+                fetch.assert_called_once_with("/download/PerformanceHUD-2.1-9.zip", publisher.MAX_ASSET)
+                restored = p.stage / "assets/packages" / ("PerformanceHUD-2.1-9" + suffix)
+                self.assertEqual(restored.read_text(encoding="utf-8"), notes)
+                self.assertNotIn("notes", entries[0], "Embedded notes do not belong in the download allowlist")
+                self.assertEqual((p.stage / "assets/appcast.xml").read_bytes(), data)
+
+    def test_verified_feed_notes_take_priority_over_stale_local_notes(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(publisher, "ROOT", Path(temp)):
+            p = self.make_publisher(Path(temp))
+            local = Path(temp) / "assets/packages/PerformanceHUD-2.1-9.zip"
+            local.parent.mkdir(parents=True)
+            local.write_bytes(b"archive")
+            local.with_suffix(".html").write_text("Stale local notes")
+            with patch.object(p, "run"), patch.object(publisher, "download") as fetch:
+                p.restore_releases(feed_with_notes("Signed **markdown** notes", "markdown"))
+            fetch.assert_not_called()
+            packages = p.stage / "assets/packages"
+            self.assertEqual((packages / "PerformanceHUD-2.1-9.md").read_text(), "Signed **markdown** notes")
+            self.assertFalse((packages / "PerformanceHUD-2.1-9.html").exists(),
+                             "A stale HTML companion would override the restored Markdown")
+
+    def test_external_release_notes_are_not_downloaded(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(publisher, "ROOT", Path(temp)):
+            p = self.make_publisher(Path(temp))
+            root = ET.fromstring(feed())
+            ET.SubElement(root.find("./channel/item"), publisher.NS + "releaseNotesLink").text = \
+                "https://example.com/untrusted.html"
+            with patch.object(p, "run"), patch.object(publisher, "download", return_value=b"archive") as fetch:
+                p.restore_releases(ET.tostring(root))
+            fetch.assert_called_once_with("/download/PerformanceHUD-2.1-9.zip", publisher.MAX_ASSET)
+            self.assertEqual([path.name for path in (p.stage / "assets/packages").iterdir()],
+                             ["PerformanceHUD-2.1-9.zip"])
 
 
 if __name__ == "__main__":

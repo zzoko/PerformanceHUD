@@ -86,6 +86,8 @@ A locally compiled app generally does not need the downloaded-app Gatekeeper exc
 
 Source builds can use **Check for updates** too. Installing an update replaces the app with the official build while keeping your HUD preferences. Local code modifications are not carried over. The [license](../LICENSE) attached to how you obtained your copy still applies.
 
+For regression checks before releasing changes, see [Running the tests](../Tests/README.md).
+
 </details>
 
 </td></tr>
