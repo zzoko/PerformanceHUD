@@ -32,6 +32,7 @@ final class FixtureDriver: NSObject, NSApplicationDelegate, SPUUserDriver {
         let testCase = Bundle.main.object(forInfoDictionaryKey: "FixtureCase") as? String
         if testCase == "settings" { checkSavedSchedule(); return }
         if testCase == "scheduled" { checkScheduledReminder(); return }
+        if testCase?.hasPrefix("first-") == true { checkFirstLaunch(); return }
         if version == "2" {
             finish(UserDefaults.standard.string(forKey: "FixturePreference") == "preserved" ? "INSTALLED; preferences preserved" : "FAILED: preferences lost")
             return
@@ -48,6 +49,7 @@ final class FixtureDriver: NSObject, NSApplicationDelegate, SPUUserDriver {
     }
 
     private func checkSavedSchedule() {
+        UserDefaults.standard.set(true, forKey: "SUHasLaunchedBefore")
         let service = HUDUpdater()
         standardUpdater = service
         precondition(service.startupError == nil)
@@ -74,6 +76,7 @@ final class FixtureDriver: NSObject, NSApplicationDelegate, SPUUserDriver {
     private func checkScheduledReminder() {
         // Make a genuine scheduled check overdue in this disposable preference
         // domain. The production wrapper and standard Sparkle UI handle it.
+        UserDefaults.standard.set(true, forKey: "SUHasLaunchedBefore")
         UserDefaults.standard.set(true, forKey: "SUEnableAutomaticChecks")
         UserDefaults.standard.set(604_800, forKey: "SUScheduledCheckInterval")
         UserDefaults.standard.set(Date(timeIntervalSince1970: 0), forKey: "SULastCheckTime")
@@ -86,6 +89,38 @@ final class FixtureDriver: NSObject, NSApplicationDelegate, SPUUserDriver {
                 precondition(service.canCheck, "The menu must be able to open a pending update")
                 precondition(!NSApp.windows.contains(where: { $0.isVisible }), "Scheduled checks must not show windows")
                 self.finish("SCHEDULED menu reminder; no popup")
+            }
+        }
+    }
+
+    private func checkFirstLaunch() {
+        let isRelaunch = CommandLine.arguments.last == "relaunch"
+        let service = HUDUpdater()
+        standardUpdater = service
+        precondition(service.startupError == nil)
+        precondition(service.schedule == .off, "The first check must not enable recurring checks")
+        precondition(service.isPerformingFirstLaunchCheck == !isRelaunch)
+
+        if isRelaunch {
+            // Allow Sparkle's launch timer to run before checking that it stayed quiet.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [self] in
+                precondition(service.canCheck)
+                precondition(!service.isPerformingFirstLaunchCheck)
+                precondition(service.schedule == .off)
+                precondition(!NSApp.windows.contains(where: { $0.isVisible }))
+                finish("FIRST relaunch; no automatic check")
+            }
+        } else {
+            service.onChange = { [weak self] in
+                guard let self, !service.isPerformingFirstLaunchCheck else { return }
+                DispatchQueue.main.async {
+                    precondition(service.canCheck)
+                    precondition(service.availableVersion == nil)
+                    precondition(service.schedule == .off)
+                    precondition(!NSApp.windows.contains(where: { $0.isVisible }),
+                                 "No-update and unavailable first checks must stay quiet")
+                    self.finish("FIRST check completed; no popup")
+                }
             }
         }
     }

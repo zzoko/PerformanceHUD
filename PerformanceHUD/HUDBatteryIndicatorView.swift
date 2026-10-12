@@ -82,6 +82,10 @@ final class HUDBatteryIndicatorView: NSView {
     private var temperatureFont: NSFont {
         HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: options.temperatureHighlighted)
     }
+    var temperatureColor: NSColor {
+        HUDStyle.temperatureColor(options.enabled && options.temperature ? temperature : nil,
+                                  warning: options.heatWarning, background: background)
+    }
     private var powerFont: NSFont {
         HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: options.powerHighlighted)
     }
@@ -243,7 +247,7 @@ final class HUDBatteryIndicatorView: NSView {
         if !temperatureText.isEmpty {
             (temperatureText as NSString).draw(at: temperatureTextRect.origin, withAttributes: [
                 .font: temperatureFont,
-                .foregroundColor: HUDStyle.readingColor(background: background)
+                .foregroundColor: temperatureColor
             ])
         }
         guard options.charge, let percentage else { return }

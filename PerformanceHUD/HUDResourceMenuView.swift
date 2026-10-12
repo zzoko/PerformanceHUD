@@ -10,6 +10,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     private var options: HUDResourceOptions
     private var controls: [Int: NSButton] = [:]
     private var usageModeControl: NSSegmentedControl?
+    private var heatWarningControl: HUDHeatWarningMenuView?
     private var pressureModeControl: NSSegmentedControl?
     private var pressureStyleControl: NSSegmentedControl?
     private var alignment: HUDAlignment
@@ -24,7 +25,8 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             temperature: batteryOptions.temperature, totalUse: batteryOptions.charge, focusedApp: false,
             power: batteryOptions.power,
             highlighted: Set([batteryOptions.temperatureHighlighted ? HUDReadingKind.temperature : nil,
-                              batteryOptions.powerHighlighted ? HUDReadingKind.power : nil].compactMap { $0 })))
+                              batteryOptions.powerHighlighted ? HUDReadingKind.power : nil].compactMap { $0 }),
+            heatWarning: batteryOptions.heatWarning))
         flowMode = batteryOptions.flowMode
         refresh()
     }
@@ -74,6 +76,18 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             button.onHighlight = { [weak self] in self?.highlightChanged(tag: tag) }
             controls[tag] = button
             var row = HUDCategoryMenuRow(reading: button)
+            if tag == 1 {
+                let control = HUDHeatWarningMenuView(title: title, options: options.heatWarning)
+                control.onChange = { [weak self] warning in
+                    guard let self else { return }
+                    self.options.heatWarning = warning
+                    self.refresh()
+                    self.onChange?(self.options)
+                    self.notifyBatteryChange()
+                }
+                heatWarningControl = control
+                row.mode = control
+            }
             if group == .ram && tag == 8 {
                 let control = NSSegmentedControl(labels: ["Text", "Graph"],
                     trackingMode: .selectOne, target: self, action: #selector(pressureModeChanged(_:)))
@@ -199,7 +213,8 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         onBatteryChange?(HUDBatteryOptions(enabled: options.enabled,
             temperature: options.temperature, charge: options.totalUse,
             temperatureHighlighted: options.highlighted.contains(.temperature),
-            powerHighlighted: options.highlighted.contains(.power), flowMode: flowMode))
+            powerHighlighted: options.highlighted.contains(.power), flowMode: flowMode,
+            heatWarning: options.heatWarning))
     }
 
     @objc private func usageModeChanged(_ sender: NSSegmentedControl) {
@@ -221,6 +236,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     private func refresh() {
+        heatWarningControl?.update(options: options.heatWarning, isEnabled: options.enabled && options.temperature)
         pressureModeControl?.selectedSegment = options.pressureMode == .text ? 0 : 1
         pressureModeControl?.isEnabled = options.showsPressure
         let style = options.selectedPressureGraphStyle.resolved(for: alignment)

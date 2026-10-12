@@ -76,13 +76,13 @@ enum HUDMetric: Int, CaseIterable, Hashable {
             return "FPS History"
 
         case .gpu:
-            return "GPU (app)"
+            return "GPU (App)"
 
         case .gpuTotal:
             return "GPU"
 
         case .cpu:
-            return "CPU (app)"
+            return "CPU (App)"
 
         case .cpuTotal:
             return "CPU"
@@ -91,7 +91,7 @@ enum HUDMetric: Int, CaseIterable, Hashable {
             return "ANE"
 
         case .ram:
-            return "MEM (app)"
+            return "MEM (App)"
 
         case .ramTotal:
             return "MEM"

@@ -191,7 +191,7 @@ final class AppDelegate:
             self?.logSnapshot.updateMisc(sample)
         }
 
-        // Updates are independent of monitoring and do not start automatic checks by default.
+        // One first-launch check is independent of monitoring and the recurring schedule.
         updater = HUDUpdater()
         updater?.onChange = { [weak self] in self?.updateUpdaterMenu() }
         loginItem.onChange = { [weak self] in self?.updateLoginMenu() }

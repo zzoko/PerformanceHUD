@@ -27,11 +27,12 @@ enum HUDPreferences {
                     "hud.glass.mode", "hud.glass.strength", "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
                     "hud.battery.power", "hud.battery.powerHighlighted", "hud.battery.flowMode",
+                    "hud.battery.heatWarning.enabled", "hud.battery.heatWarning.threshold",
                     "hud.group.ram.details", "hud.group.ram.pressure", "hud.group.ram.pressureMode", "hud.group.ram.pressureGraphStyle", "hud.fan.usage", "hud.fan.mode",
                     "hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted", "hud.misc.readings"]
         keys += HUDMetric.allCases.map { metricKey($0) }
         for group in HUDResourceGroup.allCases {
-            keys += ["enabled", "temperature", "power", "highlighted", "usageMode"].map {
+            keys += ["enabled", "temperature", "power", "highlighted", "usageMode", "heatWarning.enabled", "heatWarning.threshold"].map {
                 "hud.group.\(group.rawValue).\($0)"
             }
         }
@@ -349,7 +350,8 @@ enum HUDPreferences {
             temperatureHighlighted: store.bool(forKey: "hud.battery.temperatureHighlighted"),
             power: store.object(forKey: "hud.battery.power") as? Bool,
             powerHighlighted: store.bool(forKey: "hud.battery.powerHighlighted"),
-            flowMode: store.string(forKey: "hud.battery.flowMode").flatMap(HUDBatteryFlowMode.init(rawValue:)))
+            flowMode: store.string(forKey: "hud.battery.flowMode").flatMap(HUDBatteryFlowMode.init(rawValue:)),
+            heatWarning: heatWarningOptions(for: nil, in: store))
     }
 
     static func setBatteryOptions(_ options: HUDBatteryOptions, in store: UserDefaults = .standard) {
@@ -360,6 +362,26 @@ enum HUDPreferences {
         store.set(options.power, forKey: "hud.battery.power")
         store.set(options.powerHighlighted, forKey: "hud.battery.powerHighlighted")
         store.set(options.flowMode.rawValue, forKey: "hud.battery.flowMode")
+        setHeatWarningOptions(options.heatWarning, for: nil, in: store)
+    }
+
+    private static func heatWarningOptions(for group: HUDResourceGroup?, in store: UserDefaults) -> HUDHeatWarningOptions {
+        let prefix = group.map { "hud.group.\($0.rawValue)" } ?? "hud.battery"
+        var options = HUDHeatWarningOptions.defaults(for: group)
+        options.enabled = store.object(forKey: "\(prefix).heatWarning.enabled") as? Bool ?? true
+        if let saved = store.object(forKey: "\(prefix).heatWarning.threshold") as? NSNumber,
+           let value = HUDHeatWarningOptions.parsedThreshold(saved.stringValue) {
+            options.thresholdCelsius = value
+        }
+        return options
+    }
+
+    private static func setHeatWarningOptions(_ options: HUDHeatWarningOptions, for group: HUDResourceGroup?, in store: UserDefaults) {
+        let prefix = group.map { "hud.group.\($0.rawValue)" } ?? "hud.battery"
+        store.set(options.enabled, forKey: "\(prefix).heatWarning.enabled")
+        let threshold = HUDHeatWarningOptions.allowedThresholds.contains(options.thresholdCelsius)
+            ? options.thresholdCelsius : HUDHeatWarningOptions.defaults(for: group).thresholdCelsius
+        store.set(threshold, forKey: "\(prefix).heatWarning.threshold")
     }
 
     static func resourceOptions(for group: HUDResourceGroup, in defaults: UserDefaults = .standard) -> HUDResourceOptions {
@@ -385,7 +407,8 @@ enum HUDPreferences {
             highlighted: Set(highlights),
             usageMode: defaults.string(forKey: "hud.group.\(group.rawValue).usageMode").flatMap(HUDUsageMode.init(rawValue:)),
             pressureMode: defaults.string(forKey: "hud.group.ram.pressureMode").flatMap(HUDMemoryPressureMode.init(storedValue:)) ?? .colorHistory,
-            pressureGraphStyle: defaults.string(forKey: "hud.group.ram.pressureGraphStyle").flatMap(HUDMemoryPressureMode.init(storedValue:)) ?? .colorHistory)
+            pressureGraphStyle: defaults.string(forKey: "hud.group.ram.pressureGraphStyle").flatMap(HUDMemoryPressureMode.init(storedValue:)) ?? .colorHistory,
+            heatWarning: heatWarningOptions(for: group, in: defaults))
         options.setUsagePresentation(visible: options.usageVisible, highlighted: options.usageHighlighted)
         return options
     }
@@ -396,6 +419,7 @@ enum HUDPreferences {
         defaults.set(options.highlighted.map(\.rawValue).sorted(), forKey: "hud.group.\(group.rawValue).highlighted")
         defaults.set(options.temperature && group.supportsTemperature, forKey: "hud.group.\(group.rawValue).temperature")
         defaults.set(options.power && group.supportsPower, forKey: "hud.group.\(group.rawValue).power")
+        if group.supportsTemperature { setHeatWarningOptions(options.heatWarning, for: group, in: defaults) }
         if group == .ram {
             defaults.set(options.details, forKey: "hud.group.ram.details")
             defaults.set(options.pressure, forKey: "hud.group.ram.pressure")

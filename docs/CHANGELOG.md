@@ -2,6 +2,12 @@
 
 [← Back to README](../README.md)
 
+### v2.5
+
+- Added a one-time first-launch update check that offers a newer version when available. Weekly and Monthly schedules retain their existing settings and behaviour.
+- Added adjustable **Heat warning** thresholds beside GPU, CPU, and Battery temperature controls. Enabled by default at 95°C for GPU and CPU, and 45°C for Battery, they turn only the temperature reading red while preserving its emphasis setting.
+- Capitalized **(App)** in the GPU, CPU, and MEM HUD labels.
+
 ### v2.4
 
 - Fixed accumulating macOS host-port references while sampling total CPU and memory usage.

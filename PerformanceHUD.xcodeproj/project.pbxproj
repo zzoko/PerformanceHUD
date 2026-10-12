@@ -45,7 +45,6 @@
 
 /* Begin PBXFileReference section */
 		7578F8C1305B60D300CA190B /* PerformanceHUD.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PerformanceHUD.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A18000000000000000000001 /* NativeGlassAlternatives */ = {isa = PBXFileReference; lastKnownFileType = folder; path = NativeGlassAlternatives; sourceTree = "<group>"; };
 		ABC011000000000000000001 /* andrei.PerformanceHUD.PowerHelper */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = andrei.PerformanceHUD.PowerHelper; sourceTree = BUILT_PRODUCTS_DIR; };
 		ABC01100000000000000000E /* PowerHelper/andrei.PerformanceHUD.PowerHelper.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PowerHelper/andrei.PerformanceHUD.PowerHelper.plist; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -90,7 +89,6 @@
 				ABC011000000000000000008 /* PowerHelperShared */,
 				ABC011000000000000000009 /* PowerHelper */,
 				ABC01100000000000000000E /* PowerHelper/andrei.PerformanceHUD.PowerHelper.plist */,
-				A18000000000000000000001 /* NativeGlassAlternatives */,
 				7578F8C2305B60D300CA190B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -346,7 +344,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = K2XC57573H;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
@@ -358,7 +356,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.4;
+				MARKETING_VERSION = 2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = andrei.PerformanceHUD;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -379,7 +377,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = K2XC57573H;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
@@ -391,7 +389,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.4;
+				MARKETING_VERSION = 2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = andrei.PerformanceHUD;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;

@@ -40,7 +40,9 @@ If watts remain blank after setup, open **Power Helper** and check its status. U
 
 ### Updating or removing the app
 
-Keep the app in a stable location, preferably Applications. From v2.0, choose **Check for updates** in the menu, then choose whether to download and restart. **Automatic update checks → Weekly / Monthly** can check in the background; **Off** is the default. Available updates appear in the menu without interrupting a game. Your HUD preferences are retained, and an active CSV log is saved when the app quits for an update. If prompted afterwards, choose **Update Helper** so macOS uses the new bundled helper.
+Keep the app in a stable location, preferably Applications. On first launch, PerformanceHUD makes one update check and offers a newer version if available. This check is separate from the update schedule, including when it is **Off**. If the app is current or the check cannot connect, it stays quiet; you can use **Check for updates** in the menu at any time.
+
+**Automatic update checks → Weekly / Monthly** can check in the background; **Off** remains the default. Scheduled checks show available updates in the menu without interrupting a game. You choose whether to download and restart. Your HUD preferences are retained, and an active CSV log is saved when the app quits for an update. If prompted afterwards, choose **Update Helper** so macOS uses the new bundled helper.
 
 If an update reports that the app is running from a read-only or temporary location, quit it, move **PerformanceHUD.app itself** into Applications using Finder, and open that copy again.
 
@@ -84,7 +86,7 @@ Installing app and granting macOS permissions the first time. These are remember
 
 A locally compiled app generally does not need the downloaded-app Gatekeeper exception. Xcode resolves the pinned Sparkle dependency automatically when building. Xcode is required to build the source, not to follow the downloaded-app installation steps.
 
-Source builds can use **Check for updates** too. Installing an update replaces the app with the official build while keeping your HUD preferences. Local code modifications are not carried over. The [license](../LICENSE) attached to how you obtained your copy still applies.
+Source builds use the same first-launch check and **Check for updates** menu option. Installing an update replaces the app with the official build while keeping your HUD preferences. Local code modifications are not carried over. The [license](../LICENSE) attached to how you obtained your copy still applies.
 
 For regression checks before releasing changes, see [Running the tests](../Tests/README.md).
 

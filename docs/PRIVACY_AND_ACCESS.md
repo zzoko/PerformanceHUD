@@ -2,11 +2,13 @@
 
 [← Back to README](../README.md)
 
-PerformanceHUD processes readings locally on your Mac. The app and its power helper contain no analytics or advertising. They do not send performance readings, CSV logs, game names, or screen content to the developer or any other service. Optional update checks use the network as described below; the power helper does not.
+PerformanceHUD processes readings locally on your Mac. The app and its power helper contain no analytics or advertising. They do not send performance readings, CSV logs, game names, or screen content to the developer or any other service. Update checks use the network as described below; the power helper does not.
 
 ## App updates
 
-**Check for updates** contacts the PerformanceHUD update service hosted by Cloudflare over HTTPS. Automatic checks are **Off** by default; you can choose Weekly or Monthly. Checks happen only while the app is running, including an overdue check after launch. Downloads and restarts require your choice.
+PerformanceHUD makes one update check on first launch, even with **Automatic update checks → Off**. It offers a newer version if available and stays quiet if the app is current or the check cannot connect. This one-time check does not repeat after resetting HUD options or updating the app.
+
+You can also choose **Check for updates** at any time or enable Weekly or Monthly checks. The recurring schedule is **Off** by default. Checks happen only while the app is running, including an overdue scheduled check after launch. All checks contact the PerformanceHUD update service hosted by Cloudflare over HTTPS. Downloads and restarts require your choice.
 
 Cloudflare receives ordinary connection information such as your IP address, request time, and app/updater version information. Sparkle's optional system profiling is disabled, and there is no persistent installation identifier. Cloudflare may process service/security data and aggregate usage metrics.
 

@@ -75,7 +75,7 @@ def check_case(binary, sparkle, framework, wrangler, case):
     rss = ET.Element("rss", {"version": "2.0"})
     channel = ET.SubElement(rss, "channel")
     ET.SubElement(channel, "title").text = "Isolated updater test"
-    if case != "empty":
+    if case not in ("empty", "first-empty"):
         item = ET.SubElement(channel, "item")
         ET.SubElement(item, "title").text = "Disposable fixture 2.0"
         ET.SubElement(item, f"{{{NS}}}version").text = "2"
@@ -93,7 +93,7 @@ def check_case(binary, sparkle, framework, wrangler, case):
         data = bytearray(archive.read_bytes())
         data[len(data) // 2] ^= 1
         archive.write_bytes(data)
-    elif case == "unavailable":
+    elif case in ("unavailable", "first-unavailable"):
         feed.unlink()
     service = root / "service"
     shutil.copy2(ROOT / "UpdateService/src/worker.mjs", service / "worker.mjs")
@@ -158,6 +158,13 @@ def check_case(binary, sparkle, framework, wrangler, case):
             assert result == "SCHEDULED menu reminder; no popup", result
             log = (root / "server.log").read_text()
             assert "GET /archive/" not in log, "Scheduled checks must not download the update"
+        elif case.startswith("first-"):
+            assert result == "FIRST check completed; no popup", events + result
+            result = launch("relaunch")
+            assert result == "FIRST relaunch; no automatic check", result
+            log = (root / "server.log").read_text()
+            assert log.count("GET /appcast.xml") == 1, "Only the first launch should fetch the feed: " + log
+            assert "GET /archive/" not in log, "First checks must not download automatically"
         else:
             assert result.startswith("REJECTED:"), events + result
             assert "Ready to install" not in events, events
@@ -181,7 +188,8 @@ def check_case(binary, sparkle, framework, wrangler, case):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--sparkle", type=Path, required=True)
-    cases = ["valid", "bad-feed", "bad-archive", "empty", "unavailable", "settings", "scheduled"]
+    cases = ["valid", "bad-feed", "bad-archive", "empty", "unavailable", "settings", "scheduled",
+             "first-empty", "first-unavailable"]
     p.add_argument("--case", choices=cases)
     args = p.parse_args()
     sparkle = args.sparkle.resolve()

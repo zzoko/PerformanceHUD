@@ -24,4 +24,15 @@ enum HUDUpdateSchedule: Int, CaseIterable {
 enum HUDUpdatePolicy {
     // Request marker for the official update service.
     static let headers = ["X-PerformanceHUD-Updater": "1"]
+
+    /// Consume once, independently of app versions and the recurring schedule.
+    static func claimFirstLaunchCheck(in store: UserDefaults = .standard) -> Bool {
+        let key = "hud.updates.firstLaunchCheckHandled"
+        guard !store.bool(forKey: key) else { return false }
+        store.set(true, forKey: key)
+        // Older releases already recorded these Sparkle preferences. Use them
+        // only for migration so updating an existing copy is not a first launch.
+        return !store.bool(forKey: "SUHasLaunchedBefore")
+            && store.object(forKey: "SULastCheckTime") == nil
+    }
 }

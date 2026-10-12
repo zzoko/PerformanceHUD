@@ -101,6 +101,9 @@ final class HUDWindowController {
         [HUDMetric: NSLayoutConstraint] = [:]
 
     private var temperatureLabels: [HUDMetric: NSTextField] = [:]
+    private var temperatures: [HUDMetric: Double] = [:]
+    private var temperatureWarnings: [HUDMetric: HUDHeatWarningOptions] = Dictionary(uniqueKeysWithValues:
+        [HUDResourceGroup.cpu, .gpu].map { ($0.totalMetric, HUDPreferences.resourceOptions(for: $0).heatWarning) })
     private var powerLabels: [HUDMetric: NSTextField] = [:]
     private var powerTrailingConstraints: [HUDMetric: NSLayoutConstraint] = [:]
     private var readingColumnRight: CGFloat = 0
@@ -1047,6 +1050,7 @@ final class HUDWindowController {
     }
 
     func setResourceOptions(_ options: HUDResourceOptions, for group: HUDResourceGroup) {
+        if group.supportsTemperature { temperatureWarnings[group.totalMetric] = options.heatWarning }
         highlightedReadings[group.totalMetric] = options.highlighted
         if let appMetric = group.appMetric {
             highlightedReadings[appMetric] = options.highlighted.contains(.focusedApp) ? [.totalUse] : []
@@ -1075,7 +1079,11 @@ final class HUDWindowController {
             powerLabels[group.totalMetric]?.isHidden = !showPower
             let showTemperature = group.supportsTemperature && options.enabled && options.temperature
             if showTemperature { temperatureMetrics.insert(group.totalMetric) }
-            else { temperatureMetrics.remove(group.totalMetric); temperatureLabels[group.totalMetric]?.stringValue = "" }
+            else {
+                temperatureMetrics.remove(group.totalMetric)
+                temperatures.removeValue(forKey: group.totalMetric)
+                temperatureLabels[group.totalMetric]?.stringValue = ""
+            }
             temperatureLabels[group.totalMetric]?.isHidden = !showTemperature
             if group.supportsTotalUse && options.totalUse { hiddenUtilizationMetrics.remove(group.totalMetric) }
             else { hiddenUtilizationMetrics.insert(group.totalMetric) }
@@ -1091,10 +1099,13 @@ final class HUDWindowController {
         for (metric, value) in [(HUDMetric.cpuTotal, sample.cpu), (.gpuTotal, sample.gpu)] {
             guard temperatureMetrics.contains(metric) else { continue }
             if let value, value.isFinite, value > 0, value < 150 {
+                temperatures[metric] = value
                 temperatureLabels[metric]?.stringValue = "\(Int(value.rounded()))°C"
             } else {
+                temperatures.removeValue(forKey: metric)
                 temperatureLabels[metric]?.stringValue = ""
             }
+            temperatureLabels[metric]?.textColor = readingColor(for: metric, kind: .temperature)
         }
     }
 
@@ -1313,6 +1324,9 @@ final class HUDWindowController {
     }
 
     private func readingColor(for metric: HUDMetric, kind: HUDReadingKind) -> NSColor {
+        if kind == .temperature, let warning = temperatureWarnings[metric] {
+            return HUDStyle.temperatureColor(temperatures[metric], warning: warning, background: textBackground)
+        }
         if metric == .fps {
             return (fpsValueHighlighted ? HUDStyle.TextStyle.emphasizedReading : .reading).color(background: textBackground)
         }

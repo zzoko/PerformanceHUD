@@ -3,6 +3,11 @@ import AppKit
 enum HUDStyle {
     static let warningYellow = NSColor(srgbRed: 1, green: 0.85, blue: 0.24, alpha: 1)
 
+    static func temperatureColor(_ temperature: Double?, warning: HUDHeatWarningOptions,
+                                 background: HUDBackground) -> NSColor {
+        warning.isTriggered(by: temperature) ? .systemRed : readingColor(background: background)
+    }
+
     // Keep these names stable when discussing or refining the HUD typography.
     // Font size belongs to the existing layout; each style changes only weight/color.
     enum TextStyle: String {
