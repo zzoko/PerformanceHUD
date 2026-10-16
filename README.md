@@ -11,7 +11,11 @@ Download the ready-built app for **$3.99**, or build it yourself for free. Both 
 
 Purchases encourage maintenance of PerformanceHUD. The paid app can be used personally or commercially, including in monetized videos and streams. Free source builds and modifications are for **personal, non-commercial use**. Resale and external redistribution are not permitted. See the [license](LICENSE) for details.
 
-If you prefer to build the app yourself but would still like to support it, **GitHub Sponsorships** will offer another way to contribute, it will be added later.
+You can also support PerformanceHUD's ongoing development and maintenance through **[GitHub Sponsors](https://github.com/sponsors/zzoko)**, whether you build the app yourself or use the ready-built version.
+
+<p>
+  <a href="https://github.com/sponsors/zzoko"><img src="docs/images/github-sponsors.svg" alt="Support through GitHub Sponsors" width="250" height="64"></a>
+</p>
 
 ![Repository activity: daily Git clones over the last 14 days](https://raw.githubusercontent.com/zzoko/PerformanceHUD/stats/repository-activity.svg)
 
