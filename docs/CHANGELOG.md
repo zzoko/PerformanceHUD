@@ -2,6 +2,11 @@
 
 [← Back to README](../README.md)
 
+### v2.6
+
+- Added **FPS**, **Balanced**, and **Detailed** HUD presets, plus saved presets that can be renamed or deleted. Presets control categories, readings, emphasis, heat warnings, and reading modes; layout, appearance, Auto hide, and app settings stay independent.
+- The menu identifies matching presets automatically and shows **Custom** after category or reading options change. Balanced retains the existing default selections; Reset → All restores all default HUD settings without deleting saved presets.
+
 ### v2.5
 
 - Added a one-time first-launch update check that offers a newer version when available. Weekly and Monthly schedules retain their existing settings and behaviour.

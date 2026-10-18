@@ -13,6 +13,14 @@ final class AppDelegate:
 
     private var controlsGuide: HUDControlsGuide?
     private var hotkeyEditor: HUDHotkeyEditor?
+    private let presetStore = HUDPresetStore()
+    private var presetMenu: HUDPresetMenuController?
+    private var presetNamePrompt: HUDPresetNamePrompt?
+    private var presetManager: HUDPresetManagerWindowController?
+    private var presetObservation: NSObjectProtocol?
+    private var presetRefreshPending = false
+    private var applyingHUDConfiguration = false
+    private var presetFansAvailable = true
     private var updater: HUDUpdater?
     private var checkUpdatesItem: NSMenuItem?
     private var updateScheduleItems: [HUDUpdateSchedule: NSMenuItem] = [:]
@@ -182,6 +190,11 @@ final class AppDelegate:
             hudWindow?.updateFans(sample)
             fanMenuView?.update(sample: sample, options: options)
             if availabilityChanged { reconcileMonitoring() }
+            let fansAvailable = sample.status != .noFans
+            if fansAvailable != presetFansAvailable {
+                presetFansAvailable = fansAvailable
+                schedulePresetRefresh()
+            }
         }
 
         // Battery
@@ -199,6 +212,11 @@ final class AppDelegate:
         // Menu
         setupMenuBar()
         setupHUDShortcuts()
+        presetObservation = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: UserDefaults.standard, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.schedulePresetRefresh() }
+        }
 
         // Active app detection
         setupApplicationMonitoring()
@@ -675,6 +693,16 @@ final class AppDelegate:
 
         // MARK: Metrics
 
+        let presets = HUDPresetMenuController(
+            onSelect: { [weak self] selection in self?.selectPreset(selection) },
+            onSave: { [weak self] in self?.saveCurrentPreset() },
+            onManage: { [weak self] in self?.managePresets() }
+        )
+        presetMenu = presets
+        updatePresetMenu()
+        menu.addItem(presets.menuItem)
+        menu.addItem(.separator())
+
         var categories: [HUDCategoryMenuView] = []
         let fpsView = HUDFPSMenuView(options: HUDPreferences.fpsOptions, alignment: HUDPreferences.alignment)
         fpsView.onChange = { [weak self] options in
@@ -925,6 +953,8 @@ final class AppDelegate:
         statusItem?.menu?.cancelTracking()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            presetNamePrompt?.close()
+            presetManager?.close()
             if hotkeyEditor == nil { hotkeyEditor = HUDHotkeyEditor(hotkeys: hotkeys) }
             hotkeyEditor?.present()
         }
@@ -941,6 +971,7 @@ final class AppDelegate:
 
     func menuWillOpen(_ menu: NSMenu) {
         updateGlassMenu()
+        updatePresetMenu()
         if menu === statusItem?.menu, let categories = categoryMenuView {
             let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
             let otherHeight = menu.size.height - categories.frame.height
@@ -984,6 +1015,7 @@ final class AppDelegate:
     private func powerHelperStateChanged() {
         if powerMonitor.helper.shouldTurnPowerOff { setPowerSelections(false) }
         updatePowerHelperMenu()
+        schedulePresetRefresh()
     }
 
     private func updatePackagePowerMenu() {
@@ -1152,9 +1184,107 @@ final class AppDelegate:
         }
     }
 
+    // MARK: - Presets
+
+    private var presetAvailability: HUDPresetAvailability {
+        HUDPresetAvailability(fansAvailable: fanMonitor.sample.status != .noFans,
+                              powerAvailable: !powerMonitor.helper.shouldTurnPowerOff)
+    }
+
+    private func schedulePresetRefresh() {
+        guard !applyingHUDConfiguration, !presetRefreshPending else { return }
+        presetRefreshPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            presetRefreshPending = false
+            updatePresetMenu()
+        }
+    }
+
+    private func updatePresetMenu() {
+        guard !applyingHUDConfiguration else { return }
+        let selection = presetStore.selection(for: .capture(), availability: presetAvailability)
+        presetMenu?.update(selection: selection, savedPresets: presetStore.savedPresets)
+    }
+
+    private func selectPreset(_ selection: HUDPresetSelection) {
+        statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let configuration: HUDPresetConfiguration
+            switch selection {
+            case .builtIn(let preset):
+                configuration = .builtIn(preset)
+                presetStore.preferredSavedID = nil
+            case .saved(let id, _):
+                guard let saved = presetStore.savedPresets.first(where: { $0.id == id }) else { return }
+                configuration = saved.configuration
+                presetStore.preferredSavedID = id
+            case .custom: return
+            }
+            applyingHUDConfiguration = true
+            configuration.apply()
+            applyHUDConfiguration(resetDesign: false)
+        }
+    }
+
+    private func setPresetEditing(_ editing: Bool) {
+        if editing { hotkeys.beginEditing() }
+        else { hotkeys.endEditing() }
+    }
+
+    private func saveCurrentPreset() {
+        statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            hotkeyEditor?.close()
+            presetManager?.close()
+            presetNamePrompt?.close()
+            let configuration = HUDPresetConfiguration.capture()
+            let prompt = HUDPresetNamePrompt(onSave: { [weak self] name in
+                guard let self else { return }
+                try presetStore.add(name: name, configuration: configuration)
+                updatePresetMenu()
+            }, onEditingChanged: { [weak self] editing in self?.setPresetEditing(editing) })
+            presetNamePrompt = prompt
+            prompt.show()
+        }
+    }
+
+    private func managePresets() {
+        statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            hotkeyEditor?.close()
+            presetNamePrompt?.close()
+            if presetManager == nil {
+                presetManager = HUDPresetManagerWindowController(onRename: { [weak self] id, name in
+                    guard let self else { return }
+                    try presetStore.rename(id: id, name: name)
+                    presetManager?.update(presets: presetStore.savedPresets)
+                    updatePresetMenu()
+                }, onDelete: { [weak self] id in
+                    guard let self else { return }
+                    presetStore.delete(id: id)
+                    presetManager?.update(presets: presetStore.savedPresets)
+                    updatePresetMenu()
+                }, onEditingChanged: { [weak self] editing in self?.setPresetEditing(editing) })
+            }
+            presetManager?.update(presets: presetStore.savedPresets)
+            presetManager?.show()
+        }
+    }
+
     private func resetHUDOptions() {
+        applyingHUDConfiguration = true
         HUDPreferences.resetOptions()
-        HUDGlassStyle.apply(HUDPreferences.glassOptions)
+        HUDPreferences.hudPosition = nil
+        presetStore.preferredSavedID = nil
+        applyHUDConfiguration(resetDesign: true)
+    }
+
+    private func applyHUDConfiguration(resetDesign: Bool) {
+        if resetDesign { HUDGlassStyle.apply(HUDPreferences.glassOptions) }
         HUDPreferences.applyFanAvailability(fanMonitor.sample)
         // Restore display defaults without bypassing a denied or failed helper.
         if powerMonitor.helper.shouldTurnPowerOff {
@@ -1181,17 +1311,22 @@ final class AppDelegate:
         hudWindow?.setFanOptions(HUDPreferences.fanOptions)
         hudWindow?.setMiscOptions(HUDPreferences.miscOptions)
         hudWindow?.setPackagePowerOptions(HUDPreferences.packagePowerOptions)
-        hudWindow?.setAutoHideAnimated(HUDPreferences.autoHideAnimated)
-        hudWindow?.setAutoHideMode(HUDPreferences.autoHideMode)
-        hudWindow?.setAlignment(HUDPreferences.alignment)
+        if resetDesign {
+            hudWindow?.setAutoHideAnimated(HUDPreferences.autoHideAnimated)
+            hudWindow?.setAutoHideMode(HUDPreferences.autoHideMode)
+            hudWindow?.setAlignment(HUDPreferences.alignment)
+        }
         hudWindow?.setFPSOptions(HUDPreferences.fpsOptions)
-        hudWindow?.setHUDScale(hudScale)
-        hudWindow?.setBackground(hudBackground)
-        hudWindow?.resetPosition()
+        hudWindow?.setMetricEnabled(.deviceInfo, enabled: enabledMetrics.contains(.deviceInfo))
+        if resetDesign {
+            hudWindow?.setHUDScale(hudScale)
+            hudWindow?.setBackground(hudBackground)
+            hudWindow?.resetPosition()
+        }
         hudWindow?.setHUDEnabled(hudEnabled)
         reconcileMonitoring()
 
-        // Display reset preserves the independently saved hotkeys.
+        applyingHUDConfiguration = false
         setupMenuBar()
         updatePowerHelperMenu()
     }
@@ -1528,6 +1663,8 @@ final class AppDelegate:
         hotkeys.stop()
         if let glassObservation { NotificationCenter.default.removeObserver(glassObservation) }
         glassObservation = nil
+        if let presetObservation { NotificationCenter.default.removeObserver(presetObservation) }
+        presetObservation = nil
 
         // FPS
         fpsMonitor?

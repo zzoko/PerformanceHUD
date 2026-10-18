@@ -1,6 +1,6 @@
 import Foundation
 
-struct HUDPackagePowerOptions: Equatable {
+struct HUDPackagePowerOptions: Codable, Equatable {
     var enabled = true
     var highlighted = false
 }
@@ -15,11 +15,11 @@ enum HUDPowerDemand {
     }
 }
 
-enum HUDUsageMode: String, CaseIterable {
+enum HUDUsageMode: String, CaseIterable, Codable {
     case total, app, both
 }
 
-nonisolated enum HUDMemoryPressureMode: String, CaseIterable, Sendable {
+nonisolated enum HUDMemoryPressureMode: String, CaseIterable, Sendable, Codable {
     case text, meter, colorMeter, history, colorHistory
 
     static let graphStyles: [Self] = [.meter, .colorMeter, .history, .colorHistory]
@@ -55,16 +55,16 @@ nonisolated enum HUDMemoryPressureMode: String, CaseIterable, Sendable {
     }
 }
 
-enum HUDReadingKind: String, CaseIterable {
+enum HUDReadingKind: String, CaseIterable, Codable {
     case power, temperature, totalUse, focusedApp, details, pressure
 }
 
-enum HUDBatteryFlowMode: String, CaseIterable {
+enum HUDBatteryFlowMode: String, CaseIterable, Codable {
     case always, auto, off
     var title: String { rawValue.capitalized }
 }
 
-struct HUDHeatWarningOptions: Equatable {
+struct HUDHeatWarningOptions: Codable, Equatable {
     var enabled = true
     var thresholdCelsius = 95
 
@@ -89,7 +89,7 @@ struct HUDHeatWarningOptions: Equatable {
     }
 }
 
-struct HUDBatteryOptions: Equatable {
+struct HUDBatteryOptions: Codable, Equatable {
     var enabled: Bool
     var temperature: Bool
     var charge: Bool
@@ -118,7 +118,7 @@ struct HUDBatteryOptions: Equatable {
     }
 }
 
-enum HUDResourceGroup: String, CaseIterable {
+enum HUDResourceGroup: String, CaseIterable, Codable {
     case gpu, cpu, ane, ram
 
     var title: String { self == .ram ? "MEM" : rawValue.uppercased() }
@@ -133,7 +133,7 @@ enum HUDResourceGroup: String, CaseIterable {
     }
 }
 
-struct HUDResourceOptions: Equatable {
+struct HUDResourceOptions: Codable, Equatable {
     var enabled: Bool
     var temperature: Bool
     var totalUse: Bool

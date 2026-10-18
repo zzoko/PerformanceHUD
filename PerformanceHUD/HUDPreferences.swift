@@ -122,8 +122,16 @@ enum HUDPreferences {
     }
 
     static var alignment: HUDAlignment {
-        get { HUDAlignment(rawValue: defaults.string(forKey: "hud.alignment") ?? "") ?? .vertical }
+        get { alignment(in: defaults) }
         set { defaults.set(newValue.rawValue, forKey: "hud.alignment") }
+    }
+
+    static func alignment(in store: UserDefaults) -> HUDAlignment {
+        HUDAlignment(rawValue: store.string(forKey: "hud.alignment") ?? "") ?? .vertical
+    }
+
+    static func setAlignment(_ alignment: HUDAlignment, in store: UserDefaults) {
+        store.set(alignment.rawValue, forKey: "hud.alignment")
     }
 
     static var fpsOptions: HUDFPSOptions {
@@ -151,53 +159,35 @@ enum HUDPreferences {
     // MARK: - HUD Scale
 
     static var hudScale: HUDScale {
+        get { hudScale(in: defaults) }
+        set { setHUDScale(newValue, in: defaults) }
+    }
 
-        get {
+    static func hudScale(in store: UserDefaults) -> HUDScale {
+        guard store.object(forKey: hudScaleKey) != nil else { return .normal }
+        return HUDScale(rawValue: store.double(forKey: hudScaleKey))
+    }
 
-            /*
-             First launch:
-             HUD size defaults to 1x.
-            */
-
-            guard
-                defaults.object(
-                    forKey: hudScaleKey
-                ) != nil
-            else {
-                return .normal
-            }
-
-            let value =
-                defaults.double(
-                    forKey: hudScaleKey
-                )
-
-            return HUDScale(
-                rawValue: value
-            )
-        }
-
-        set {
-
-            defaults.set(
-                newValue.rawValue,
-                forKey: hudScaleKey
-            )
-        }
+    static func setHUDScale(_ scale: HUDScale, in store: UserDefaults) {
+        store.set(scale.rawValue, forKey: hudScaleKey)
     }
 
     // MARK: - Background
 
     static var background: HUDBackground {
-        get {
-            let saved = HUDBackground(rawValue: defaults.string(forKey: "hud.background") ?? "")
-            // Follow macOS for fresh/reset settings and migrate the retired Clear/Off choices.
-            guard let saved, saved == .system || HUDBackground.menuOptions.contains(saved) else { return .system }
-            return saved
-        }
-        set {
-            defaults.set(newValue.rawValue, forKey: "hud.background")
-        }
+        get { background(in: defaults) }
+        set { setBackground(newValue, in: defaults) }
+    }
+
+    static func background(in store: UserDefaults) -> HUDBackground {
+        let saved = HUDBackground(rawValue: store.string(forKey: "hud.background") ?? "")
+        // Follow macOS for fresh/reset settings and migrate the retired Clear/Off choices.
+        guard let saved, saved == .system || HUDBackground.menuOptions.contains(saved) else { return .system }
+        return saved
+    }
+
+    static func setBackground(_ background: HUDBackground, in store: UserDefaults) {
+        store.set(background.rawValue, forKey: "hud.background")
     }
 
     // MARK: - Liquid Glass
@@ -224,19 +214,22 @@ enum HUDPreferences {
     // MARK: - Position
 
     static var hudPosition: CGPoint? {
-        get {
-            guard let value = defaults.dictionary(forKey: "hud.position"),
-                  let x = value["x"] as? Double,
-                  let y = value["y"] as? Double,
-                  x.isFinite, y.isFinite else { return nil }
-            return CGPoint(x: x, y: y)
-        }
-        set {
-            if let point = newValue {
-                defaults.set(["x": Double(point.x), "y": Double(point.y)], forKey: "hud.position")
-            } else {
-                defaults.removeObject(forKey: "hud.position")
-            }
+        get { hudPosition(in: defaults) }
+        set { setHUDPosition(newValue, in: defaults) }
+    }
+
+    static func hudPosition(in store: UserDefaults) -> CGPoint? {
+        guard let value = store.dictionary(forKey: "hud.position"),
+              let x = value["x"] as? Double, let y = value["y"] as? Double,
+              x.isFinite, y.isFinite else { return nil }
+        return CGPoint(x: x, y: y)
+    }
+
+    static func setHUDPosition(_ position: CGPoint?, in store: UserDefaults) {
+        if let position, position.x.isFinite, position.y.isFinite {
+            store.set(["x": Double(position.x), "y": Double(position.y)], forKey: "hud.position")
+        } else {
+            store.removeObject(forKey: "hud.position")
         }
     }
 
@@ -258,57 +251,31 @@ enum HUDPreferences {
         store.set(options.readings.map(\.rawValue).sorted(), forKey: "hud.misc.readings")
     }
 
-    static func isMetricEnabled(
-        _ metric: HUDMetric
-    ) -> Bool {
-
-        let key =
-            metricKey(
-                metric
-            )
-
-        /*
-         If this metric has never had a saved
-         preference, use its defaultEnabled value.
-        */
-
-        if defaults.object(
-            forKey: key
-        ) == nil {
-
-            return metric.defaultEnabled
-        }
-
-        return defaults.bool(
-            forKey: key
-        )
+    static func isMetricEnabled(_ metric: HUDMetric, in store: UserDefaults = .standard) -> Bool {
+        let key = metricKey(metric)
+        guard store.object(forKey: key) != nil else { return metric.defaultEnabled }
+        return store.bool(forKey: key)
     }
 
-    static func setMetricEnabled(
-        _ metric: HUDMetric,
-        enabled: Bool
-    ) {
-
-        defaults.set(
-            enabled,
-            forKey:
-                metricKey(
-                    metric
-                )
-        )
+    static func setMetricEnabled(_ metric: HUDMetric, enabled: Bool, in store: UserDefaults = .standard) {
+        store.set(enabled, forKey: metricKey(metric))
     }
 
     // MARK: - Metric Keys
 
     static var packagePowerOptions: HUDPackagePowerOptions {
-        get {
-            HUDPackagePowerOptions(enabled: defaults.object(forKey: "hud.package.power") as? Bool ?? true,
-                                   highlighted: defaults.object(forKey: "hud.package.highlighted") as? Bool ?? false)
-        }
-        set {
-            defaults.set(newValue.enabled, forKey: "hud.package.power")
-            defaults.set(newValue.highlighted, forKey: "hud.package.highlighted")
-        }
+        get { packagePowerOptions(in: defaults) }
+        set { setPackagePowerOptions(newValue, in: defaults) }
+    }
+
+    static func packagePowerOptions(in store: UserDefaults) -> HUDPackagePowerOptions {
+        HUDPackagePowerOptions(enabled: store.object(forKey: "hud.package.power") as? Bool ?? true,
+                               highlighted: store.object(forKey: "hud.package.highlighted") as? Bool ?? false)
+    }
+
+    static func setPackagePowerOptions(_ options: HUDPackagePowerOptions, in store: UserDefaults) {
+        store.set(options.enabled, forKey: "hud.package.power")
+        store.set(options.highlighted, forKey: "hud.package.highlighted")
     }
 
     // Only confirmed fanless hardware forces the category off. Temporary read
@@ -322,20 +289,26 @@ enum HUDPreferences {
     }
 
     static var fanOptions: HUDFanOptions {
-        get { HUDFanOptions(enabled: isMetricEnabled(.fans),
-            usage: defaults.object(forKey: "hud.fan.usage") as? Bool ?? true,
-            mode: defaults.string(forKey: "hud.fan.mode").flatMap(HUDFanMode.init(rawValue:)) ?? .bar,
-            average: defaults.object(forKey: "hud.fan.average") as? Bool ?? true,
-            averageMode: defaults.string(forKey: "hud.fan.averageMode").flatMap(HUDFanAverageMode.init(rawValue:)) ?? .horizontal,
-            rpmHighlighted: defaults.bool(forKey: "hud.fan.rpmHighlighted")) }
-        set {
-            setMetricEnabled(.fans, enabled: newValue.enabled)
-            defaults.set(newValue.usage, forKey: "hud.fan.usage")
-            defaults.set(newValue.mode.rawValue, forKey: "hud.fan.mode")
-            defaults.set(newValue.average, forKey: "hud.fan.average")
-            defaults.set(newValue.averageMode.rawValue, forKey: "hud.fan.averageMode")
-            defaults.set(newValue.rpmHighlighted, forKey: "hud.fan.rpmHighlighted")
-        }
+        get { fanOptions(in: defaults) }
+        set { setFanOptions(newValue, in: defaults) }
+    }
+
+    static func fanOptions(in store: UserDefaults) -> HUDFanOptions {
+        HUDFanOptions(enabled: isMetricEnabled(.fans, in: store),
+            usage: store.object(forKey: "hud.fan.usage") as? Bool ?? true,
+            mode: store.string(forKey: "hud.fan.mode").flatMap(HUDFanMode.init(rawValue:)) ?? .bar,
+            average: store.object(forKey: "hud.fan.average") as? Bool ?? true,
+            averageMode: store.string(forKey: "hud.fan.averageMode").flatMap(HUDFanAverageMode.init(rawValue:)) ?? .horizontal,
+            rpmHighlighted: store.bool(forKey: "hud.fan.rpmHighlighted"))
+    }
+
+    static func setFanOptions(_ options: HUDFanOptions, in store: UserDefaults) {
+        setMetricEnabled(.fans, enabled: options.enabled, in: store)
+        store.set(options.usage, forKey: "hud.fan.usage")
+        store.set(options.mode.rawValue, forKey: "hud.fan.mode")
+        store.set(options.average, forKey: "hud.fan.average")
+        store.set(options.averageMode.rawValue, forKey: "hud.fan.averageMode")
+        store.set(options.rpmHighlighted, forKey: "hud.fan.rpmHighlighted")
     }
 
     static var batteryOptions: HUDBatteryOptions {

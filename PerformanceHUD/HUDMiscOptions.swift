@@ -1,6 +1,6 @@
 import Foundation
 
-enum HUDMiscReading: String, CaseIterable {
+enum HUDMiscReading: String, CaseIterable, Codable {
     case process, resolution, refreshRate, gameMode, thermal
 
     var title: String {
@@ -14,7 +14,7 @@ enum HUDMiscReading: String, CaseIterable {
     }
 }
 
-struct HUDMiscOptions: Equatable {
+struct HUDMiscOptions: Codable, Equatable {
     var enabled = false
     var readings = Set(HUDMiscReading.allCases)
     var visibleReadings: [HUDMiscReading] {

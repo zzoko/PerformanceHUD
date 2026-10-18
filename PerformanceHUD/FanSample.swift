@@ -66,7 +66,7 @@ nonisolated struct FanDisplayReading: Equatable, Sendable {
     var rpmText: String { rpm.flatMap(FanDecoder.rpm).map { "\(Int($0.rounded())) RPM" } ?? "" }
 }
 
-enum HUDFanMode: String, CaseIterable {
+enum HUDFanMode: String, CaseIterable, Codable {
     // Keep stored values compatible while presenting Total (bar), RPM, Both.
     case bar, rpm, both
     var title: String { self == .rpm ? "RPM" : self == .bar ? "Total" : "Both" }
@@ -74,7 +74,7 @@ enum HUDFanMode: String, CaseIterable {
     var showsBar: Bool { self != .rpm }
 }
 
-struct HUDFanOptions: Equatable {
+struct HUDFanOptions: Codable, Equatable {
     var enabled = true
     var usage = true
     var mode: HUDFanMode = .bar
@@ -87,7 +87,7 @@ struct HUDFanOptions: Equatable {
     }
 }
 
-enum HUDFanAverageMode: String, CaseIterable {
+enum HUDFanAverageMode: String, CaseIterable, Codable {
     case vertical, horizontal, both
     var title: String { rawValue.capitalized }
 }

@@ -318,8 +318,9 @@ final class HUDResourceMasterButton: NSButton {
         super.layout()
         // Menu views may be measured at zero width before the category assigns its frame.
         let height = nameLabel.intrinsicContentSize.height
-        nameLabel.frame = NSRect(x: 38, y: (bounds.height - height) / 2,
-                                width: max(0, bounds.width - 38), height: height)
+        let inset = HUDCategoryLayout.categoryLabelInset
+        nameLabel.frame = NSRect(x: inset, y: (bounds.height - height) / 2,
+                                width: max(0, bounds.width - inset), height: height)
     }
 
     override func draw(_ dirtyRect: NSRect) {

@@ -1,11 +1,11 @@
 import AppKit
 
-enum HUDFPSDisplayMode: String, CaseIterable {
+enum HUDFPSDisplayMode: String, CaseIterable, Codable {
     case value, history, both
     var title: String { rawValue.capitalized }
 }
 
-struct HUDFPSOptions {
+struct HUDFPSOptions: Codable, Equatable {
     var enabled: Bool
     var mode: HUDFPSDisplayMode
     var valueHighlighted = true

@@ -5,8 +5,10 @@ import AppKit
 enum HUDCategoryLayout {
     static let categoryLeading: CGFloat = 8
     static let categoryWidth: CGFloat = 116
+    static let categoryLabelInset: CGFloat = 38
     static let readingLeading: CGFloat = 136
     static let readingWidth: CGFloat = 148
+    static let readingLabelInset: CGFloat = 24
     static let modeLeading: CGFloat = 296
     static var modeWidth: CGFloat {
         let control = NSSegmentedControl(labels: ["Vertical", "Horizontal", "Both"],
@@ -85,7 +87,7 @@ class HUDCategoryMenuView: NSView {
         for (index, row) in rows.enumerated() {
             let y = grid.padding + CGFloat(index) * grid.rowHeight
             let label = row.reading as? NSTextField
-            let inset: CGFloat = label == nil ? 0 : 24
+            let inset: CGFloat = label == nil ? 0 : grid.readingLabelInset
             let height = label?.intrinsicContentSize.height ?? (grid.rowHeight - 4)
             row.reading.frame = NSRect(x: grid.readingLeading + inset, y: y + (grid.rowHeight - height) / 2,
                 width: (row.fullWidth ? bounds.width - grid.readingLeading - 14 : grid.readingWidth) - inset,
