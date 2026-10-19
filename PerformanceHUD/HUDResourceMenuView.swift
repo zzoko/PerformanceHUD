@@ -17,6 +17,8 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     private var flowControl: NSSegmentedControl?
     private let flowHighlight = HUDEmphasisButton()
     private var flowLabel: NSTextField?
+    private var anePowerLabel: NSTextField?
+    private let anePowerHighlight = HUDEmphasisButton()
     private let master = HUDResourceMasterButton(title: "", target: nil, action: nil)
     private var flowMode: HUDBatteryFlowMode = .auto
 
@@ -52,6 +54,16 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             : [(4, "Power"), (1, "Temperature"), (7, "Use")]
         var rows: [HUDCategoryMenuRow] = []
         for (tag, name) in readings {
+            if group == .ane {
+                let label = NSTextField(labelWithString: name)
+                label.font = .menuFont(ofSize: 0)
+                anePowerLabel = label
+                anePowerHighlight.target = self
+                anePowerHighlight.action = #selector(anePowerHighlightChanged)
+                anePowerHighlight.setAccessibilityLabel("Emphasize ANE Power")
+                rows.append(.init(reading: label, emphasis: anePowerHighlight))
+                continue
+            }
             if group == nil && tag == 4 {
                 let label = NSTextField(labelWithString: name)
                 label.font = .menuFont(ofSize: 0)
@@ -166,6 +178,24 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     @objc private func changed(_ sender: NSButton) {
+        if group == .ane && sender.tag == 0 {
+            guard powerAvailability.allowsPowerToggle else {
+                // Remember the requested category while helper setup controls
+                // whether its only reading can be enabled.
+                options.enabled = true
+                options.power = false
+                refresh()
+                onChange?(options)
+                onPowerSetup?()
+                return
+            }
+            options.enabled = sender.state == .on
+            // Older settings may have left the removed Power checkbox off.
+            if options.enabled { options.power = true }
+            refresh()
+            onChange?(options)
+            return
+        }
         if group != nil && sender.tag == 4 && !powerAvailability.allowsPowerToggle {
             refresh()
             onPowerSetup?()
@@ -206,6 +236,14 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         refresh()
         onChange?(options)
         notifyBatteryChange()
+    }
+
+    @objc private func anePowerHighlightChanged() {
+        guard anePowerHighlight.isEnabled else { return }
+        if anePowerHighlight.state == .on { options.highlighted.insert(.power) }
+        else { options.highlighted.remove(.power) }
+        refresh()
+        onChange?(options)
     }
 
     private func notifyBatteryChange() {
@@ -274,6 +312,17 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             power.alphaValue = powerAvailability.usesNormalAppearance ? 1 : 0.5
             power.toolTip = powerAvailability.explanation
             power.setAccessibilityHelp(power.toolTip)
+        }
+        if group == .ane {
+            let visible = options.enabled && options.power
+            master.state = visible ? .on : .off
+            master.toolTip = powerAvailability.explanation
+            master.setAccessibilityHelp(powerAvailability.explanation)
+            anePowerLabel?.textColor = visible ? .labelColor : .disabledControlTextColor
+            anePowerLabel?.alphaValue = powerAvailability.usesNormalAppearance ? 1 : 0.5
+            anePowerLabel?.toolTip = powerAvailability.explanation
+            anePowerHighlight.state = options.highlighted.contains(.power) ? .on : .off
+            anePowerHighlight.isEnabled = visible && powerAvailability.allowsPowerToggle
         }
     }
 }

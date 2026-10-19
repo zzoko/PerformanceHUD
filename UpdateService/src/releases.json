@@ -1,5 +1,11 @@
 [
   {
+    "file": "PerformanceHUD-2.6-14.zip",
+    "build": "14",
+    "version": "2.6",
+    "sha256": "fb7925d396ebdedb191d223afd268f9b60c5c1a532612dd2a28229d58fd5a9df"
+  },
+  {
     "file": "PerformanceHUD-2.5-13.zip",
     "build": "13",
     "version": "2.5",
@@ -10,11 +16,5 @@
     "build": "12",
     "version": "2.4",
     "sha256": "99ee338c4c156dae57558a6a9916d2b8dda43aae308ea104d65b3916ee4d5672"
-  },
-  {
-    "file": "PerformanceHUD-2.3-11.zip",
-    "build": "11",
-    "version": "2.3",
-    "sha256": "931c95d6058b78cc59c22695c91bb732bd079735df95870091a80307ee23d727"
   }
 ]

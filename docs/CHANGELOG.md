@@ -2,6 +2,11 @@
 
 [← Back to README](../README.md)
 
+### v2.7
+
+- Simplified **ANE** to a single category switch, keeping its Power label, emphasis control, and helper setup access.
+- Changed the **FPS** preset to show only the frame-rate value, without the history graph. Balanced and Detailed retain their existing defaults.
+
 ### v2.6
 
 - Added **FPS**, **Balanced**, and **Detailed** HUD presets, plus saved presets that can be renamed or deleted. Presets control categories, readings, emphasis, heat warnings, and reading modes; layout, appearance, Auto hide, and app settings stay independent.

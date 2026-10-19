@@ -32,13 +32,16 @@ import AppKit
         check(presets.selection(for: balanced).title == "Balanced", "Fresh settings select Balanced")
 
         var expectedFPS = balanced
+        expectedFPS.fps.mode = .value
         for group in HUDResourceGroup.allCases { expectedFPS.resources[group]?.enabled = false }
         expectedFPS.packagePower.enabled = false
         expectedFPS.fans.enabled = false
         expectedFPS.battery.enabled = false
         expectedFPS.misc.enabled = false
         expectedFPS.deviceInfo = false
-        check(fpsOnly == expectedFPS, "FPS changes category visibility and no other reading choices")
+        check(fpsOnly == expectedFPS, "FPS shows only the frame-rate value and retains other reading choices")
+        check(fpsOnly.fps.visibleMetrics(alignment: .vertical) == [.fps],
+              "FPS preset does not display the history graph in vertical mode")
         var expectedFull = balanced
         for group in [HUDResourceGroup.gpu, .cpu, .ram] {
             expectedFull.resources[group]?.selectUsageMode(.both)

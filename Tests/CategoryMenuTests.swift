@@ -231,6 +231,40 @@ import AppKit
         check(!changed.enabled && !mode.isEnabled && !use.isEnabled, "Category switch disables subordinate controls")
         controls[0]!.performClick(nil)
         check(changed.enabled && changed.focusedApp && changed.power && mode.isEnabled, "Category returns with its selections")
+        let aneMaster: NSButton = member(ane, "master")
+        let aneHighlight: HUDEmphasisButton = member(ane, "anePowerHighlight")
+        let aneLabel = ane.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == "Power" }
+        check(ane.subviews.allSatisfy { !($0 is HUDReadingCheckbox) } && aneLabel != nil,
+              "ANE has a Power label and one category switch without a duplicate checkbox")
+        var aneOptions = options
+        ane.onChange = { aneOptions = $0 }
+        aneMaster.performClick(nil)
+        check(aneOptions.visibleMetrics(for: .ane).isEmpty && !aneHighlight.isEnabled
+              && aneOptions.highlighted.contains(.power),
+              "ANE category switch hides its only reading and preserves emphasis")
+        aneMaster.performClick(nil)
+        check(aneOptions.visibleMetrics(for: .ane) == [.aneTotal] && aneHighlight.isEnabled,
+              "ANE category switch restores power without a second checkbox")
+        aneHighlight.performClick(nil)
+        check(!aneOptions.highlighted.contains(.power) && aneMaster.state == .on,
+              "ANE power emphasis remains independent of category visibility")
+        ane.setPowerState(.ready, selected: false)
+        check(aneMaster.state == .off && !aneHighlight.isEnabled,
+              "An older unchecked ANE Power setting shows the sole toggle as off")
+        aneMaster.performClick(nil)
+        check(aneOptions.enabled && aneOptions.power && aneMaster.state == .on,
+              "The sole ANE toggle can enable an older unchecked Power setting")
+        aneMaster.performClick(nil)
+        var aneSetupCount = 0
+        ane.onPowerSetup = { aneSetupCount += 1 }
+        ane.setPowerState(.setupRequired, selected: false)
+        aneMaster.performClick(nil)
+        check(aneSetupCount == 1 && aneOptions.visibleMetrics(for: .ane).isEmpty
+              && aneMaster.state == .off && !aneHighlight.isEnabled,
+              "ANE switch offers helper setup while keeping unavailable power off")
+        ane.setPowerState(.ready, selected: true)
+        check(aneMaster.state == .on && aneHighlight.isEnabled,
+              "Helper approval restores the ANE category requested through its sole switch")
         let socMaster: NSButton = member(soc, "master")
         let socHighlight: HUDEmphasisButton = member(soc, "highlight")
         var socOptions = HUDPackagePowerOptions(enabled: true, highlighted: true)

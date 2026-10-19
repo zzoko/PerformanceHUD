@@ -73,6 +73,7 @@ struct HUDPresetConfiguration: Codable, Equatable {
         switch preset {
         case .balanced: break
         case .fpsOnly:
+            configuration.fps.mode = .value
             for group in HUDResourceGroup.allCases { configuration.resources[group]?.enabled = false }
             configuration.packagePower.enabled = false
             configuration.fans.enabled = false
