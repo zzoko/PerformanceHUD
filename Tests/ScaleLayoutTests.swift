@@ -7,7 +7,9 @@ import AppKit
   _ = NSApplication.shared
   UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "off", "hud.background": "dark", "hud.fps.dynamic": false], forName: UserDefaults.argumentDomain)
   let hud = HUDWindowController()
-  hud.setHUDEnabled(false)
+  let panel: HUDPanel = member(hud, "panel")
+  panel.alphaValue = 0
+  hud.setHUDEnabled(true)
   hud.setAutoHideMode(.off)
   hud.setFPSOptions(.init(enabled: true, mode: .both))
   hud.setPackagePowerOptions(.init(enabled: true))
@@ -15,7 +17,6 @@ import AppKit
   hud.setMetricEnabled(.deviceInfo, enabled: true)
   hud.setFanOptions(.init(enabled: true, average: false))
   hud.updateFans(.init(status: .ready, fans: [.init(id: 0, rpm: 3000, maximumRPM: 6000), .init(id: 1, rpm: 3500, maximumRPM: 6000)]))
-  let panel: HUDPanel = member(hud, "panel")
   let container: NSView = member(hud, "container")
   let horizontal: HUDHorizontalView = member(hud, "horizontalView")
   let glass: NativeGlassHUDBackground = member(hud, "backgroundView")

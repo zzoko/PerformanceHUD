@@ -2,6 +2,15 @@
 
 [← Back to README](../README.md)
 
+### v2.8
+
+- Added optional **menu-bar readings**, with an independent button beside each supported reading. They retain the horizontal HUD's proportions at a smaller size and stay available while the HUD is disabled. All selections start off; a shared chevron collapses or expands them together.
+- Menu-bar readings share display modes, emphasis, and heat warnings with the HUD. FPS shows its value, and memory-pressure history styles use the corresponding compact meters. Selections are saved with presets; built-in presets keep them off.
+- Added a one-time Yes/No confirmation before first enabling menu-bar readings and a width limit that warns before a selection becomes too wide. Existing selections collapse safely if display or reading-mode changes exceed the limit.
+- **Auto hide → FPS** also collapses unavailable menu-bar FPS. **Auto hide → All** continues to affect only the HUD. A Charge-only menu-bar battery category disappears when Charge is Off or Auto hides idle flow. In Auto, it returns when flow resumes.
+- Kept monitoring limited to readings needed by the HUD, menu bar, or active logging. Collapsed menu-bar readings stop requesting samples, and menu-bar power setup preserves the HUD's category choices.
+- Removed unnecessary leading dividers when Memory, Fan, or Chip & OS is the first visible vertical category. Added a faint separator before menu-bar selection buttons, reordered and shortened the **Controls guide**, and removed outdated installation and in-game videos from the docs.
+
 ### v2.7
 
 - Simplified **ANE** to a single category switch, keeping its Power label, emphasis control, and helper setup access.

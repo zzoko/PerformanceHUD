@@ -30,6 +30,8 @@ import AppKit
         check(balanced.resources[.ram]?.pressureMode == .colorHistory,
               "Balanced retains colored memory history")
         check(presets.selection(for: balanced).title == "Balanced", "Fresh settings select Balanced")
+        check([balanced, fpsOnly, full].allSatisfy { $0.menuBarReadings.isEmpty },
+              "Every built-in preset keeps all menu-bar readings off by default")
 
         var expectedFPS = balanced
         expectedFPS.fps.mode = .value
@@ -53,7 +55,8 @@ import AppKit
         let designSettings: [String: Any] = [
             "hud.alignment": "horizontal", "hud.background": "dark", "hud.scale": 1.37,
             "hud.position": ["x": -890.5, "y": 431.25], "hud.autoHide.mode": "all",
-            "hud.autoHide.animated": false, "hud.glass.mode": "strength", "hud.glass.strength": 0.38
+            "hud.autoHide.animated": false, "hud.glass.mode": "strength", "hud.glass.strength": 0.38,
+            HUDMenuBarOptions.collapsedKey: true
         ]
         func retains(_ settings: [String: Any]) -> Bool {
             settings.allSatisfy { key, value in
@@ -96,8 +99,12 @@ import AppKit
             options.heatWarning = .init(enabled: false, thresholdCelsius: group == .gpu ? 87 : 101)
             HUDPreferences.setResourceOptions(options, for: group, in: defaults)
         }
+        let selectedMenuBarReadings = Set(HUDMenuBarReading.allCases)
+        HUDMenuBarOptions(readings: selectedMenuBarReadings, isCollapsed: true).save(in: defaults)
         let existing = defaults.persistentDomain(forName: suite)! as NSDictionary
         let customized = HUDPresetConfiguration.capture(in: defaults)
+        check(customized.menuBarReadings == selectedMenuBarReadings,
+              "Preset capture retains all selected menu-bar readings even while globally collapsed")
         presets = HUDPresetStore(in: defaults)
         check(presets.selection(for: customized).title == "Custom", "An existing customized install starts Custom")
         check(existing.isEqual(to: defaults.persistentDomain(forName: suite)!),
@@ -106,7 +113,7 @@ import AppKit
         check(try JSONDecoder().decode(HUDPresetConfiguration.self, from: encoded) == customized,
               "Saved configuration encoding retains every selected and hidden category setting")
         let encodedObject = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
-        let independentFields = ["alignment", "background", "glass", "autoHideMode", "autoHideAnimated", "scale", "position"]
+        let independentFields = ["alignment", "background", "glass", "autoHideMode", "autoHideAnimated", "scale", "position", "isCollapsed"]
         check(independentFields.allSatisfy { encodedObject[$0] == nil },
               "New saved configurations exclude every independent design field")
         let globalBefore = defaults.persistentDomain(forName: UserDefaults.globalDomain) as NSDictionary?
@@ -115,6 +122,9 @@ import AppKit
         customized.apply(in: defaults)
         check(HUDPresetConfiguration.capture(in: defaults) == customized,
               "Applying restores hidden reading modes, emphasis, warnings, and categories")
+        check(HUDMenuBarOptions.load(in: defaults)
+              == HUDMenuBarOptions(readings: selectedMenuBarReadings, isCollapsed: true),
+              "Applying restores menu-bar selections without expanding a collapsed menu bar")
         check(retains(designSettings), "Applying a saved configuration leaves all design settings untouched")
         check(globalBefore == defaults.persistentDomain(forName: UserDefaults.globalDomain) as NSDictionary?,
               "Applying a preset does not write macOS global preferences")
@@ -158,6 +168,7 @@ import AppKit
             ("Reading emphasis", { $0.resources[.gpu]?.highlighted.insert(.temperature) }),
             ("Heat threshold", { $0.resources[.cpu]?.heatWarning.thresholdCelsius = 96 }),
             ("Heat enable", { $0.resources[.gpu]?.heatWarning.enabled.toggle() }),
+            ("Menu-bar reading", { $0.menuBarReadings.insert(.gpuTemperature) }),
             ("SOC", { $0.packagePower.enabled.toggle() }),
             ("SOC emphasis", { $0.packagePower.highlighted.toggle() }),
             ("Fan mode", { $0.fans.mode = .both }),
@@ -180,9 +191,12 @@ import AppKit
         }
         for preset in HUDBuiltInPreset.allCases {
             let configuration = HUDPresetConfiguration.builtIn(preset)
+            HUDMenuBarOptions(readings: selectedMenuBarReadings, isCollapsed: true).save(in: defaults)
             configuration.apply(in: defaults)
             check(presets.selection(for: .capture(in: defaults)).title == preset.title,
                   "All built-ins recognized after applying: \(preset.title)")
+            check(HUDMenuBarOptions.load(in: defaults) == HUDMenuBarOptions(isCollapsed: true),
+                  "Applying \(preset.title) clears all pins and retains global collapse")
         }
         var unavailable = balanced
         unavailable.fans.enabled = false
@@ -192,6 +206,11 @@ import AppKit
         check(unavailable.matches(balanced, availability: noHardware),
               "Forced fan/helper disablement does not make Balanced Custom")
         check(!unavailable.matches(balanced), "Actual display changes still count when hardware is available")
+        var pinnedFan = balanced
+        pinnedFan.menuBarReadings = [.fanUsage]
+        check(pinnedFan.matches(balanced, availability: noHardware),
+              "Automatic removal of an unavailable fan pin does not make a preset Custom")
+        check(!pinnedFan.matches(balanced), "An available fan pin remains a preset choice")
         unavailable.fans.mode = .both
         check(!unavailable.matches(balanced, availability: noHardware),
               "Remembered fan mode remains a choice even on a fanless Mac")
@@ -207,6 +226,18 @@ import AppKit
         presets.preferredSavedID = second.id
         check(presets.selection(for: customized).title == "Second setup", "Selecting an identical saved setup retains its name")
         customized.apply(in: defaults)
+        for collapsed in [false, true] {
+            var menuBar = HUDMenuBarOptions.load(in: defaults)
+            menuBar.isCollapsed = collapsed
+            menuBar.save(in: defaults)
+            check(presets.selection(for: .capture(in: defaults)).title == "Second setup",
+                  "Global collapse never clears a matching saved preset selection")
+            balanced.apply(in: defaults)
+            customized.apply(in: defaults)
+            check(HUDMenuBarOptions.load(in: defaults)
+                  == HUDMenuBarOptions(readings: selectedMenuBarReadings, isCollapsed: collapsed),
+                  "Restoring a saved preset preserves either global collapse state")
+        }
         for (key, value) in designSettings {
             defaults.set(value, forKey: key)
             check(presets.selection(for: .capture(in: defaults)).title == "Second setup",
@@ -287,6 +318,9 @@ import AppKit
         // settings are decoded and applied.
         clear()
         var legacyConfiguration = encodedObject
+        legacyConfiguration.removeValue(forKey: "menuBarReadings")
+        var legacyExpected = customized
+        legacyExpected.menuBarReadings = []
         legacyConfiguration.merge([
             "alignment": "vertical", "background": "light", "scale": 1.72,
             "position": ["x": 420.0, "y": 690.0], "autoHideMode": "off",
@@ -299,12 +333,13 @@ import AppKit
         defaults.set([legacyData], forKey: "hud.presets.saved")
         let legacyStore = HUDPresetStore(in: defaults)
         let legacySaved = legacyStore.savedPresets.first
-        check(legacySaved?.id == legacyID && legacySaved?.configuration == customized,
-              "Saved full-configuration records decode their category settings and ignore old design fields")
+        check(legacySaved?.id == legacyID && legacySaved?.configuration == legacyExpected,
+              "Older saved presets keep category settings, ignore old design fields, and default menu-bar pins off")
         for (key, value) in designSettings { defaults.set(value, forKey: key) }
+        HUDMenuBarOptions(readings: selectedMenuBarReadings, isCollapsed: true).save(in: defaults)
         legacySaved?.configuration.apply(in: defaults)
-        check(HUDPresetConfiguration.capture(in: defaults) == customized && retains(designSettings),
-              "Applying a legacy saved preset changes readings without restoring its former design settings")
+        check(HUDPresetConfiguration.capture(in: defaults) == legacyExpected && retains(designSettings),
+              "Applying an older preset clears menu-bar pins and preserves design and global collapse settings")
         let unreservedName = try legacyStore.add(name: "Full", configuration: balanced)
         check(unreservedName.name == "Full", "Names other than current built-ins remain available for saved presets")
 

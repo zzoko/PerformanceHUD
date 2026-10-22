@@ -23,7 +23,7 @@ enum HUDPreferences {
     // authoritative. The controller resets position separately; helper registration
     // and independent “Don’t show this again” choices stay.
     static func resetOptions(in store: UserDefaults = .standard) {
-        var keys = [hudEnabledKey, hudScaleKey, "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.fps.valueHighlighted", "hud.autoHide", "hud.autoHide.mode", "hud.autoHide.animated",
+        var keys = [hudEnabledKey, hudScaleKey, "hud.menuBar.readings", "hud.menuBar.collapsed", "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.fps.valueHighlighted", "hud.autoHide", "hud.autoHide.mode", "hud.autoHide.animated",
                     "hud.glass.mode", "hud.glass.strength", "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
                     "hud.battery.power", "hud.battery.powerHighlighted", "hud.battery.flowMode",
@@ -119,6 +119,11 @@ enum HUDPreferences {
     static var loggingExplanationDismissed: Bool {
         get { defaults.bool(forKey: "hud.logging.explanationDismissed") }
         set { defaults.set(newValue, forKey: "hud.logging.explanationDismissed") }
+    }
+
+    static var menuBarEnableConfirmed: Bool {
+        get { defaults.bool(forKey: "hud.menuBar.enableConfirmed") }
+        set { defaults.set(newValue, forKey: "hud.menuBar.enableConfirmed") }
     }
 
     static var alignment: HUDAlignment {
@@ -283,9 +288,15 @@ enum HUDPreferences {
     @discardableResult
     static func applyFanAvailability(_ sample: FanSample, in store: UserDefaults = .standard) -> Bool {
         let key = metricKey(.fans)
-        guard sample.status == .noFans, store.object(forKey: key) as? Bool != false else { return false }
-        store.set(false, forKey: key)
-        return true
+        guard sample.status == .noFans else { return false }
+        var changed = store.object(forKey: key) as? Bool != false
+        if changed { store.set(false, forKey: key) }
+        var menuBar = HUDMenuBarOptions.load(in: store)
+        if menuBar.readings.remove(.fanUsage) != nil {
+            menuBar.save(in: store)
+            changed = true
+        }
+        return changed
     }
 
     static var fanOptions: HUDFanOptions {

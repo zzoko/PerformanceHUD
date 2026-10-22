@@ -4,8 +4,45 @@ import AppKit
     @MainActor static func member<T>(_ object: Any, _ name: String) -> T {
         Mirror(reflecting: object).children.first { $0.label == name }!.value as! T
     }
+    @MainActor static func verticalDividerBoundaries() {
+        let defaults = UserDefaults.standard
+        let arguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        defaults.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "off",
+            "hud.alignment": "vertical"], forName: UserDefaults.argumentDomain)
+        defer { defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain) }
+        let hud = HUDWindowController()
+        defer { hud.shutdown() }
+        hud.setPackagePowerOptions(.init(enabled: false))
+        for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
+        let dividers: [Int: NSView] = member(hud, "groupDividers")
+        let groups: [[HUDMetric]] = member(hud, "verticalMetricGroups")
+        let stack: NSStackView = member(hud, "stackView")
+        let rows: [HUDMetric: NSView] = member(hud, "metricRows")
+        for metric in [HUDMetric.ramTotal, .ram, .deviceInfo, .fans] {
+            hud.setMetricEnabled(metric, enabled: true)
+            precondition(dividers.values.allSatisfy(\.isHidden),
+                         "A lone \(metric.hudTitle) category has no leading or trailing divider")
+            precondition(stack.arrangedSubviews.first(where: { !$0.isHidden }) === rows[metric],
+                         "A lone \(metric.hudTitle) starts directly with its content")
+            hud.setMetricEnabled(metric, enabled: false)
+        }
+        hud.setMetricEnabled(.ramTotal, enabled: true)
+        hud.setMetricEnabled(.deviceInfo, enabled: true)
+        let deviceGroup = groups.firstIndex { $0.contains(.deviceInfo) }!
+        precondition(Set(dividers.filter { !$0.value.isHidden }.keys) == [deviceGroup],
+                     "Memory and Chip & OS have exactly one divider between them")
+        hud.setMetricEnabled(.ramTotal, enabled: false)
+        precondition(dividers.values.allSatisfy(\.isHidden),
+                     "Removing the preceding category removes Chip & OS's former boundary")
+        hud.setMetricEnabled(.fans, enabled: true)
+        precondition(Set(dividers.filter { !$0.value.isHidden }.keys) == [deviceGroup],
+                     "Fans before Chip & OS retains its separating boundary without a top divider")
+        print("PASS: singleton Memory, Chip & OS, and Fan divider boundaries")
+    }
     @MainActor static func main() throws {
         _ = NSApplication.shared
+        verticalDividerBoundaries()
+        if CommandLine.arguments.contains("--dividers-only") { return }
         let scales: [HUDScale] = CommandLine.arguments.contains("--normal-size") ? [.normal] : [.small, .normal, .large]
         let suite = "PerformanceHUD.PressureTests.\(UUID().uuidString)"
         let store = UserDefaults(suiteName: suite)!
@@ -29,8 +66,9 @@ import AppKit
         UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "off",
             "hud.background": "dark", "hud.alignment": "vertical"], forName: UserDefaults.argumentDomain)
         let hud = HUDWindowController()
-        hud.setHUDEnabled(false)
         let panel: HUDPanel = member(hud, "panel")
+        panel.alphaValue = 0
+        hud.setHUDEnabled(true)
         let container: NSView = member(hud, "container")
         let horizontal: HUDHorizontalView = member(hud, "horizontalView")
         let glass: NativeGlassHUDBackground = member(hud, "backgroundView")

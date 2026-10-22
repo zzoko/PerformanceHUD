@@ -1,6 +1,6 @@
 import AppKit
 
-/// Shared columns for category, reading, mode, and emphasis.
+/// Shared columns for category, reading, mode, emphasis, and menu-bar visibility.
 @MainActor
 enum HUDCategoryLayout {
     static let categoryLeading: CGFloat = 8
@@ -18,7 +18,8 @@ enum HUDCategoryLayout {
         return max(230, ceil(control.intrinsicContentSize.width))
     }
     static var emphasisLeading: CGFloat { modeLeading + modeWidth + 12 }
-    static var width: CGFloat { emphasisLeading + 24 + 14 }
+    static var menuBarLeading: CGFloat { emphasisLeading + 30 }
+    static var width: CGFloat { menuBarLeading + 24 + 14 }
     static let rowHeight: CGFloat = 28
     static let modeHeight: CGFloat = 24
     static let padding: CGFloat = 6
@@ -29,6 +30,7 @@ struct HUDCategoryMenuRow {
     let reading: NSView
     var mode: NSView? = nil
     var emphasis: NSView? = nil
+    var menuBar: NSView? = nil
     var fullWidth = false
 
     var emphasisView: NSView? { emphasis ?? (reading as? HUDReadingCheckbox)?.emphasisControl }
@@ -38,7 +40,10 @@ struct HUDCategoryMenuRow {
 class HUDCategoryMenuView: NSView {
     private var category: NSView?
     private var rows: [HUDCategoryMenuRow] = []
+    private var menuBarButtons: [HUDMenuBarReading: HUDMenuBarButton] = [:]
     var onHeightChange: (() -> Void)?
+    var onMenuBarChange: (() -> Void)?
+    var shouldAllowMenuBarSelection: ((Set<HUDMenuBarReading>) -> Bool)?
     override var isFlipped: Bool { true }
 
     init() {
@@ -48,6 +53,39 @@ class HUDCategoryMenuView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("Use init()") }
+
+    func makeMenuBarButton(for reading: HUDMenuBarReading, title: String) -> HUDMenuBarButton {
+        if let button = menuBarButtons[reading] { return button }
+        let button = HUDMenuBarButton()
+        button.setAccessibilityLabel("Show \(title) in menu bar")
+        button.state = isMenuBarSelected(reading) ? .on : .off
+        button.onChange = { [weak self] selected in
+            guard let self else { return }
+            var options = HUDPreferences.menuBarOptions
+            if selected {
+                options.readings.insert(reading)
+                guard shouldAllowMenuBarSelection?(options.readings) != false else {
+                    refreshMenuBarSelections()
+                    return
+                }
+            } else { options.readings.remove(reading) }
+            HUDPreferences.menuBarOptions = options
+            refreshMenuBarSelections()
+            onMenuBarChange?()
+        }
+        menuBarButtons[reading] = button
+        return button
+    }
+
+    func isMenuBarSelected(_ reading: HUDMenuBarReading) -> Bool {
+        HUDPreferences.menuBarOptions.readings.contains(reading)
+    }
+
+    func refreshMenuBarSelections() {
+        for (reading, button) in menuBarButtons {
+            button.state = isMenuBarSelected(reading) ? .on : .off
+        }
+    }
 
     func setCategory(_ view: NSView) {
         category?.removeFromSuperview()
@@ -65,8 +103,8 @@ class HUDCategoryMenuView: NSView {
                 control.sizeToFit()
             }
         }
-        let oldViews = rows.flatMap { [$0.reading, $0.mode, $0.emphasisView].compactMap { $0 } }
-        let newViews = newRows.flatMap { [$0.reading, $0.mode, $0.emphasisView].compactMap { $0 } }
+        let oldViews = rows.flatMap { [$0.reading, $0.mode, $0.emphasisView, $0.menuBar].compactMap { $0 } }
+        let newViews = newRows.flatMap { [$0.reading, $0.mode, $0.emphasisView, $0.menuBar].compactMap { $0 } }
         if oldViews.map(ObjectIdentifier.init) != newViews.map(ObjectIdentifier.init) {
             oldViews.forEach { $0.removeFromSuperview() }
             newViews.forEach { addSubview($0) }
@@ -76,6 +114,7 @@ class HUDCategoryMenuView: NSView {
         let changed = frame.height != height
         setFrameSize(NSSize(width: frame.width, height: height))
         needsLayout = true
+        needsDisplay = true
         if changed { onHeightChange?() }
     }
 
@@ -99,12 +138,66 @@ class HUDCategoryMenuView: NSView {
                     width: grid.modeWidth, height: grid.modeHeight))
             }
             row.emphasisView?.frame = NSRect(x: grid.emphasisLeading, y: y + 3, width: 22, height: 22)
+            row.menuBar?.frame = NSRect(x: grid.menuBarLeading, y: y + 3, width: 22, height: 22)
         }
     }
 
     override func draw(_ dirtyRect: NSRect) {
         NSColor.labelColor.withAlphaComponent(0.065).setFill()
         NSRect(x: 30, y: bounds.height - 0.5, width: bounds.width - 44, height: 0.5).fill()
+        if let first = rows.firstIndex(where: { $0.menuBar != nil }),
+           let last = rows.lastIndex(where: { $0.menuBar != nil }) {
+            let grid = HUDCategoryLayout.self
+            let x = (grid.emphasisLeading + 22 + grid.menuBarLeading) / 2 - 0.25
+            let y = grid.padding + CGFloat(first) * grid.rowHeight + 3
+            NSRect(x: x, y: y, width: 0.5,
+                   height: CGFloat(last - first) * grid.rowHeight + 22).fill()
+        }
+    }
+}
+
+/// Uses the emphasis button's neutral treatment for the independent menu-bar output.
+@MainActor
+final class HUDMenuBarButton: NSButton {
+    var onChange: ((Bool) -> Void)?
+    override var intrinsicContentSize: NSSize { NSSize(width: 22, height: 22) }
+    override var state: NSControl.StateValue { didSet { needsDisplay = true } }
+    override var isEnabled: Bool { didSet { needsDisplay = true } }
+
+    init() {
+        super.init(frame: .zero)
+        title = ""
+        setButtonType(.toggle)
+        isBordered = false
+        target = self
+        action = #selector(changed)
+        setAccessibilityRole(.checkBox)
+    }
+
+    required init?(coder: NSCoder) { fatalError("Use init()") }
+
+    @objc private func changed() { onChange?(state == .on) }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
+        let selected = state == .on
+        NSColor.labelColor.withAlphaComponent(isEnabled ? (selected ? 0.18 : 0.025) : 0.025).setFill()
+        shape.fill()
+        NSColor.labelColor.withAlphaComponent(isEnabled ? (selected ? 0.32 : 0.15) : 0.07).setStroke()
+        shape.lineWidth = 0.75
+        shape.stroke()
+        let color: NSColor = !isEnabled ? .disabledControlTextColor : selected ? .labelColor : .secondaryLabelColor
+        let screen = NSRect(x: (bounds.width - 13) / 2, y: (bounds.height - 10) / 2, width: 13, height: 10)
+        let outline = NSBezierPath(roundedRect: screen, xRadius: 1.5, yRadius: 1.5)
+        color.setStroke()
+        outline.lineWidth = 1
+        outline.stroke()
+        color.setFill()
+        NSRect(x: screen.minX + 1, y: screen.maxY - 3, width: screen.width - 2, height: 2).fill()
+        if window?.firstResponder === self {
+            NSFocusRingPlacement.only.set()
+            shape.fill()
+        }
     }
 }
 
@@ -212,6 +305,7 @@ final class HUDReadingCheckbox: NSButton {
     var onHighlight: (() -> Void)?
     var emphasized = false { didSet { updateControls() } }
     var highlightAvailable = true { didSet { updateControls() } }
+    var menuBarSelected = false { didSet { updateControls() } }
 
     override var state: NSControl.StateValue { didSet { updateControls() } }
     override var isEnabled: Bool { didSet { updateControls() } }
@@ -250,7 +344,7 @@ final class HUDReadingCheckbox: NSButton {
         visibility.state = state
         visibility.isEnabled = isEnabled
         highlight.state = emphasized ? .on : .off
-        highlight.isEnabled = isEnabled && state == .on && highlightAvailable
+        highlight.isEnabled = ((isEnabled && state == .on) || menuBarSelected) && highlightAvailable
         visibility.needsDisplay = true
     }
     override func performClick(_ sender: Any?) { visibility.performClick(sender) }

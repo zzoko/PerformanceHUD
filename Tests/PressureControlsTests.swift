@@ -103,9 +103,10 @@ import AppKit
         UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "off",
             "hud.scale": 1.0, "hud.background": "dark", "hud.alignment": "vertical"], forName: UserDefaults.argumentDomain)
         let hud = HUDWindowController()
-        hud.setHUDEnabled(false)
-        hud.setHUDScale(.normal)
         let panel: HUDPanel = member(hud, "panel")
+        panel.alphaValue = 0
+        hud.setHUDEnabled(true)
+        hud.setHUDScale(.normal)
         let rows: [HUDMetric: NSView] = member(hud, "metricRows")
         let physical: [HUDMetric: NSTextField] = member(hud, "ramDetailLabels")
         let swap: NSTextField = member(hud, "ramSwapValueLabel")

@@ -161,15 +161,22 @@ struct HUDLogSelection {
 /// rounded display strings. Missing/non-finite values remain empty, not zero.
 struct HUDLogSnapshot {
     private(set) var values: [HUDLogColumn: String] = [:]
+    // Keep display precision independent of CSV formatting. Re-rounding a CSV
+    // number could otherwise put a menu-bar reading across a heat threshold.
+    private(set) var numbers: [HUDLogColumn: Double] = [:]
 
     mutating func set(_ column: HUDLogColumn, _ number: Double?) {
+        numbers[column] = number.flatMap { $0.isFinite ? $0 : nil }
         values[column] = number.flatMap { column.formattedNumber($0) }
     }
 
-    mutating func setText(_ column: HUDLogColumn, _ text: String?) { values[column] = text }
+    mutating func setText(_ column: HUDLogColumn, _ text: String?) {
+        numbers[column] = nil
+        values[column] = text
+    }
 
     mutating func clear(_ columns: [HUDLogColumn]) {
-        for column in columns { values[column] = nil }
+        for column in columns { values[column] = nil; numbers[column] = nil }
     }
 
     mutating func updatePower(_ sample: PowerSample) {
@@ -185,6 +192,7 @@ struct HUDLogSnapshot {
 
     mutating func updateFans(_ sample: FanSample) {
         values = values.filter { !$0.key.isFan }
+        numbers = numbers.filter { !$0.key.isFan }
         guard sample.status == .ready else { return }
         for fan in sample.fans {
             set(.fanUsage(fan.id), fan.fraction.map { $0 * 100 })

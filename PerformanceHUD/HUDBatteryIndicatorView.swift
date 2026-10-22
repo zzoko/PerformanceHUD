@@ -3,6 +3,11 @@ import AppKit
 /// A custom battery drawing with a continuous fill, rather than a system menu control.
 @MainActor
 final class HUDBatteryIndicatorView: NSView {
+    // Menu-bar pins retain an explicit placeholder until their first sample.
+    // The overlay keeps its established empty-state presentation.
+    var showsUnavailableReadings = false {
+        didSet { needsDisplay = true }
+    }
     private var horizontal = false
     private var percentage: Double?
     private var source: BatterySample.Source?
@@ -109,14 +114,22 @@ final class HUDBatteryIndicatorView: NSView {
     private var horizontalGap: CGFloat { HUDStyle.metricColumnSpacing(scale: HUDScale(rawValue: Double(scale))) }
     private var iconWidth: CGFloat { (34 * 0.85 + 0.5) * scale }
     var powerText: String {
+        if options.power, power == nil, showsUnavailableReadings { return "—" }
         guard options.power, options.flowMode != .auto || flowVisibility.isVisible else { return "" }
         return BatteryPowerRate.text(power)
+    }
+
+    /// Whether Charge has content to show according to its display mode. Auto
+    /// follows the same flow thresholds and idle delay as the rendered reading.
+    var hasVisiblePowerFlow: Bool {
+        options.enabled && options.power && (options.flowMode != .auto || flowVisibility.isVisible)
     }
 
     private var reservesPowerSpace: Bool {
         // Vertical keeps fixed columns. Horizontal also reclaims Auto's slot
         // when Charge is temporarily hidden.
-        options.power && (!horizontal || options.flowMode != .auto || flowVisibility.isVisible)
+        options.power && (!horizontal || options.flowMode != .auto || flowVisibility.isVisible
+            || (showsUnavailableReadings && power == nil))
     }
 
     var powerTextRect: NSRect {
@@ -130,7 +143,8 @@ final class HUDBatteryIndicatorView: NSView {
     }
 
     var temperatureText: String {
-        guard options.temperature, let temperature else { return "" }
+        guard options.temperature else { return "" }
+        guard let temperature else { return showsUnavailableReadings ? "—" : "" }
         return "\(Int(temperature.rounded()))°C"
     }
 
@@ -243,6 +257,10 @@ final class HUDBatteryIndicatorView: NSView {
             ]
             (text as NSString).draw(at: NSPoint(x: bounds.minX + 2 * scale,
                                                y: sourceOriginY), withAttributes: attributes)
+        } else if showsUnavailableReadings {
+            ("—" as NSString).draw(at: NSPoint(x: bounds.minX + 2 * scale, y: sourceOriginY),
+                withAttributes: [.font: sourceFont,
+                                 .foregroundColor: HUDStyle.primaryTitleColor(for: .battery, background: background)])
         }
         if !temperatureText.isEmpty {
             (temperatureText as NSString).draw(at: temperatureTextRect.origin, withAttributes: [
@@ -250,7 +268,18 @@ final class HUDBatteryIndicatorView: NSView {
                 .foregroundColor: temperatureColor
             ])
         }
-        guard options.charge, let percentage else { return }
+        guard options.charge else { return }
+        guard let percentage else {
+            if showsUnavailableReadings {
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: temperatureFont, .foregroundColor: HUDStyle.readingColor(background: background)
+                ]
+                let size = ("—" as NSString).size(withAttributes: attributes)
+                ("—" as NSString).draw(at: NSPoint(x: bounds.maxX - (iconWidth + size.width) / 2,
+                                                  y: rowMidY - size.height / 2), withAttributes: attributes)
+            }
+            return
+        }
         let iconScale = scale * 0.85
         let foreground = HUDStyle.valueColor(background: background)
         let fillColor: NSColor = lowPower ? HUDStyle.warningYellow : foreground

@@ -52,7 +52,8 @@ final class HUDFPSMenuView: HUDCategoryMenuView {
         valueHighlight.action = #selector(toggleValueHighlight)
         valueHighlight.setAccessibilityLabel("Emphasize FPS number")
         setCategory(master)
-        setRows([.init(reading: readingLabel, mode: control, emphasis: valueHighlight)])
+        setRows([.init(reading: readingLabel, mode: control, emphasis: valueHighlight,
+                      menuBar: makeMenuBarButton(for: .fps, title: "FPS"))])
         refresh()
     }
 
@@ -64,13 +65,19 @@ final class HUDFPSMenuView: HUDCategoryMenuView {
         refresh()
     }
 
+    override func refreshMenuBarSelections() {
+        super.refreshMenuBarSelections()
+        refresh()
+    }
+
     private func refresh() {
         master.state = options.enabled ? .on : .off
-        readingLabel.textColor = options.enabled ? .labelColor : .disabledControlTextColor
+        let pinned = isMenuBarSelected(.fps)
+        readingLabel.textColor = options.enabled || pinned ? .labelColor : .disabledControlTextColor
         control.selectedSegment = alignment == .horizontal ? 0
             : HUDFPSDisplayMode.allCases.firstIndex(of: options.mode)!
         valueHighlight.state = options.valueHighlighted ? .on : .off
-        valueHighlight.isEnabled = options.visibleMetrics(alignment: alignment).contains(.fps)
+        valueHighlight.isEnabled = options.visibleMetrics(alignment: alignment).contains(.fps) || pinned
         valueHighlight.needsDisplay = true
         control.isEnabled = options.enabled
         control.setEnabled(options.enabled, forSegment: 0)

@@ -155,6 +155,8 @@ final class HUDWindowController {
     private let autoHidePresentation = HUDAutoHidePresentation(enabled: HUDPreferences.autoHideMode == .all)
     private var lastAutoHideHidden = HUDPreferences.autoHideMode == .all
     var onAutoHideVisibilityChange: (() -> Void)?
+    var onFPSAvailabilityChange: (() -> Void)?
+    var hasRecentFPSReading: Bool { fpsAvailability.expanded }
     var isAutomaticallyHidden: Bool { modeTransition == nil && autoHidePresentation.isHidden }
     private var autoHideMode = HUDPreferences.autoHideMode
     private var autoHideAnimated = HUDPreferences.autoHideAnimated
@@ -168,7 +170,11 @@ final class HUDWindowController {
     }
     private var modeTransition: ModeTransition?
     private var modeAnimationTimer: Timer?
-    private var fpsAvailability = HUDFPSAvailability()
+    private var fpsAvailability = HUDFPSAvailability() {
+        didSet {
+            if oldValue.expanded != fpsAvailability.expanded { onFPSAvailabilityChange?() }
+        }
+    }
     private var fpsAvailabilityTask: Task<Void, Never>?
     private var fpsAnimationTimer: Timer?
     private var fpsAnimationTarget: CGFloat?
@@ -498,8 +504,7 @@ final class HUDWindowController {
         for (index, metrics) in verticalMetricGroups.enumerated() {
             let groupIsVisible = metrics.contains { enabledMetrics.contains($0) }
                 || (metrics.contains(.aneTotal) && showsPackagePower)
-            let showDivider = groupIsVisible
-                && (lastVisibleGroup != nil || metrics == [.deviceInfo] || metrics == [.ram, .ramTotal] || metrics == [.fans])
+            let showDivider = groupIsVisible && lastVisibleGroup != nil
             let height = HUDStyle.dividerHeight(scale: hudScale, afterFPS: lastVisibleGroup == 0)
             if let divider = groupDividers[index] {
                 divider.isHidden = !showDivider
@@ -919,6 +924,7 @@ final class HUDWindowController {
         if enabled && autoHidePresentation.enabled {
             autoHidePresentation.transition(visible: fpsAvailability.expanded, animated: false)
         }
+        if enabled { updateLayout() }
         updateVisibility()
     }
 
@@ -1037,6 +1043,7 @@ final class HUDWindowController {
     func updateFans(_ sample: FanSample) {
         let previousRows = fanView.rowCount
         fanSample = sample
+        guard hudEnabled, !isAutomaticallyHidden else { return }
         fanView.update(sample: sample, options: fanOptions, scale: hudScale, background: textBackground)
         // RPM changes only redraw the existing view; keep window geometry stable.
         if alignment == .horizontal { refreshHorizontalReadings() }
@@ -1487,6 +1494,7 @@ final class HUDWindowController {
 
     private func refreshHorizontalReadings(forceLayout: Bool = false) {
         guard alignment == .horizontal else { return }
+        guard forceLayout || (hudEnabled && !isAutomaticallyHidden) else { return }
         var sections: [[HUDHorizontalView.Reading]] = []
         for metrics in metricGroups {
             var readings: [HUDHorizontalView.Reading] = []
@@ -1947,6 +1955,9 @@ final class HUDWindowController {
         fpsAvailabilityTask?.cancel()
         fpsAvailabilityTask = nil
         fpsAvailability.receivedReading()
+        // Menu-bar FPS remains live with the overlay disabled. Cache its state
+        // for the next reveal without animating the hidden window.
+        guard hudEnabled else { return }
         // Do not restart an in-flight expansion for each arriving sample.
         if let transition = modeTransition {
             if !transition.available { transitionToAutoHideMode(autoHideMode) }
@@ -1963,6 +1974,7 @@ final class HUDWindowController {
             guard let self else { return }
             fpsAvailabilityTask = nil
             fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
+            guard hudEnabled else { return }
             if !fpsAvailability.expanded {
                 if modeTransition != nil { transitionToAutoHideMode(autoHideMode) }
                 else if autoHidePresentation.enabled { animateAutoHide(visible: false) }

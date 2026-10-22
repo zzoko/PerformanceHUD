@@ -22,7 +22,8 @@ final class HUDPackagePowerMenuView: HUDCategoryMenuView {
         highlight.target = self
         highlight.action = #selector(highlightChanged)
         highlight.setAccessibilityLabel("Emphasize SOC Combined power")
-        setRows([.init(reading: readingLabel, emphasis: highlight)])
+        setRows([.init(reading: readingLabel, emphasis: highlight,
+                      menuBar: makeMenuBarButton(for: .socPower, title: "SOC Combined power"))])
         setState(options: options, helper: .idle)
     }
 
@@ -37,12 +38,18 @@ final class HUDPackagePowerMenuView: HUDCategoryMenuView {
         refresh()
     }
 
+    override func refreshMenuBarSelections() {
+        super.refreshMenuBarSelections()
+        refresh()
+    }
+
     private func refresh() {
         master.state = options.enabled ? .on : .off
-        readingLabel.textColor = options.enabled ? .labelColor : .disabledControlTextColor
+        let visible = options.enabled || isMenuBarSelected(.socPower)
+        readingLabel.textColor = visible ? .labelColor : .disabledControlTextColor
         readingLabel.alphaValue = helperAvailability.usesNormalAppearance ? 1 : 0.5
         highlight.state = options.highlighted ? .on : .off
-        highlight.isEnabled = options.enabled && helperAvailability.allowsPowerToggle
+        highlight.isEnabled = visible && helperAvailability.allowsPowerToggle
     }
 
     @objc private func changed(_ sender: NSButton) {
@@ -52,7 +59,7 @@ final class HUDPackagePowerMenuView: HUDCategoryMenuView {
         onChange?(options)
     }
     @objc private func highlightChanged() {
-        guard options.enabled, helperAvailability.allowsPowerToggle else { return }
+        guard highlight.isEnabled else { return }
         options.highlighted = highlight.state == .on
         refresh()
         onChange?(options)

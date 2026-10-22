@@ -143,12 +143,14 @@ import AppKit
         UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "off", "hud.alignment": "vertical"],
                                                 forName: UserDefaults.argumentDomain)
         let hud = HUDWindowController()
-        hud.setHUDEnabled(false)
+        let panel: HUDPanel = member(hud, "panel")
+        panel.alphaValue = 0
+        // Auto Charge resizing requires active rendering; keep the test invisible.
+        hud.setHUDEnabled(true)
         hud.setAutoHideMode(.off)
         hud.setPackagePowerOptions(.init(enabled: false))
         for metric in HUDMetric.allCases where metric != .battery { hud.setMetricEnabled(metric, enabled: false) }
         defer { hud.shutdown() }
-        let panel: HUDPanel = member(hud, "panel")
         let verticalBattery: HUDBatteryIndicatorView = member(hud, "batteryIndicator")
         let view = HUDBatteryIndicatorView(frame: .zero)
         for horizontal in [false, true] {

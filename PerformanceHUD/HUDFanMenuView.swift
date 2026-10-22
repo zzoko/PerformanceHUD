@@ -57,11 +57,19 @@ final class HUDFanMenuView: HUDCategoryMenuView {
         refresh()
     }
 
+    override func refreshMenuBarSelections() {
+        super.refreshMenuBarSelections()
+        refresh()
+    }
+
     private func refresh() {
         let detected = !sample.fans.isEmpty
+        let pinned = isMenuBarSelected(.fanUsage)
+        let menuBar = makeMenuBarButton(for: .fanUsage, title: "Fan Use")
+        menuBar.isEnabled = detected
         unavailableLabel.stringValue = sample.message ?? "Not available"
         setRows(detected ? [.init(reading: average, mode: averageMode),
-                            .init(reading: usage, mode: mode, emphasis: rpmHighlight)]
+                            .init(reading: usage, mode: mode, emphasis: rpmHighlight, menuBar: menuBar)]
                          : [.init(reading: unavailableLabel, fullWidth: true)])
         master.isEnabled = sample.status != .noFans
         master.state = options.enabled && master.isEnabled ? .on : .off
@@ -71,12 +79,12 @@ final class HUDFanMenuView: HUDCategoryMenuView {
         usage.toolTip = message
         usage.setAccessibilityHelp(message)
         mode.selectedSegment = HUDFanMode.allCases.firstIndex(of: options.mode) ?? 0
-        mode.isEnabled = usage.isEnabled && options.usage
+        mode.isEnabled = detected && ((options.enabled && options.usage) || pinned)
         rpmHighlight.state = options.rpmHighlighted ? .on : .off
         rpmHighlight.isEnabled = mode.isEnabled && options.mode.showsRPM
         rpmHighlight.needsDisplay = true
         average.state = sample.canAverage && options.average ? .on : .off
-        average.isEnabled = options.enabled && sample.canAverage
+        average.isEnabled = (options.enabled || pinned) && sample.canAverage
         let averageMessage = message ?? (sample.fans.count == 1 ? "Average requires at least two fans." : nil)
         average.toolTip = averageMessage
         average.setAccessibilityHelp(averageMessage)

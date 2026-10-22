@@ -30,7 +30,7 @@ This uses an exception for this app, not a system-wide change. Do not disable Ga
 
 Background activity approval allows PerformanceHUD’s power helper to provide CPU, GPU, ANE, and SoC watt readings. On first launch, choose **Enable Power Readings** in the app’s prompt. If macOS requests approval, open **System Settings → General → Login Items & Extensions → Login Items** and turn on **PerformanceHUD** under **Background App Activity**. The path may vary slightly between macOS versions. Authenticate with Touch ID or an administrator password if asked. CPU, GPU, and ANE Power are enabled by default.
 
-You can choose **Not Now** and continue using the other metrics. If setup is declined, approval is missing, the helper is removed, or it repeatedly fails to respond, Power checkboxes turn off and appear muted. They remain clickable while their category is enabled: click **Power** to open setup, repair, or approval settings. Successful setup or later approval enables these options again. Brief startup delays or missing samples do not change your selections. Use **Power Helper → Set Up Power Readings…** in the menu to enable watts later, or **Remove Power Helper** to unregister it. Sampling stops when no selected category needs Power, when the HUD is disabled, or when the app is closed. It also pauses while fully auto-hidden, unless logging is active. The installed helper is otherwise idle.
+You can choose **Not Now** and continue using the other metrics. If setup is declined, approval is missing, the helper is removed, or it repeatedly fails to respond, Power checkboxes turn off and appear muted. They remain clickable while their category is enabled: click **Power** to open setup, repair, or approval settings. Successful setup or later approval enables these options again. Selecting a menu-bar power reading can also offer setup without enabling its HUD category. Brief startup delays or missing samples do not change your selections. Use **Power Helper → Set Up Power Readings…** in the menu to enable watts later, or **Remove Power Helper** to unregister it. Sampling runs only when visible HUD readings, expanded menu-bar readings, or active logging need Power. Disabling or automatically hiding the HUD can leave menu-bar readings active; collapsing those readings stops their sampling demand. Quitting the app stops sampling. The installed helper is otherwise idle.
 
 CPU, GPU, ANE, and SOC watts all use this helper. ANE shows power only; utilization percentage, temperature, and focused-app usage are not offered. SOC Combined power is the combined CPU, GPU, and Neural Engine estimate, not whole-Mac power consumption. Its category switch works independently of the individual Power options and is available in both Vertical and Horizontal alignment. Battery Charge watts use separate read-only sensors and do not need the helper. Missing or unsupported readings stay blank.
 
@@ -53,17 +53,6 @@ Before deleting the app, set **Auto start on login → Off**, choose **Power Hel
 ### Starting automatically
 
 Choose **Auto start on login → On** to open PerformanceHUD with your saved settings when you log in. **Off** is the default. If macOS needs approval, the app offers to open Login Items in System Settings. This choice is independent of the power helper’s background activity permission and is preserved when resetting HUD options.
-
-</details>
-
-*or*
-
-<details>
-<summary><strong>Watch the installation walkthrough</strong></summary>
-
-Installing app and granting macOS permissions the first time. These are remembered for later launches. When updating the app, you usually only need to approve the updated power helper if prompted. The video shows an older version; its Screen Recording approval steps are no longer needed with native Liquid Glass.
-
-[![Watch the PerformanceHUD installation walkthrough on YouTube](https://img.youtube.com/vi/7mou4dwnUpE/hqdefault.jpg)](https://youtu.be/7mou4dwnUpE)
 
 </details>
 

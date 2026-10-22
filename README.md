@@ -1,6 +1,6 @@
 # PerformanceHUD
 
-## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version.svg" alt="App version 2.7 — view changelog" width="56" height="30" align="top"></a>
+## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version.svg" alt="App version 2.8 — view changelog" width="56" height="30" align="top"></a>
 
 Download the ready-built app for **$3.99**, or build it yourself for free. Both offer the same features, with no subscription or feature unlocks.
 
@@ -33,6 +33,8 @@ PerformanceHUD is a small app under 10 MB that displays a customizable performan
 The default layout offers a balanced selection of useful metrics, but the overlay is designed to be highly configurable. You can choose which readings to show, emphasize key values, switch layouts, and select different display styles where supported. Show all the stats available at all times, or use it as a small unobtrusive FPS-only overlay that can automatically hide itself when out of the game. My priority has been to make useful information easy to read without distracting from what’s behind it.
 
 All settings are available directly in the menu bar. You can show or hide the HUD at any time, including while a game is running. Editable hotkeys let you toggle the HUD, start or stop logging, and change appearance without leaving your current app. The built-in Controls guide explains each option and how it works. In-app updates, optional weekly or monthly update checks, and optional startup at login are also available from the menu.
+
+You can also show a few selected readings directly in the macOS menu bar, using the horizontal HUD's proportions at a smaller size. These remain available with the HUD disabled and can be collapsed together with one click. Menu-bar selections start off and are saved with presets.
 
 I’ve put a lot of thought into keeping the overlay readable and the controls organized as more features have been added. The goal is to make a useful, thoughtfully designed tool that i would actually want to use myself.
 
@@ -82,13 +84,6 @@ I’ve put a lot of thought into keeping the overlay readable and the controls o
 </table>
 
 *Liquid Glass follows macOS by default; its strength can also be adjusted in the app.*
-
-<details>
-<summary>See PerformanceHUD in-game example (video from an older version of the app)</summary>
-
-[![Watch PerformanceHUD in-game on YouTube](https://img.youtube.com/vi/-b_t999Q9pQ/hqdefault.jpg)](https://youtu.be/-b_t999Q9pQ)
-
-</details>
 
 </details>
 

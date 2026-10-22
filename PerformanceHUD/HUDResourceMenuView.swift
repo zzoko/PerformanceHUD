@@ -54,6 +54,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             : [(4, "Power"), (1, "Temperature"), (7, "Use")]
         var rows: [HUDCategoryMenuRow] = []
         for (tag, name) in readings {
+            let menuBar = menuBarReading(for: tag).map { makeMenuBarButton(for: $0, title: "\(title) \(name)") }
             if group == .ane {
                 let label = NSTextField(labelWithString: name)
                 label.font = .menuFont(ofSize: 0)
@@ -61,7 +62,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                 anePowerHighlight.target = self
                 anePowerHighlight.action = #selector(anePowerHighlightChanged)
                 anePowerHighlight.setAccessibilityLabel("Emphasize ANE Power")
-                rows.append(.init(reading: label, emphasis: anePowerHighlight))
+                rows.append(.init(reading: label, emphasis: anePowerHighlight, menuBar: menuBar))
                 continue
             }
             if group == nil && tag == 4 {
@@ -77,7 +78,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                 flowHighlight.target = self
                 flowHighlight.action = #selector(flowHighlightChanged)
                 flowHighlight.setAccessibilityLabel("Emphasize Battery Charge")
-                rows.append(.init(reading: label, mode: control, emphasis: flowHighlight))
+                rows.append(.init(reading: label, mode: control, emphasis: flowHighlight, menuBar: menuBar))
                 continue
             }
             let button = HUDReadingCheckbox(title: name, supportsEmphasis: readingKind(for: tag) != nil || tag == 7)
@@ -87,7 +88,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             button.setControlAccessibilityLabel("\(title) \(name)")
             button.onHighlight = { [weak self] in self?.highlightChanged(tag: tag) }
             controls[tag] = button
-            var row = HUDCategoryMenuRow(reading: button)
+            var row = HUDCategoryMenuRow(reading: button, menuBar: menuBar)
             if tag == 1 {
                 let control = HUDHeatWarningMenuView(title: title, options: options.heatWarning)
                 control.onChange = { [weak self] warning in
@@ -138,6 +139,11 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         refresh()
     }
 
+    override func refreshMenuBarSelections() {
+        super.refreshMenuBarSelections()
+        refresh()
+    }
+
     @objc private func pressureModeChanged(_ sender: NSSegmentedControl) {
         guard sender.isEnabled, (0...1).contains(sender.selectedSegment) else { return }
         options.selectPressureMode(sender.selectedSegment == 0 ? .text : options.selectedPressureGraphStyle)
@@ -156,7 +162,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     @objc private func flowModeChanged(_ sender: NSSegmentedControl) {
-        guard options.enabled, HUDBatteryFlowMode.allCases.indices.contains(sender.selectedSegment) else { return }
+        guard sender.isEnabled, HUDBatteryFlowMode.allCases.indices.contains(sender.selectedSegment) else { return }
         flowMode = HUDBatteryFlowMode.allCases[sender.selectedSegment]
         options.power = flowMode != .off
         refresh()
@@ -224,11 +230,12 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     private func highlightChanged(tag: Int) {
-        guard let control = controls[tag], control.isEnabled, control.state == .on else { return }
+        guard let control = controls[tag] as? HUDReadingCheckbox,
+              control.emphasisControl?.isEnabled == true else { return }
         if tag == 8 && options.pressureMode != .text { return }
         if group != nil && tag == 4 && !powerAvailability.allowsPowerToggle { return }
         if tag == 7 {
-            options.setUsagePresentation(visible: true, highlighted: !options.usageHighlighted)
+            options.setUsagePresentation(visible: options.usageVisible, highlighted: !options.usageHighlighted)
         } else if let kind = readingKind(for: tag) {
             if options.highlighted.contains(kind) { options.highlighted.remove(kind) }
             else { options.highlighted.insert(kind) }
@@ -256,7 +263,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     @objc private func usageModeChanged(_ sender: NSSegmentedControl) {
-        guard HUDUsageMode.allCases.indices.contains(sender.selectedSegment) else { return }
+        guard sender.isEnabled, HUDUsageMode.allCases.indices.contains(sender.selectedSegment) else { return }
         options.selectUsageMode(HUDUsageMode.allCases[sender.selectedSegment])
         refresh()
         onChange?(options)
@@ -273,35 +280,62 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         }
     }
 
+    private func menuBarReading(for tag: Int) -> HUDMenuBarReading? {
+        switch (group, tag) {
+        case (.gpu, 4): return .gpuPower
+        case (.gpu, 1): return .gpuTemperature
+        case (.gpu, 7): return .gpuUsage
+        case (.cpu, 4): return .cpuPower
+        case (.cpu, 1): return .cpuTemperature
+        case (.cpu, 7): return .cpuUsage
+        case (.ane, 4): return .anePower
+        case (.ram, 8): return .memoryPressure
+        case (.ram, 5): return .memoryDetails
+        case (.ram, 7): return .memoryUsage
+        case (nil, 4): return .batteryPower
+        case (nil, 1): return .batteryTemperature
+        case (nil, 6): return .batteryEnergy
+        default: return nil
+        }
+    }
+
+    private func isPinned(_ tag: Int) -> Bool {
+        menuBarReading(for: tag).map(isMenuBarSelected) ?? false
+    }
+
     private func refresh() {
-        heatWarningControl?.update(options: options.heatWarning, isEnabled: options.enabled && options.temperature)
+        heatWarningControl?.update(options: options.heatWarning,
+            isEnabled: (options.enabled && options.temperature) || isPinned(1))
         pressureModeControl?.selectedSegment = options.pressureMode == .text ? 0 : 1
-        pressureModeControl?.isEnabled = options.showsPressure
+        pressureModeControl?.isEnabled = options.showsPressure || isPinned(8)
         let style = options.selectedPressureGraphStyle.resolved(for: alignment)
         pressureStyleControl?.selectedSegment = HUDMemoryPressureMode.graphStyles.firstIndex(of: style) ?? 3
-        pressureStyleControl?.isEnabled = options.showsPressure && options.pressureMode != .text
+        pressureStyleControl?.isEnabled = (options.showsPressure || isPinned(8)) && options.pressureMode != .text
         for (index, mode) in HUDMemoryPressureMode.graphStyles.enumerated() {
             pressureStyleControl?.setEnabled(alignment != .horizontal || !mode.isHistory, forSegment: index)
         }
         flowControl?.selectedSegment = HUDBatteryFlowMode.allCases.firstIndex(of: flowMode) ?? 1
-        flowControl?.isEnabled = options.enabled
-        flowLabel?.textColor = options.enabled ? .labelColor : .disabledControlTextColor
+        flowControl?.isEnabled = options.enabled || isPinned(4)
+        flowLabel?.textColor = options.enabled || isPinned(4) ? .labelColor : .disabledControlTextColor
         flowHighlight.state = options.highlighted.contains(.power) ? .on : .off
-        flowHighlight.isEnabled = options.enabled && flowMode != .off
+        flowHighlight.isEnabled = (options.enabled && flowMode != .off) || isPinned(4)
         for (tag, value) in [(0, options.enabled), (1, options.temperature),
                              (4, options.power), (5, options.details), (6, options.totalUse), (7, options.usageVisible),
                              (8, options.pressure)] {
             controls[tag]?.state = value ? .on : .off
             controls[tag]?.isEnabled = tag == 0 || options.enabled
-            if let button = controls[tag] as? HUDReadingCheckbox, let kind = readingKind(for: tag) {
-                button.emphasized = options.highlighted.contains(kind)
-                button.setAccessibilityValue(!value ? "Off" : button.emphasized ? "Highlighted" : "Faint")
+            if let button = controls[tag] as? HUDReadingCheckbox {
+                button.menuBarSelected = isPinned(tag)
+                if let kind = readingKind(for: tag) {
+                    button.emphasized = options.highlighted.contains(kind)
+                    button.setAccessibilityValue(!value ? "Off" : button.emphasized ? "Highlighted" : "Faint")
+                }
             }
         }
         controls[8]?.isEnabled = options.enabled && options.selectedUsageMode != .app
         (controls[8] as? HUDReadingCheckbox)?.highlightAvailable = options.pressureMode == .text
         usageModeControl?.selectedSegment = HUDUsageMode.allCases.firstIndex(of: options.selectedUsageMode) ?? 0
-        usageModeControl?.isEnabled = options.enabled
+        usageModeControl?.isEnabled = options.enabled || isPinned(7) || isPinned(5)
         if let usage = controls[7] as? HUDReadingCheckbox {
             usage.emphasized = options.usageHighlighted
             usage.setAccessibilityValue(!options.usageVisible ? "Off" : usage.emphasized ? "Highlighted" : "Faint")
@@ -314,8 +348,8 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             power.setAccessibilityHelp(power.toolTip)
         }
         if group == .ane {
-            let visible = options.enabled && options.power
-            master.state = visible ? .on : .off
+            let visible = (options.enabled && options.power) || isPinned(4)
+            master.state = options.enabled && options.power ? .on : .off
             master.toolTip = powerAvailability.explanation
             master.setAccessibilityHelp(powerAvailability.explanation)
             anePowerLabel?.textColor = visible ? .labelColor : .disabledControlTextColor

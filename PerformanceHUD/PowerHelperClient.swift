@@ -31,6 +31,10 @@ final class PowerHelperClient {
     private var nextConnectionAttempt: TimeInterval = 0
     private let revisionKey = "powerHelperInstalledRevision"
     private let promptKey = "powerHelperSetupOffered"
+    private let restoreSelectionsKey = "powerHelperRestoreHUDSelections"
+    private var restoresHUDSelections: Bool {
+        UserDefaults.standard.object(forKey: restoreSelectionsKey) as? Bool ?? true
+    }
 
     var status: SMAppService.Status { service.status }
     var availability: PowerHelperAvailability {
@@ -98,7 +102,7 @@ final class PowerHelperClient {
             // they were unticked while waiting in System Settings.
             if previous != nil, previous != .enabled, current == .enabled, !busy, !needsUpdate {
                 startupFailed = false; lastError = nil; health.reset()
-                onPowerSelectionChange?(true)
+                if restoresHUDSelections { onPowerSelectionChange?(true) }
             }
             onStateChange?()
         }
@@ -108,16 +112,17 @@ final class PowerHelperClient {
         refreshStatus()
         guard status != .requiresApproval,
               needsUpdate || (status != .enabled && !UserDefaults.standard.bool(forKey: promptKey)) else { return }
-        requestSetup()
+        requestSetup(restoringHUDSelections: restoresHUDSelections)
     }
 
-    func requestSetup() {
+    func requestSetup(restoringHUDSelections: Bool = true) {
         guard !busy else { return }
+        UserDefaults.standard.set(restoringHUDSelections, forKey: restoreSelectionsKey)
         busy = true; onStateChange?()
         UserDefaults.standard.set(true, forKey: promptKey)
         let alert = NSAlert()
         alert.messageText = needsUpdate ? "Update power readings helper?" : "Enable power readings?"
-        alert.informativeText = "CPU, GPU, ANE, and SOC watts use a small background helper to read macOS hardware measurements. macOS may ask for administrator approval. It samples only for selected power readings while the HUD is visible or logging is active. You can remove it from the Power Helper menu."
+        alert.informativeText = "CPU, GPU, ANE, and SOC watts use a small background helper to read macOS hardware measurements. macOS may ask for administrator approval. It samples only for selected power readings in the HUD, the menu bar, or active logging. You can remove it from the Power Helper menu."
         alert.addButton(withTitle: needsUpdate ? "Update Helper" : "Enable Power Readings")
         alert.addButton(withTitle: "Not Now")
         NSApp.activate(ignoringOtherApps: true)
@@ -143,7 +148,7 @@ final class PowerHelperClient {
             }
             busy = false
             refreshStatus()
-            if canReadPower { onPowerSelectionChange?(true) }
+            if canReadPower && restoresHUDSelections { onPowerSelectionChange?(true) }
             onStateChange?(); tick()
         }
     }
@@ -213,10 +218,11 @@ final class PowerHelperClient {
 
     func openApprovalSettings() { SMAppService.openSystemSettingsLoginItems() }
 
-    func requestPowerAccess() {
+    func requestPowerAccess(restoringHUDSelections: Bool = true) {
         guard !busy else { return }
+        UserDefaults.standard.set(restoringHUDSelections, forKey: restoreSelectionsKey)
         if status == .requiresApproval && !needsUpdate { openApprovalSettings() }
-        else { requestSetup() }
+        else { requestSetup(restoringHUDSelections: restoringHUDSelections) }
     }
 
     private func connectionFailed(_ message: String) {

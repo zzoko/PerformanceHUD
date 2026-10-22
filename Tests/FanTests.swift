@@ -136,10 +136,12 @@ import AppKit
         check(menu.hitTest(hitPoint) === rpmHighlight, "RPM emphasis is independently clickable")
 
         let hud = HUDWindowController()
-        hud.setHUDEnabled(false)
+        let panel: HUDPanel = member(hud, "panel")
+        panel.alphaValue = 0
+        // Test the active renderer while leaving the fixture invisible.
+        hud.setHUDEnabled(true)
         hud.setPackagePowerOptions(.init(enabled: false))
         for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
-        let panel: HUDPanel = member(hud, "panel")
         let fanView: HUDFanView = member(hud, "fanView")
         let horizontal: HUDHorizontalView = member(hud, "horizontalView")
         if CommandLine.arguments.contains("--controls-only") {

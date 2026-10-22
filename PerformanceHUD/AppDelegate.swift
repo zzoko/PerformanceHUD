@@ -77,6 +77,15 @@ final class AppDelegate:
     private var statusItem:
         NSStatusItem?
 
+    private var menuBarController: HUDMenuBarController?
+    private var menuBarVisibilityItem: NSMenuItem?
+    private var menuBarRefreshPending = false
+    private var menuBarEnableConfirmationPending = false
+    private var menuBarWidthWarningPending = false
+    private var categoryViews: [HUDCategoryMenuView] = []
+    private var latestBatterySample: BatterySample?
+    private var lastMenuBarReadings = HUDPreferences.menuBarOptions.readings
+
     private let hotkeys = HUDHotkeyMonitor()
 
     private var hudVisibilityMenuItem:
@@ -123,7 +132,9 @@ final class AppDelegate:
     private var powerHelperRemoveItem: NSMenuItem?
 
     private let csvLogger = HUDCSVLogger()
-    private var logSnapshot = HUDLogSnapshot()
+    private var logSnapshot = HUDLogSnapshot() {
+        didSet { scheduleMenuBarRefresh() }
+    }
     private var loggingMenuItem: NSMenuItem?
     private var loggingActionPending = false
 
@@ -276,6 +287,7 @@ final class AppDelegate:
             // Let the reveal finish setting up before starting/stopping monitors.
             DispatchQueue.main.async { [weak self] in self?.reconcileMonitoring() }
         }
+        hud.onFPSAvailabilityChange = { [weak self] in self?.scheduleMenuBarRefresh() }
     }
 
     // MARK: - FPS Setup
@@ -529,6 +541,7 @@ final class AppDelegate:
             BatteryMonitor()
 
         monitor.onBatteryUpdate = { [weak self] sample in
+            self?.latestBatterySample = sample
             self?.logSnapshot.updateBattery(sample)
             self?.hudWindow?.updateBattery(sample)
         }
@@ -548,7 +561,7 @@ final class AppDelegate:
                     NSStatusItem.squareLength
             )
 
-        if let button =
+        if menuBarController == nil, let button =
             statusItem.button {
 
             button.image =
@@ -589,6 +602,12 @@ final class AppDelegate:
 
         self.hudVisibilityMenuItem =
             hudVisibilityItem
+
+        let menuBarVisibility = NSMenuItem(title: "Show menu-bar readings",
+            action: #selector(toggleMenuBarReadings), keyEquivalent: "")
+        menuBarVisibility.target = self
+        menuBarVisibilityItem = menuBarVisibility
+        menu.addItem(menuBarVisibility)
         menu.addItem(.separator())
 
         // MARK: HUD Size
@@ -714,6 +733,7 @@ final class AppDelegate:
             if previousMetrics != options.visibleMetrics(alignment: HUDPreferences.alignment) {
                 reconcileMonitoring()
             }
+            refreshMenuBarReadings()
         }
         fpsMenuView = fpsView
         categories.append(fpsView)
@@ -786,6 +806,13 @@ final class AppDelegate:
         chipView.onChange = { [weak self] in self?.toggleDeviceInfo() }
         deviceInfoMenuView = chipView
         categories.append(chipView)
+        categoryViews = categories
+        for category in categories {
+            category.shouldAllowMenuBarSelection = { [weak self] readings in
+                self?.allowMenuBarSelection(readings) ?? true
+            }
+            category.onMenuBarChange = { [weak self] in self?.menuBarSelectionChanged() }
+        }
         let categoryList = HUDCategoryListView(categories: categories)
         categoryMenuView = categoryList
         let categoryItem = NSMenuItem()
@@ -890,7 +917,141 @@ final class AppDelegate:
 
         self.statusItem =
             statusItem
+        lastMenuBarReadings = HUDPreferences.menuBarOptions.readings
+        if menuBarController == nil {
+            menuBarController = HUDMenuBarController(statusItem: statusItem,
+                onToggleCollapsed: { [weak self] in self?.toggleMenuBarReadings() })
+            menuBarController?.onWidthOverflow = { [weak self] in self?.collapseOversizedMenuBarReadings() }
+        }
+        refreshMenuBarReadings()
         updateHotkeyHints()
+    }
+
+    // Coalesce callbacks arriving in the same run-loop pass into one layout.
+    private func scheduleMenuBarRefresh() {
+        guard menuBarController != nil, !menuBarRefreshPending else { return }
+        menuBarRefreshPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            menuBarRefreshPending = false
+            refreshMenuBarReadings()
+        }
+    }
+
+    private func refreshMenuBarReadings() {
+        let options = HUDPreferences.menuBarOptions
+        menuBarVisibilityItem?.state = !options.readings.isEmpty && !options.isCollapsed ? .on : .off
+        menuBarVisibilityItem?.isEnabled = !options.readings.isEmpty
+        menuBarController?.refresh(snapshot: logSnapshot, fanSample: fanMonitor.sample,
+                                   batterySample: latestBatterySample, options: options,
+                                   fpsExpanded: hudWindow?.hasRecentFPSReading ?? false,
+                                   autoHideMode: HUDPreferences.autoHideMode)
+    }
+
+    private func menuBarSelectionChanged() {
+        let options = HUDPreferences.menuBarOptions
+        let addedReadings = options.readings.subtracting(lastMenuBarReadings)
+        lastMenuBarReadings = options.readings
+        categoryViews.forEach { $0.refreshMenuBarSelections() }
+        reconcileMonitoring()
+        updatePresetMenu()
+        offerMenuBarPowerSetup(for: addedReadings.intersection(options.activeReadings))
+    }
+
+    private func menuBarReadingsFit(_ readings: Set<HUDMenuBarReading>) -> Bool {
+        guard let controller = menuBarController else { return true }
+        return controller.expandedWidth(for: readings) <= controller.maximumExpandedWidth
+    }
+
+    private func allowMenuBarSelection(_ readings: Set<HUDMenuBarReading>) -> Bool {
+        guard !menuBarEnableConfirmationPending else { return false }
+        guard menuBarReadingsFit(readings) else {
+            showMenuBarWidthWarning("This selection would make PerformanceHUD’s menu-bar readings too wide. Turn off another menu-bar reading or choose a more compact reading mode before enabling this one. Your existing selections have been kept.")
+            return false
+        }
+        guard HUDPreferences.menuBarEnableConfirmed else {
+            confirmMenuBarSelection(readings)
+            return false
+        }
+        return true
+    }
+
+    private func confirmMenuBarSelection(_ readings: Set<HUDMenuBarReading>) {
+        let addedReadings = readings.subtracting(HUDPreferences.menuBarOptions.readings)
+        // Keep the attempted selection off until Yes. Waiting until menu tracking
+        // finishes avoids opening a modal alert from inside a menu control action.
+        menuBarEnableConfirmationPending = true
+        statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            defer { menuBarEnableConfirmationPending = false }
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Enable menu-bar readings?"
+            alert.informativeText = "I recommend enabling no more than a couple of menu-bar readings at a time. Too many can crowd the menu bar or cause items to be hidden."
+            alert.addButton(withTitle: "Yes")
+            alert.addButton(withTitle: "No").keyEquivalent = "\u{1b}"
+            NSApp.activate(ignoringOtherApps: true)
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            HUDPreferences.menuBarEnableConfirmed = true
+            var options = HUDPreferences.menuBarOptions
+            options.readings.formUnion(addedReadings)
+            guard menuBarReadingsFit(options.readings) else {
+                showMenuBarWidthWarning("This selection would make PerformanceHUD’s menu-bar readings too wide. Turn off another menu-bar reading or choose a more compact reading mode before enabling this one. Your existing selections have been kept.")
+                return
+            }
+            HUDPreferences.menuBarOptions = options
+            menuBarSelectionChanged()
+        }
+    }
+
+    private func collapseOversizedMenuBarReadings() {
+        var options = HUDPreferences.menuBarOptions
+        guard !options.isCollapsed, !menuBarReadingsFit(options.readings) else { return }
+        options.isCollapsed = true
+        HUDPreferences.menuBarOptions = options
+        reconcileMonitoring()
+        showMenuBarWidthWarning("Your selected readings exceed the menu-bar width limit and have been collapsed. Your selections are kept. Turn off some menu-bar readings or choose a more compact reading mode before expanding them again.")
+    }
+
+    private func showMenuBarWidthWarning(_ message: String) {
+        guard !menuBarWidthWarningPending else { return }
+        menuBarWidthWarningPending = true
+        statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            defer { menuBarWidthWarningPending = false }
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Menu-bar width limit reached"
+            alert.informativeText = message
+            alert.addButton(withTitle: "OK")
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
+    }
+
+    private func offerMenuBarPowerSetup(for readings: Set<HUDMenuBarReading>) {
+        if !readings.isDisjoint(with: [.gpuPower, .cpuPower, .anePower, .socPower]),
+           !powerMonitor.helper.availability.allowsPowerToggle {
+            statusItem?.menu?.cancelTracking()
+            Task { @MainActor [weak self] in
+                self?.powerMonitor.helper.requestPowerAccess(restoringHUDSelections: false)
+            }
+        }
+    }
+
+    @objc private func toggleMenuBarReadings() {
+        var options = HUDPreferences.menuBarOptions
+        guard !options.readings.isEmpty else { return }
+        if options.isCollapsed, !menuBarReadingsFit(options.readings) {
+            showMenuBarWidthWarning("These readings exceed the menu-bar width limit. Turn off some menu-bar readings or choose a more compact reading mode before expanding them. Your selections have been kept.")
+            return
+        }
+        options.isCollapsed.toggle()
+        HUDPreferences.menuBarOptions = options
+        reconcileMonitoring()
+        if !options.isCollapsed { offerMenuBarPowerSetup(for: options.activeReadings) }
     }
 
     private func updateUpdaterMenu() {
@@ -981,8 +1142,7 @@ final class AppDelegate:
         updateLoginMenu()
         updateLoggingMenu()
         updateHotkeyHints()
-        let fan = HUDPreferences.fanOptions
-        fanMonitor.configure(readings: readingsActive && fan.enabled && fan.usage)
+        fanMonitor.configure(readings: monitoringDemand.fans)
         powerMonitor.helper.refreshStatus()
         updatePowerHelperMenu()
     }
@@ -1480,72 +1640,57 @@ final class AppDelegate:
         reconcileMonitoring()
     }
 
-    // Collect selected metrics while visible or explicitly logging. Each monitor's
-    // start is idempotent, so unrelated toggles do not reset its baselines.
-    private var readingsActive: Bool {
-        hudEnabled && (csvLogger.isLogging || !(hudWindow?.isAutomaticallyHidden ?? false))
+    private var monitoringDemand: HUDMonitoringDemand {
+        HUDMonitoringDemand.make(hudEnabled: hudEnabled,
+            hudVisible: !(hudWindow?.isAutomaticallyHidden ?? false), isLogging: csvLogger.isLogging,
+            autoHideMode: HUDPreferences.autoHideMode, selection: .current,
+            menuBar: HUDPreferences.menuBarOptions)
     }
 
     private func reconcileMonitoring() {
-        miscMonitor.configure(readingsActive && enabledMetrics.contains(.misc) ? HUDPreferences.miscOptions : HUDMiscOptions())
-        var metrics = readingsActive ? enabledMetrics : []
-        // CPU/GPU rows can stay visible without utilization. Memory sampling also
-        // supplies Details, so it remains active for a Details-only row.
-        for group in HUDResourceGroup.allCases where group != .ram && !HUDPreferences.resourceOptions(for: group).totalUse {
-            metrics.remove(group.totalMetric)
-        }
-        let fan = HUDPreferences.fanOptions
-        fanMonitor.configure(readings: readingsActive && fan.enabled && fan.usage)
-        let cpu = HUDPreferences.resourceOptions(for: .cpu)
-        let gpu = HUDPreferences.resourceOptions(for: .gpu)
-        let resources = Dictionary(uniqueKeysWithValues: HUDResourceGroup.allCases.map {
-            ($0, HUDPreferences.resourceOptions(for: $0))
-        })
-        let powerEnabled = HUDPowerDemand.isNeeded(hudEnabled: readingsActive,
-            resources: resources, package: HUDPreferences.packagePowerOptions)
-        powerMonitor.configure(enabled: powerEnabled)
-        if !powerEnabled {
+        let demand = monitoringDemand
+        miscMonitor.configure(demand.misc)
+        fanMonitor.configure(readings: demand.fans)
+        powerMonitor.configure(enabled: demand.power)
+        if !demand.power {
             logSnapshot.updatePower(.unavailable)
             hudWindow?.updatePower(.unavailable)
         }
-        if !readingsActive || !cpu.enabled || !cpu.temperature { logSnapshot.set(.cpuTemperature, nil) }
-        if !readingsActive || !gpu.enabled || !gpu.temperature { logSnapshot.set(.gpuTemperature, nil) }
-        if !readingsActive || !fan.enabled || !fan.usage { logSnapshot.updateFans(.unavailable) }
-        if !HUDPreferences.batteryOptions.temperature { logSnapshot.set(.batteryTemperature, nil) }
-        if !HUDPreferences.batteryOptions.power { logSnapshot.set(.batteryPower, nil) }
-        temperatureMonitor.configure(cpu: readingsActive && cpu.enabled && cpu.temperature,
-                                     gpu: readingsActive && gpu.enabled && gpu.temperature)
-        if metrics.contains(.gpuTotal) { totalGPUUsageMonitor?.start() }
+        if !demand.cpuTemperature { logSnapshot.set(.cpuTemperature, nil) }
+        if !demand.gpuTemperature { logSnapshot.set(.gpuTemperature, nil) }
+        if !demand.fans { logSnapshot.updateFans(.unavailable) }
+        if !demand.batteryTemperature { logSnapshot.set(.batteryTemperature, nil) }
+        if !demand.batteryPower { logSnapshot.set(.batteryPower, nil) }
+        temperatureMonitor.configure(cpu: demand.cpuTemperature, gpu: demand.gpuTemperature)
+        if demand.gpuUsage { totalGPUUsageMonitor?.start() }
         else { logSnapshot.set(.gpuUsage, nil); totalGPUUsageMonitor?.stop(); hudWindow?.updateMetric(.gpuTotal, value: "") }
-        if metrics.contains(.cpuTotal) { totalCPUUsageMonitor?.start() }
+        if demand.cpuUsage { totalCPUUsageMonitor?.start() }
         else { logSnapshot.set(.cpuUsage, nil); totalCPUUsageMonitor?.stop(); hudWindow?.updateMetric(.cpuTotal, value: "") }
-        let memory = HUDPreferences.resourceOptions(for: .ram)
-        if metrics.contains(.ramTotal) && (memory.totalUse || memory.showsDetails) { totalRAMUsageMonitor?.start() }
+        if demand.totalMemory { totalRAMUsageMonitor?.start() }
         else { logSnapshot.updateMemory(nil, app: false); totalRAMUsageMonitor?.stop(); hudWindow?.updateRAM(.ramTotal, usage: nil) }
-        if metrics.contains(.ramTotal) && memory.showsPressure {
-            memoryPressureMonitor?.start(includeHistory: HUDPreferences.alignment == .vertical && memory.pressureMode.isHistory)
+        if demand.pressure {
+            memoryPressureMonitor?.start(includeHistory: demand.pressureHistory)
         } else {
             logSnapshot.setText(.memoryPressure, nil)
             memoryPressureMonitor?.stop()
             hudWindow?.updateMemoryPressure("")
             hudWindow?.clearMemoryPressureHistory()
         }
-        if metrics.contains(.battery) {
-            batteryMonitor?.start(temperature: HUDPreferences.batteryOptions.temperature, power: HUDPreferences.batteryOptions.power)
+        if demand.battery {
+            batteryMonitor?.start(temperature: demand.batteryTemperature, power: demand.batteryPower)
+        } else {
+            latestBatterySample = nil
+            logSnapshot.updateBattery(nil)
+            batteryMonitor?.stop()
+            hudWindow?.updateMetric(.battery, value: "")
         }
-        else { logSnapshot.updateBattery(nil); batteryMonitor?.stop(); hudWindow?.updateMetric(.battery, value: "") }
-
-        if metrics.contains(.gpu), let pid = currentPID { gpuUsageMonitor?.start(pid: pid) }
+        if demand.gpuAppUsage, let pid = currentPID { gpuUsageMonitor?.start(pid: pid) }
         else { logSnapshot.set(.gpuAppUsage, nil); gpuUsageMonitor?.stop(); hudWindow?.updateMetric(.gpu, value: "") }
-        if metrics.contains(.cpu), let pid = currentPID { cpuUsageMonitor?.start(pid: pid) }
+        if demand.cpuAppUsage, let pid = currentPID { cpuUsageMonitor?.start(pid: pid) }
         else { logSnapshot.set(.cpuAppUsage, nil); cpuUsageMonitor?.stop(); hudWindow?.updateMetric(.cpu, value: "") }
-        if metrics.contains(.ram), let pid = currentPID { ramUsageMonitor?.start(pid: pid) }
+        if demand.appMemory, let pid = currentPID { ramUsageMonitor?.start(pid: pid) }
         else { logSnapshot.updateMemory(nil, app: true); ramUsageMonitor?.stop(); hudWindow?.updateRAM(.ram, usage: nil) }
-        // Auto hide must keep detecting FPS even with the FPS category unchecked
-        // and all other readings paused, otherwise the HUD could never reappear.
-        let needsResolution = readingsActive && enabledMetrics.contains(.misc)
-            && HUDPreferences.miscOptions.visibleReadings.contains(.resolution)
-        if hudEnabled && (HUDPreferences.autoHideMode == .all || metrics.contains(.fps) || metrics.contains(.fpsGraph) || needsResolution), let pid = currentPID {
+        if demand.fps, let pid = currentPID {
             do { try fpsMonitor?.start(pid: pid) }
             catch { logSnapshot.set(.fps, nil); miscMonitor.updateResolution(nil); hudWindow?.markFPSUnavailable() }
         } else {
@@ -1554,6 +1699,7 @@ final class AppDelegate:
             miscMonitor.updateResolution(nil)
             hudWindow?.resetFPS()
         }
+        refreshMenuBarReadings()
     }
 
     // MARK: - Logging

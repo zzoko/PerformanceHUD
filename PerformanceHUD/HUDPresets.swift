@@ -27,6 +27,11 @@ struct HUDPresetConfiguration: Codable, Equatable {
     var battery: HUDBatteryOptions
     var misc: HUDMiscOptions
     var deviceInfo: Bool
+    var menuBarReadings: Set<HUDMenuBarReading> = []
+
+    private enum CodingKeys: String, CodingKey {
+        case fps, resources, packagePower, fans, battery, misc, deviceInfo, menuBarReadings
+    }
 
     static func capture(in store: UserDefaults = .standard) -> Self {
         Self(fps: HUDPreferences.fpsOptions(in: store),
@@ -37,7 +42,8 @@ struct HUDPresetConfiguration: Codable, Equatable {
              fans: HUDPreferences.fanOptions(in: store),
              battery: HUDPreferences.batteryOptions(in: store),
              misc: HUDPreferences.miscOptions(in: store),
-             deviceInfo: HUDPreferences.isMetricEnabled(.deviceInfo, in: store))
+             deviceInfo: HUDPreferences.isMetricEnabled(.deviceInfo, in: store),
+             menuBarReadings: HUDMenuBarOptions.load(in: store).readings)
             .canonicalized()
     }
 
@@ -55,6 +61,9 @@ struct HUDPresetConfiguration: Codable, Equatable {
         HUDPreferences.setBatteryOptions(configuration.battery, in: store)
         HUDPreferences.setMiscOptions(configuration.misc, in: store)
         HUDPreferences.setMetricEnabled(.deviceInfo, enabled: configuration.deviceInfo, in: store)
+        var menuBar = HUDMenuBarOptions.load(in: store)
+        menuBar.readings = configuration.menuBarReadings
+        menuBar.save(in: store)
     }
 
     static func builtIn(_ preset: HUDBuiltInPreset) -> Self {
@@ -93,7 +102,10 @@ struct HUDPresetConfiguration: Codable, Equatable {
     func matches(_ other: Self, availability: HUDPresetAvailability = .init()) -> Bool {
         func comparable(_ source: Self) -> Self {
             var result = source.canonicalized()
-            if !availability.fansAvailable { result.fans.enabled = false }
+            if !availability.fansAvailable {
+                result.fans.enabled = false
+                result.menuBarReadings.remove(.fanUsage)
+            }
             if !availability.powerAvailable {
                 result.packagePower.enabled = false
                 for group in HUDResourceGroup.allCases where group.supportsPower {
@@ -135,6 +147,21 @@ struct HUDPresetConfiguration: Codable, Equatable {
             result.resources[group] = options
         }
         return result
+    }
+}
+
+extension HUDPresetConfiguration {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        fps = try values.decode(HUDFPSOptions.self, forKey: .fps)
+        resources = try values.decode([HUDResourceGroup: HUDResourceOptions].self, forKey: .resources)
+        packagePower = try values.decode(HUDPackagePowerOptions.self, forKey: .packagePower)
+        fans = try values.decode(HUDFanOptions.self, forKey: .fans)
+        battery = try values.decode(HUDBatteryOptions.self, forKey: .battery)
+        misc = try values.decode(HUDMiscOptions.self, forKey: .misc)
+        deviceInfo = try values.decode(Bool.self, forKey: .deviceInfo)
+        // Presets saved before menu-bar readings existed retain an all-off selection.
+        menuBarReadings = try values.decodeIfPresent(Set<HUDMenuBarReading>.self, forKey: .menuBarReadings) ?? []
     }
 }
 

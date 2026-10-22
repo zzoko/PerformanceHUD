@@ -85,7 +85,10 @@ import AppKit
         ], forName: UserDefaults.argumentDomain)
         defer { UserDefaults.standard.setVolatileDomain(originalDomain, forName: UserDefaults.argumentDomain) }
         let hud = HUDWindowController()
-        hud.setHUDEnabled(false)
+        let panel: HUDPanel = member(hud, "panel")
+        panel.alphaValue = 0
+        // Exercise active rendering without showing the fixture on screen.
+        hud.setHUDEnabled(true)
         hud.setAutoHideMode(.off)
         hud.setHUDScale(.init(rawValue: 1))
         defer { hud.shutdown() }

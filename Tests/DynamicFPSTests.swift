@@ -7,6 +7,16 @@ import AppKit
     @MainActor static func member<T>(_ object: Any, _ name: String) -> T {
         Mirror(reflecting: object).children.first { $0.label == name }!.value as! T
     }
+    @MainActor static func activeHUD() -> HUDWindowController {
+        let hud = HUDWindowController()
+        let panel: HUDPanel = member(hud, "panel")
+        panel.alphaValue = 0
+        hud.setAutoHideAnimated(false)
+        // Disabled overlays intentionally stop live rendering. Keep the fixture
+        // active but invisible; geometry checks use instant transitions.
+        hud.setHUDEnabled(true)
+        return hud
+    }
     @MainActor static func main() async {
         _ = NSApplication.shared
         var availability = HUDFPSAvailability()
@@ -123,8 +133,7 @@ import AppKit
             try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-fps-selector-preview.png"))
         }
 
-        let styledHUD = HUDWindowController()
-        styledHUD.setHUDEnabled(false)
+        let styledHUD = activeHUD()
         styledHUD.setAutoHideMode(.off)
         let styledPanel: HUDPanel = member(styledHUD, "panel")
         let styledGlass: NativeGlassHUDBackground = member(styledHUD, "backgroundView")
@@ -142,13 +151,15 @@ import AppKit
                 styledHUD.setHUDScale(scale)
                 styledHUD.updateFPS(60)
                 styledGraph.append(60)
-                let storedHistory: FPSHistory = member(styledGraph, "history")
                 let frame = styledPanel.frame
                 let bodyFrame = styledGlass.bodyFrame
                 let values: [HUDMetric: NSTextField] = member(styledHUD, "valueLabels")
                 let titles: [HUDMetric: NSTextField] = member(styledHUD, "titleLabels")
                 for highlighted in [false, true, false] {
+                    let storedHistory: FPSHistory = member(styledGraph, "history")
                     styledHUD.setFPSOptions(.init(enabled: true, mode: .both, valueHighlighted: highlighted))
+                    let history: FPSHistory = member(styledGraph, "history")
+                    check(history.samples.count == storedHistory.samples.count, "Emphasis must retain FPS history")
                     for value in [0.0, 8, 120, 9999] {
                         styledHUD.updateFPS(value)
                         let horizontalLabels: [String: NSTextField] = member(styledHorizontal, "labels")
@@ -187,8 +198,6 @@ import AppKit
                         check(styledPanel.frame == frame && styledGlass.bodyFrame == bodyFrame,
                               "FPS emphasis and changing digits must not resize the window or glass")
                     }
-                    let history: FPSHistory = member(styledGraph, "history")
-                    check(history.samples.count == storedHistory.samples.count, "Emphasis must retain FPS history")
                     check(titles[.fps]?.font == HUDStyle.titleFont(for: .fps, scale: scale), "Emphasis affects only the FPS number")
                 }
             }
@@ -240,7 +249,7 @@ import AppKit
                       HUDScale(rawValue: 1.01), HUDScale(rawValue: 1.25), HUDScale.large] {
             for fpsMetrics: Set<HUDMetric> in [[.fps], [.fpsGraph], [.fps, .fpsGraph]] {
                 for body: Set<HUDMetric> in [[], [.cpuTotal], [.ramTotal], [.fans], [.battery], [.deviceInfo], [.cpuTotal, .ramTotal, .battery]] {
-                    let hud = HUDWindowController()
+                    let hud = activeHUD()
                     hud.setPackagePowerOptions(.init(enabled: false))
                     for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: fpsMetrics.union(body).contains(metric)) }
                     hud.setHUDScale(scale)
@@ -316,7 +325,7 @@ import AppKit
                       HUDScale(rawValue: 1.01), HUDScale(rawValue: 1.25), HUDScale.large] {
             for background in [HUDBackground.dark, .light] {
                 for body: Set<HUDMetric> in [[], [.cpuTotal], [.ramTotal, .battery], [.fans]] {
-                    let hud = HUDWindowController()
+                    let hud = activeHUD()
                     hud.setAutoHideMode(.off)
                     hud.setAlignment(.horizontal)
                     hud.setBackground(background)
@@ -364,7 +373,7 @@ import AppKit
         }
 
         // Exercise real asynchronous collapse/recovery, including a cancelled deadline.
-        let hud = HUDWindowController()
+        let hud = activeHUD()
         hud.setAutoHideMode(.fps)
         let container: NSView = member(hud, "container")
         let panel: HUDPanel = member(hud, "panel")
@@ -398,6 +407,7 @@ import AppKit
         // Animate a visible native window and verify its anchor through reversal.
         hud.setBackground(.dark)
         hud.setAutoHideMode(.fps)
+        hud.setAutoHideAnimated(true)
         hud.setHUDEnabled(true)
         let animationStart = container.frame.height
         let animationWindow = panel.frame
@@ -420,10 +430,11 @@ import AppKit
         check(container.frame.height == finalExpanded, "Returning readings reverse an in-flight collapse")
         hud.setHUDEnabled(false)
         hud.shutdown()
-        let sideways = HUDWindowController()
+        let sideways = activeHUD()
         sideways.setAlignment(.horizontal)
         sideways.setBackground(.dark)
         sideways.setAutoHideMode(.fps)
+        sideways.setAutoHideAnimated(true)
         sideways.setHUDEnabled(true)
         let sidewaysContainer: NSView = member(sideways, "container")
         let sidewaysPanel: HUDPanel = member(sideways, "panel")
