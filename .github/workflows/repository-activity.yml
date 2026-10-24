@@ -2,7 +2,7 @@ name: Update repository activity
 
 on:
   schedule:
-    - cron: '23 6 * * *'
+    - cron: '23 * * * *'
   workflow_dispatch:
 
 permissions:

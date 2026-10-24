@@ -1,5 +1,6 @@
 import importlib.util
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -26,7 +27,7 @@ class ActivityTests(unittest.TestCase):
         self.assertEqual(days[0][0].isoformat(), '2026-09-17')
         self.assertEqual(days[-1][0].isoformat(), '2026-09-30')
         self.assertEqual(days[-1][1], 19)
-        self.assertEqual(sum(c for _, c in days), 119)
+        self.assertEqual(sum(c for _, c in days if c is not None), 119)
         svg = activity.render_svg(days, NOW)
         ET.fromstring(svg)
         self.assertIn('119 Git clones, including 19 yesterday', svg)
@@ -35,14 +36,63 @@ class ActivityTests(unittest.TestCase):
         self.assertIn('Oct 01, 2026 06:23 UTC', svg)
 
     def test_valid_zero_activity_is_renderable(self):
-        days = activity.daily_counts({'count': 0, 'clones': []}, NOW,
-                                    {'days': [{'date': '2026-09-17', 'count': 0}]})
+        rows = [((NOW.date() - timedelta(days=i)).isoformat(), 0)
+                for i in range(1, 15)]
+        days = activity.daily_counts(payload(rows), NOW)
         self.assertEqual(sum(c for _, c in days), 0)
         svg = activity.render_svg(days, NOW)
         root = ET.fromstring(svg)
         bars = root.findall("{http://www.w3.org/2000/svg}rect[@class='zero']")
         self.assertEqual(len(bars), 14)
+        self.assertNotIn('Pending', svg)
+        self.assertIn('including 0 yesterday', svg)
         self.assertNotIn('nan', svg.lower())
+
+    def test_missing_recent_readings_are_pending_not_zero(self):
+        days = activity.daily_counts(payload([]), NOW)
+        self.assertTrue(all(count is None for _, count in days))
+        svg = activity.render_svg(days, NOW)
+        root = ET.fromstring(svg)
+        self.assertEqual(len(root.findall("{http://www.w3.org/2000/svg}rect[@class='zero']")), 0)
+        self.assertIn('>Pending</text>', svg)
+        self.assertIn('Yesterday pending', svg)
+        self.assertIn('Pending Git clones', svg)
+        self.assertIn('Total tracked: Pending', svg)
+        self.assertIn('13 day(s) pending', svg)
+        self.assertIn('1 day(s) unavailable', svg)
+
+    def test_pending_reading_is_replaced_when_data_arrives(self):
+        previous = {'schema_version': 2,
+                    'days': [{'date': '2026-09-30', 'count': None}]}
+        days = activity.daily_counts(payload([('2026-09-30', 19)]), NOW, previous)
+        self.assertEqual(days[-1][1], 19)
+        svg = activity.render_svg(days, NOW)
+        self.assertIn('including 19 yesterday', svg)
+        self.assertNotIn('Yesterday pending', svg)
+
+    def test_missing_rows_preserve_confirmed_counts_including_zero(self):
+        previous = {'schema_version': 2, 'history': [
+            {'date': '2026-09-29', 'count': 7},
+            {'date': '2026-09-30', 'count': 0}]}
+        days = activity.daily_counts(payload([]), NOW, previous)
+        self.assertEqual([count for _, count in days[-2:]], [7, 0])
+
+    def test_explicit_zero_can_correct_a_saved_positive_count(self):
+        previous = {'schema_version': 2,
+                    'history': [{'date': '2026-09-30', 'count': 7}]}
+        days = activity.daily_counts(payload([('2026-09-30', 0)]), NOW, previous)
+        self.assertEqual(days[-1][1], 0)
+
+    def test_legacy_zeros_require_api_confirmation(self):
+        previous = {'history': [
+            {'date': '2026-09-01', 'count': 0},
+            {'date': '2026-09-28', 'count': 7},
+            {'date': '2026-09-29', 'count': 0},
+            {'date': '2026-09-30', 'count': 0}]}
+        history = activity.collected_counts(payload([('2026-09-29', 0)]), NOW, previous)
+        self.assertEqual({day.isoformat(): count for day, count in history.items()},
+                         {'2026-09-28': 7, '2026-09-29': 0})
+        self.assertIsNone(activity.completed_days(history, NOW)[-1][1])
 
     def test_bad_responses_do_not_turn_into_zero_counts(self):
         bad = [{}, {'message': 'Bad credentials'}, {'count': 2, 'clones': []},
@@ -118,6 +168,21 @@ class ActivityTests(unittest.TestCase):
                     with self.assertRaises(RuntimeError):
                         activity.main()
                     publish.assert_not_called()
+
+    def test_empty_response_publishes_pending_and_persists_new_schema(self):
+        env = {'GITHUB_REPOSITORY': activity.REPOSITORY,
+               'GITHUB_TOKEN': 'test-only', 'TRAFFIC_TOKEN': 'test-only'}
+        with patch.dict('os.environ', env, clear=True):
+            with patch.object(activity.GitHub, 'call', side_effect=[payload([]), None]):
+                with patch.object(activity, 'publish') as publish:
+                    activity.main()
+        files = publish.call_args.args[1]
+        saved = json.loads(files['activity.json'])
+        self.assertEqual(saved['schema_version'], 2)
+        self.assertEqual(saved['history'], [])
+        self.assertTrue(all(day['count'] is None for day in saved['days']))
+        self.assertIn('Yesterday pending', files['repository-activity.svg'])
+        self.assertIn('hourly', files['README.md'])
 
 
 class FakeAPI:
