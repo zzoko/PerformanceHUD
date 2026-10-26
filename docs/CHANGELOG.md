@@ -2,6 +2,10 @@
 
 [← Back to README](../README.md)
 
+### v2.9
+
+- The battery icon turns red at 10% charge or below in both HUD layouts and the menu bar, taking priority over the Low Power Mode yellow.
+
 ### v2.8
 
 - Added optional **menu-bar readings**, with an independent button beside each supported reading. They retain the horizontal HUD's proportions at a smaller size and stay available while the HUD is disabled. All selections start off; a shared chevron collapses or expands them together.

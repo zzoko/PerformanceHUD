@@ -62,7 +62,7 @@ final class HUDControlsGuide: NSWindowController {
         .init(title: "Battery", rows: [
             ("Charge · Always / Auto / Off", "Net battery watts: positive means charging, negative discharging. Always includes zero; Auto, the default, hides near-zero flow after three seconds; Off hides it. Auto reclaims the space in Horizontal. If Charge is the only battery reading selected in the menu bar, hiding it also hides its category. Auto restores it when flow returns."),
             ("Temperature / Heat warning", "Battery temperature in °C on supported MacBooks. Heat warning turns only the number red at your threshold; enabled at 45°C by default. Unavailable readings stay blank."),
-            ("Energy", "Battery charge icon: a bolt indicates external power; yellow indicates Low Power Mode. Power Source identifies Battery or Adapter, shortened to BAT or ADP in Horizontal.")]),
+            ("Energy", "Battery charge icon: red at 10% or below; otherwise yellow in Low Power Mode. A bolt indicates external power. Power Source identifies Battery or Adapter, shortened to BAT or ADP in Horizontal.")]),
         .init(title: "Misc", rows: [
             ("", "Vertical-only and off by default. Its buttons toggle each reading independently."),
             ("Process", "The focused app being tracked."),
