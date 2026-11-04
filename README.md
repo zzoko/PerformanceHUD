@@ -1,4 +1,10 @@
-# PerformanceHUD
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/banner-dark.webp">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/banner-light.webp">
+    <img src="docs/images/banner-light.webp" alt="PerformanceHUD — a lightweight performance overlay for macOS" width="860">
+  </picture>
+</p>
 
 ## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-2.9.svg" alt="App version 2.9 — view changelog" width="56" height="30" align="top"></a>
 
