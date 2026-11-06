@@ -13,6 +13,8 @@ struct FPSHistory {
     private(set) var endTime: TimeInterval = 0
     private var interrupted = false
 
+    var currentSample: Sample? { interrupted ? nil : samples.last }
+
     mutating func append(_ fps: Double, at time: TimeInterval) {
         guard fps.isFinite, fps >= 0, time.isFinite else { return }
         if time < endTime { reset() }
@@ -123,6 +125,7 @@ final class HUDFPSGraphView: NSView {
         super.init(frame: .zero)
         setAccessibilityElement(true)
         setAccessibilityLabel("FPS history, last 60 seconds")
+        setAccessibilityHelp("The endpoint dot marks the current FPS reading.")
     }
 
     required init?(coder: NSCoder) { fatalError("Use init()") }
@@ -172,10 +175,12 @@ final class HUDFPSGraphView: NSView {
         super.draw(dirtyRect)
         guard !history.samples.isEmpty, bounds.width > 0, bounds.height > 0 else { return }
         let lineWidth = 1.35 * hudScale
+        let dotHaloRadius = 3 * hudScale
         // Reserve the extra bottom area for the fade without moving or scaling the stroke.
         let fadeExtension = HUDStyle.fpsHistoryFadeExtension * hudScale
+        // Keep the current-reading halo inside the graph's trailing edge.
         let plot = NSRect(x: bounds.minX + lineWidth / 2, y: bounds.minY + 9 * hudScale + fadeExtension,
-                          width: bounds.width - lineWidth,
+                          width: bounds.width - lineWidth / 2 - dotHaloRadius,
                           height: bounds.height - 12 * hudScale - fadeExtension)
         let fillBaseline = bounds.minY
         guard plot.width > 0, plot.height > 0 else { return }
@@ -218,6 +223,17 @@ final class HUDFPSGraphView: NSView {
             path.lineCapStyle = .round
             lineColor.setStroke()
             path.stroke()
+        }
+        if history.currentSample != nil, let center = segments.last?.last {
+            // Match the memory pressure graph's current-reading dot and halo.
+            func circle(radius: CGFloat) -> NSBezierPath {
+                NSBezierPath(ovalIn: NSRect(x: center.x - radius, y: center.y - radius,
+                                          width: radius * 2, height: radius * 2))
+            }
+            lineColor.withAlphaComponent(0.22).setFill()
+            circle(radius: dotHaloRadius).fill()
+            lineColor.setFill()
+            circle(radius: 1.6 * hudScale).fill()
         }
     }
 }

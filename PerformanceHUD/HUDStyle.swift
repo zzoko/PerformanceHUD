@@ -116,9 +116,8 @@ enum HUDStyle {
             return (24 + fpsHistoryFadeExtension) * CGFloat(scale.rawValue) + rowSpacing(scale: scale)
         }
         if metric == .deviceInfo { return ramDetailHeight(scale: scale) }
-        if metric == .battery { return rowHeight(scale: scale) + ramDetailHeight(scale: scale) }
         let detailLines = metric == .ramTotal ? 3 : metric == .ram ? 1 : 0
-        let detailGroupSpacing: CGFloat = 0
+        let detailGroupSpacing = detailLines > 0 ? rowSpacing(scale: scale) : 0
         return rowHeight(scale: scale) + detailGroupSpacing + CGFloat(detailLines) * ramDetailHeight(scale: scale)
     }
 
@@ -166,10 +165,10 @@ enum HUDStyle {
         return current + gap * gapIncrease
     }
 
-    // A fixed 270pt vertical HUD at 1×, including its two side paddings.
+    // A fixed 285pt vertical HUD at 1×, including its two side paddings.
     // Reading visibility, emphasis, and category selection never change it.
     static func verticalValueColumnRight(scale: HUDScale) -> CGFloat {
-        270 * CGFloat(scale.rawValue) - 2 * horizontalPadding(scale: scale)
+        285 * CGFloat(scale.rawValue) - 2 * horizontalPadding(scale: scale)
     }
 
     // Share the compact FPS-only column with the FPS section of the horizontal HUD.

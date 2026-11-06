@@ -24,7 +24,8 @@ import Darwin
         check(HUDPreferences.miscOptions(in: store) == HUDMiscOptions(), "Reset restores disabled default")
         check(!HUDAlignment.horizontal.allows(.misc), "Misc is vertical-only")
         for reading in HUDMiscReading.allCases {
-            check(HUDMiscSample().text(for: reading).isEmpty, "Unavailable values stay blank")
+            check(HUDMiscSample().text(for: reading) == (reading == .resolution ? "-" : ""),
+                  "Unavailable resolution shows a dash; other unavailable values stay blank")
         }
         check(HUDMiscSample(gameMode: true).text(for: .gameMode) == "on", "Enabled Game Mode")
         check(HUDMiscSample(gameMode: false).text(for: .gameMode) == "off", "Disabled Game Mode")

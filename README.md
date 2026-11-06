@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-2.9.svg" alt="App version 2.9 — view changelog" width="56" height="30" align="top"></a>
+## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-3.0.svg" alt="App version 3.0 — view changelog" width="56" height="30" align="top"></a>
 
 Download the ready-built app for **$3.99**, or build it yourself for free. Both offer the same features, with no subscription or feature unlocks.
 
@@ -32,7 +32,7 @@ You can also support PerformanceHUD's ongoing development and maintenance throug
 <td>
 
 <details>
-<summary><strong>Take a closer look — features, screenshots &amp; controls</strong></summary>
+<summary><strong>Features, screenshots &amp; controls</strong></summary>
 
 PerformanceHUD is a small app under 10 MB that displays a customizable performance overlay over games and apps. It's a highly versatile tool,  you can use it while gaming, show performance and system information for benchmark videos, or record readings to CSV for later analysis. It can display FPS, CPU, GPU and memory statistics, fan speeds, battery information, and details about the focused app.
 

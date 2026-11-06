@@ -46,7 +46,7 @@ import AppKit
         check(!master.isEnabled && master.state == .off && !usage.isEnabled && usage.state == .off, "No fans disables and unchecks the category and its controls")
         check(!average.isEnabled && average.state == .off, "No fans also dims and unchecks Average")
         check(usage.toolTip == "Not available" && FanSample.noFans.message == "Not available", "Menu and HUD share the no-fan message")
-        check((0..<mode.segmentCount).map { mode.label(forSegment: $0)! } == ["Total", "RPM", "Both"] && mode.selectedSegment == 0, "Fan mode labels and Total default")
+        check((0..<mode.segmentCount).map { mode.label(forSegment: $0)! } == ["Total", "RPM", "Both"] && mode.selectedSegment == 2, "Fan mode labels and Both default")
         menu.update(sample: two)
         check(master.isEnabled && master.state == .on && usage.isEnabled && usage.state == .on && mode.isEnabled, "Category and saved usage return on detection")
         let averageMode: NSSegmentedControl = member(menu, "averageMode")
@@ -65,7 +65,7 @@ import AppKit
         }
         var lastFanOptions: HUDFanOptions?
         menu.onChange = { lastFanOptions = $0 }
-        check(HUDFanOptions().mode == .bar && !rpmHighlight.isEnabled, "Total is the default and disables RPM emphasis")
+        check(HUDFanOptions().mode == .both && rpmHighlight.isEnabled, "Both is the default and allows RPM emphasis")
         selectFanMode(2)
         check(rpmHighlight.state == .off && rpmHighlight.isEnabled, "RPM emphasis defaults off and is available in Both")
         rpmHighlight.performClick(nil)

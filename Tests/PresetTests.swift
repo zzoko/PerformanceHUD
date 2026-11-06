@@ -24,7 +24,7 @@ import AppKit
               "Balanced exactly matches pre-preset fresh preferences")
         check(balanced.fps.enabled && balanced.fps.mode == .both && balanced.fps.valueHighlighted,
               "Balanced retains FPS Both and number emphasis")
-        check(balanced.fans.mode == .bar && balanced.battery.flowMode == .auto
+        check(balanced.fans.mode == .both && balanced.battery.flowMode == .auto
               && !balanced.misc.enabled && !balanced.deviceInfo,
               "Balanced retains fan, battery, Misc, and Chip & OS defaults")
         check(balanced.resources[.ram]?.pressureMode == .colorHistory,
@@ -171,7 +171,7 @@ import AppKit
             ("Menu-bar reading", { $0.menuBarReadings.insert(.gpuTemperature) }),
             ("SOC", { $0.packagePower.enabled.toggle() }),
             ("SOC emphasis", { $0.packagePower.highlighted.toggle() }),
-            ("Fan mode", { $0.fans.mode = .both }),
+            ("Fan mode", { $0.fans.mode = .bar }),
             ("Fan average", { $0.fans.averageMode = .both }),
             ("Battery charge", { $0.battery.flowMode = .always }),
             ("Battery heat", { $0.battery.heatWarning.thresholdCelsius = 47 }),
@@ -211,7 +211,18 @@ import AppKit
         check(pinnedFan.matches(balanced, availability: noHardware),
               "Automatic removal of an unavailable fan pin does not make a preset Custom")
         check(!pinnedFan.matches(balanced), "An available fan pin remains a preset choice")
-        unavailable.fans.mode = .both
+        var desktop = balanced
+        desktop.battery.enabled = false
+        let noBattery = HUDPresetAvailability(batteryAvailable: false)
+        check(desktop.matches(balanced, availability: noBattery), "Automatic battery disablement keeps the Balanced preset on desktops")
+        check(!desktop.matches(balanced), "A disabled battery remains a preset choice on laptops")
+        var pinnedBattery = balanced
+        pinnedBattery.menuBarReadings = [.batteryPower, .batteryTemperature, .batteryEnergy]
+        check(pinnedBattery.matches(balanced, availability: noBattery), "Unavailable battery pins are ignored when matching presets")
+        check(!pinnedBattery.matches(balanced), "Battery pins remain preset choices on supported hardware")
+        desktop.battery.temperature = false
+        check(!desktop.matches(balanced, availability: noBattery), "Remembered battery reading choices remain meaningful on desktops")
+        unavailable.fans.mode = .bar
         check(!unavailable.matches(balanced, availability: noHardware),
               "Remembered fan mode remains a choice even on a fanless Mac")
         clear()

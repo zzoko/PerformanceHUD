@@ -77,7 +77,7 @@ enum HUDFanMode: String, CaseIterable, Codable {
 struct HUDFanOptions: Codable, Equatable {
     var enabled = true
     var usage = true
-    var mode: HUDFanMode = .bar
+    var mode: HUDFanMode = .both
     var average = true
     var averageMode: HUDFanAverageMode = .horizontal
     var rpmHighlighted = false

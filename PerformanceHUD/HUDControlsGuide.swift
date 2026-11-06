@@ -38,7 +38,7 @@ final class HUDControlsGuide: NSWindowController {
         .init(title: "Category controls", rows: [
             ("Switches and checkboxes", "A category switch shows or hides its readings without clearing choices. Checkboxes control individual readings; adjacent buttons choose their mode. Scroll to reach more categories."),
             ("B · Emphasis", "Highlight a reading without changing its size. A filled B means on. Formatting controls remain available for readings selected in the menu bar, even when hidden in the HUD.")]),
-        .init(title: "FPS", rows: [("Value / History / Both", "Show the focused app’s FPS number, its last 60 seconds of history, or both. History is sampled about once per second, not per frame. Availability depends on the app and macOS. Both is the default; B emphasizes the number.")]),
+        .init(title: "FPS", rows: [("Value / History / Both", "Show the focused app’s FPS number, its last 60 seconds of history, or both. History is sampled about once per second, not per frame; the dot marks the latest available reading. Availability depends on the app and macOS. Both is the default; B emphasizes the number.")]),
         .init(title: "GPU", rows: [
             ("Power", "Estimated system GPU watts. Requires Power Helper."),
             ("Temperature / Heat warning", "Average of available GPU temperature sensors. Heat warning turns the number red at or above the chosen temperature; enabled at 95°C by default. Accepts whole degrees from 1–149°C and follows the rounded displayed value. B controls emphasis independently."),
@@ -57,16 +57,17 @@ final class HUDControlsGuide: NSWindowController {
             ("Use · Total / App / Both", "Choose system memory, the focused app’s tracked process, or both. This also selects the source for Details, even when the Use percentage is hidden.")]),
         .init(title: "FAN", rows: [
             ("Average · Vertical / Horizontal / Both", "Combine two or more fans in the chosen layouts. A marks an average; numbered badges identify individual fans. Horizontal averaging is on by default."),
-            ("Use · Total / RPM / Both", "Total shows a bar relative to the fan’s maximum speed; RPM shows its speed as a number. Both shows both. Total is the default; B emphasizes RPM only. A stopped fan can correctly show 0 RPM."),
+            ("Use · Total / RPM / Both", "Total shows a bar relative to the fan’s maximum speed; RPM shows its speed as a number. Both shows both and is the default; B emphasizes RPM only. A stopped fan can correctly show 0 RPM."),
             ("Availability", "Fanless Macs show Not available with FAN off and greyed out. Readings are for monitoring only: these controls do not change fan speed or require Power Helper.")]),
         .init(title: "Battery", rows: [
             ("Charge · Always / Auto / Off", "Net battery watts: positive means charging, negative discharging. Always includes zero; Auto, the default, hides near-zero flow after three seconds; Off hides it. Auto reclaims the space in Horizontal. If Charge is the only battery reading selected in the menu bar, hiding it also hides its category. Auto restores it when flow returns."),
             ("Temperature / Heat warning", "Battery temperature in °C on supported MacBooks. Heat warning turns only the number red at your threshold; enabled at 45°C by default. Unavailable readings stay blank."),
-            ("Energy", "Battery charge icon: red at 10% or below; otherwise yellow in Low Power Mode. A bolt indicates external power. Power Source identifies Battery or Adapter, shortened to BAT or ADP in Horizontal.")]),
+            ("Energy", "Battery charge icon: yellow in Low Power Mode; otherwise red at 10% or below. A bolt indicates external power. Source · Battery or Source · Adapter identifies the power source, shortened to BAT or ADP in Horizontal."),
+            ("Availability", "Macs without an internal battery show Not available with Battery off and greyed out.")]),
         .init(title: "Misc", rows: [
             ("", "Vertical-only and off by default. Its buttons toggle each reading independently."),
             ("Process", "The focused app being tracked."),
-            ("Resolution", "Reported Metal output dimensions, which may differ from internal rendering resolution with upscaling."),
+            ("Resolution", "Reported Metal output dimensions, which may differ from internal rendering resolution with upscaling. A dash means unavailable."),
             ("Refresh rate", "The display’s configured rate or variable-refresh range, not its instantaneous rate."),
             ("Game Mode", "Experimental macOS on/off status. Unavailable readings stay blank."),
             ("Thermal", "System thermal pressure: nominal, fair, serious, or critical. This is not a temperature reading.")]),

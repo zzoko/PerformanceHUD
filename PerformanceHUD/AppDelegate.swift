@@ -123,6 +123,7 @@ final class AppDelegate:
     private let temperatureMonitor = TemperatureMonitor()
     private let fanMonitor = FanMonitor()
     private var fanMenuView: HUDFanMenuView?
+    private var batteryMenuView: HUDResourceMenuView?
     private let powerMonitor = PowerMonitor()
     private var packagePowerMenuView: HUDPackagePowerMenuView?
     private var resourceMenuViews: [HUDResourceGroup: HUDResourceMenuView] = [:]
@@ -161,6 +162,10 @@ final class AppDelegate:
             self?.reconcileMonitoring()
             self?.presentLoggingError(error, recovery: recovery)
         }
+        // Resolve absent battery hardware before building the HUD and category menu.
+        setupBatteryMonitor()
+        HUDPreferences.applyBatteryAvailability(batteryMonitor?.availability ?? .unknown)
+        enabledMetrics = HUDPreferences.visibleMetrics
         setupHUD()
 
         // Selected app / FPS
@@ -208,8 +213,6 @@ final class AppDelegate:
             }
         }
 
-        // Battery
-        setupBatteryMonitor()
         miscMonitor.onUpdate = { [weak self] sample in
             self?.hudWindow?.updateMisc(sample)
             self?.logSnapshot.updateMisc(sample)
@@ -540,6 +543,17 @@ final class AppDelegate:
         let monitor =
             BatteryMonitor()
 
+        monitor.onAvailabilityChange = { [weak self] availability in
+            guard let self else { return }
+            let changed = HUDPreferences.applyBatteryAvailability(availability)
+            batteryMenuView?.update(batteryAvailability: availability)
+            if changed {
+                enabledMetrics = HUDPreferences.visibleMetrics
+                hudWindow?.setBatteryOptions(HUDPreferences.batteryOptions)
+                reconcileMonitoring()
+            }
+            schedulePresetRefresh()
+        }
         monitor.onBatteryUpdate = { [weak self] sample in
             self?.latestBatterySample = sample
             self?.logSnapshot.updateBattery(sample)
@@ -782,14 +796,16 @@ final class AppDelegate:
         }
         fanMenuView = fanView
         categories.append(fanView)
-        let batteryView = HUDResourceMenuView(batteryOptions: HUDPreferences.batteryOptions)
+        let batteryView = HUDResourceMenuView(batteryOptions: HUDPreferences.batteryOptions,
+                                              availability: batteryMonitor?.availability ?? .unknown)
         batteryView.onBatteryChange = { [weak self] options in
-            guard let self else { return }
+            guard let self, batteryMonitor?.availability != .unavailable else { return }
             HUDPreferences.setBatteryOptions(options)
             enabledMetrics = HUDPreferences.visibleMetrics
             hudWindow?.setBatteryOptions(options)
             reconcileMonitoring()
         }
+        batteryMenuView = batteryView
         categories.append(batteryView)
         let miscView = HUDMiscMenuView(options: HUDPreferences.miscOptions, alignment: HUDPreferences.alignment)
         miscMenuView = miscView
@@ -1348,7 +1364,8 @@ final class AppDelegate:
 
     private var presetAvailability: HUDPresetAvailability {
         HUDPresetAvailability(fansAvailable: fanMonitor.sample.status != .noFans,
-                              powerAvailable: !powerMonitor.helper.shouldTurnPowerOff)
+                              powerAvailable: !powerMonitor.helper.shouldTurnPowerOff,
+                              batteryAvailable: batteryMonitor?.availability != .unavailable)
     }
 
     private func schedulePresetRefresh() {
@@ -1446,6 +1463,7 @@ final class AppDelegate:
     private func applyHUDConfiguration(resetDesign: Bool) {
         if resetDesign { HUDGlassStyle.apply(HUDPreferences.glassOptions) }
         HUDPreferences.applyFanAvailability(fanMonitor.sample)
+        HUDPreferences.applyBatteryAvailability(batteryMonitor?.availability ?? .unknown)
         // Restore display defaults without bypassing a denied or failed helper.
         if powerMonitor.helper.shouldTurnPowerOff {
             for group in HUDResourceGroup.allCases where group.supportsPower {

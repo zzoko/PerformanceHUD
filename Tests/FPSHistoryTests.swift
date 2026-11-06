@@ -41,10 +41,15 @@ import AppKit
                   "Do not fill a real gap at the left edge")
         }
         history.reset()
+        check(history.currentSample == nil, "Reset clears the current-reading marker")
         history.append(60, at: 100)
         history.append(61, at: 101)
+        check(history.currentSample?.fps == 61, "The marker follows the latest reading")
         history.markUnavailable(at: 102)
+        check(history.currentSample == nil && !history.visibleSegments.isEmpty,
+              "Unavailable FPS hides the marker while retaining older history")
         history.append(65, at: 103)
+        check(history.currentSample?.fps == 65, "The marker returns with resumed readings")
         check(history.visibleSegments.count == 2, "Internal interruptions remain separate")
         history.advance(to: 161)
         check(history.visibleSegments.count == 2 && history.visibleSegments[0][0].time == 101,

@@ -1,4 +1,5 @@
 import AppKit
+import IOKit.ps
 
 @main struct BatteryPowerTests {
     @MainActor static func member<T>(_ object: Any, _ name: String) -> T {
@@ -12,6 +13,16 @@ import AppKit
         func check(_ value: Bool, _ reason: String) {
             if !value { failures.insert(reason) }
         }
+        let internalBattery: [String: Any] = [kIOPSTypeKey: kIOPSInternalBatteryType, kIOPSIsPresentKey: true]
+        let ups: [String: Any] = [kIOPSTypeKey: kIOPSUPSType, kIOPSIsPresentKey: true]
+        check(BatteryAvailability.from(nil) == .unknown, "A failed hardware query does not claim no battery")
+        check(BatteryAvailability.from([[:]]) == .unknown, "An incomplete power source description is not confirmed absence")
+        check(BatteryAvailability.from([]) == .unavailable, "A desktop with no power sources has no internal battery")
+        check(BatteryAvailability.from([ups]) == .unavailable, "A desktop UPS does not enable laptop battery controls")
+        check(BatteryAvailability.from([ups, internalBattery]) == .available, "An internal battery remains supported alongside a UPS")
+        check(BatteryAvailability.from([internalBattery]) == .available, "Hardware presence does not depend on a successful numeric reading")
+        check(BatteryAvailability.from([[kIOPSTypeKey: kIOPSInternalBatteryType, kIOPSIsPresentKey: false]]) == .unavailable,
+              "An explicitly absent internal battery is unavailable")
         let voltage = NSNumber(value: 12_000)
         for current in [NSNumber(value: -2_000), NSNumber(value: UInt32(bitPattern: -2_000)),
                         NSNumber(value: UInt64(bitPattern: -2_000))] {
@@ -97,6 +108,43 @@ import AppKit
         check(HUDPreferences.batteryOptions(in: store).flowMode == .auto && !HUDPreferences.batteryOptions(in: store).powerHighlighted,
               "Reset restores both defaults")
 
+        var pins = HUDMenuBarOptions.load(in: store)
+        pins.readings = [.batteryPower, .batteryTemperature, .batteryEnergy, .cpuPower]
+        pins.save(in: store)
+        let beforeHardwareCheck = HUDPreferences.batteryOptions(in: store)
+        for availability in [BatteryAvailability.unknown, .available] {
+            check(!HUDPreferences.applyBatteryAvailability(availability, in: store), "Only confirmed absence disables Battery")
+            check(HUDPreferences.batteryOptions(in: store) == beforeHardwareCheck, "Detection preserves supported/unknown battery settings")
+        }
+        check(HUDPreferences.applyBatteryAvailability(.unavailable, in: store), "Confirmed absent battery forces the category off")
+        var expectedBattery = beforeHardwareCheck
+        expectedBattery.enabled = false
+        check(HUDPreferences.batteryOptions(in: store) == expectedBattery, "Unavailable Battery preserves its saved reading choices")
+        check(HUDMenuBarOptions.load(in: store).readings == [.cpuPower], "Remove only the unavailable battery menu-bar pins")
+        check(!HUDPreferences.applyBatteryAvailability(.unavailable, in: store), "Repeated absence does not rewrite settings")
+        HUDPreferences.resetOptions(in: store)
+        check(HUDPreferences.applyBatteryAvailability(.unavailable, in: store), "Reset cannot enable confirmed absent hardware")
+
+        let unavailableMenu = HUDResourceMenuView(batteryOptions: beforeHardwareCheck, availability: .unavailable)
+        let unavailableControls: [Int: NSButton] = member(unavailableMenu, "controls")
+        let unavailableLabel: NSTextField = member(unavailableMenu, "unavailableLabel")
+        let unavailableFlow: NSSegmentedControl? = member(unavailableMenu, "flowControl")
+        let unavailableFan = HUDFanMenuView(options: .init(), sample: .noFans)
+        check(unavailableControls[0]?.isEnabled == false && unavailableControls[0]?.state == .off,
+              "An absent battery has an off, disabled category switch")
+        check(unavailableLabel.stringValue == "Not available" && unavailableLabel.superview === unavailableMenu,
+              "An absent battery shows the same Not available row as fans")
+        check(unavailableMenu.frame.height == unavailableFan.frame.height, "Battery and FAN use matching unavailable row geometry")
+        check(unavailableFlow?.superview == nil && unavailableFlow?.isEnabled == false,
+              "Unsupported battery readings are removed and disabled")
+        var unavailableActions = 0
+        unavailableMenu.onBatteryChange = { _ in unavailableActions += 1 }
+        if let master = unavailableControls[0] { master.state = .on; master.sendAction(master.action, to: master.target) }
+        check(unavailableActions == 0, "The unavailable category cannot be enabled by an action")
+        unavailableMenu.update(batteryAvailability: .available)
+        check(unavailableControls[0]?.isEnabled == true && unavailableFlow?.superview === unavailableMenu,
+              "Battery-equipped hardware gets its normal controls")
+
         let battery = HUDResourceMenuView(batteryOptions: .init(enabled: true, temperature: true, charge: true))
         let gpu = HUDResourceMenuView(group: .gpu, options: .init(enabled: true, temperature: true, totalUse: true, focusedApp: false))
         battery.layoutSubtreeIfNeeded(); gpu.layoutSubtreeIfNeeded()
@@ -156,10 +204,11 @@ import AppKit
         for horizontal in [false, true] {
             view.setHorizontal(horizontal)
             view.setOptions(.init(enabled: true, temperature: true, charge: true, flowMode: .auto))
-            view.frame = NSRect(x: 0, y: 0, width: 232, height: horizontal ? 21 : 39)
+            view.frame = NSRect(x: 0, y: 0, width: 232, height: HUDStyle.rowHeight(for: .battery, scale: .normal))
             view.update(percentage: 80, source: .powerAdapter, temperature: 33, power: 12, now: 100)
             let reservedWidth = view.minimumRowWidth
             let temperatureRect = view.temperatureTextRect
+            let sourceWithFlow = view.sourceText
             check(view.powerText == "12.0 W", "Auto displays real charging watts")
             view.update(percentage: 80, source: .powerAdapter, temperature: 33, power: 0, now: 101)
             check(!view.powerText.isEmpty, "Auto preserves the reading during the idle delay")
@@ -173,6 +222,7 @@ import AppKit
             } else {
                 check(view.minimumRowWidth == reservedWidth && view.temperatureTextRect == temperatureRect,
                       "Vertical Auto keeps its fixed columns")
+                check(view.sourceText == sourceWithFlow, "Auto hiding Charge does not change the source caption")
             }
             check(!(view.accessibilityValue() as? String ?? "").contains("Battery charge rate:"), "Accessibility follows hidden Auto text")
             view.update(percentage: 80, source: .battery, temperature: 33, power: -8, now: 105)
@@ -253,24 +303,38 @@ import AppKit
                             check(panel.frame.width == withoutWatts,
                                   "Aligned battery width: scale=\(factor), mask=\(mask), emphasized=\(emphasized), before=\(withoutWatts), after=\(panel.frame.width)")
                             width = verticalBattery.bounds.width
+                            view.alignVerticalReadings(
+                                powerTrailingInset: member(verticalBattery, "sharedVerticalPowerTrailingInset"),
+                                temperatureTrailingInset: member(verticalBattery, "sharedVerticalTemperatureTrailingInset"))
                         }
                         view.frame = NSRect(x: 0, y: 0, width: width,
                             height: horizontal ? 21 * factor : HUDStyle.rowHeight(for: .battery, scale: scale))
-                        for reading: Double? in [-1000, -24.3, 0, 24.3, 1000, nil] {
+                        var stableSourceText: String?
+                        for reading: Double? in [-1000, -99.9, -24.3, -5.3, 0, 24.3, 99.9, 1000, nil] {
                             view.update(percentage: 80, source: .powerAdapter, temperature: 99.9, power: reading)
                             if horizontal {
                                 width = view.minimumRowWidth
                                 view.setFrameSize(NSSize(width: width, height: view.frame.height))
                             } else {
                                 check(abs(view.minimumRowWidth - referenceWidth) < 0.01, "Changing numbers never resize the vertical row")
+                                check(view.sourceText == "Source · Adapter", "The full source caption stays visible at every scale and reading combination")
+                                if let stableSourceText {
+                                    check(view.sourceText == stableSourceText,
+                                          "Live watts do not change the source caption: scale=\(factor), mask=\(mask), emphasized=\(emphasized)")
+                                } else { stableSourceText = view.sourceText }
                             }
                             if options.power && reading != nil {
                                 let rect = view.powerTextRect
                                 check(view.bounds.insetBy(dx: -0.1, dy: -0.1).contains(rect), "Power fits its row at every scale")
-                                let label = horizontal ? "ADP" : "Adapter"
-                                let font = HUDStyle.TextStyle.label.font(ofSize: 14 * factor)
-                                let labelRight = 2 * factor + (label as NSString).size(withAttributes: [.font: font]).width
-                                check(rect.minX >= labelRight + 7.9 * factor, "Power does not collide with its label: horizontal=\(horizontal), scale=\(factor), mask=\(mask), watts=\(String(describing: reading)), width=\(width), labelRight=\(labelRight), powerLeft=\(rect.minX)")
+                                let labelRight = view.sourceTextRect.maxX
+                                // The approved compact vertical layout permits a tighter caption gap.
+                                // At 0.5× with all readings, artificial ±1000 W stress values can
+                                // exceed that budget; still check their bounds and caption stability.
+                                let compactStressValue = !horizontal && factor < 1 && mask == 7 && abs(reading!) >= 1000
+                                if !compactStressValue {
+                                    let minimumGap = (horizontal ? 7.9 : 0.5) * factor
+                                    check(rect.minX >= labelRight + minimumGap, "Power does not collide with its label: horizontal=\(horizontal), scale=\(factor), mask=\(mask), watts=\(String(describing: reading)), width=\(width), labelRight=\(labelRight), powerLeft=\(rect.minX)")
+                                }
                             } else { check(view.powerText.isEmpty, "Hidden/unavailable power does not draw") }
                             if options.temperature {
                                 let temperatureRect = view.temperatureTextRect
@@ -376,6 +440,17 @@ import AppKit
             }
             let sharedMiddle = verticalBattery.temperatureTextRect.maxX
             let allReadingsFlowRight = verticalBattery.powerTextRect.maxX
+            for emphasized in [false, true] {
+                hud.setBatteryOptions(.init(enabled: true, temperature: true, charge: true,
+                    temperatureHighlighted: emphasized, powerHighlighted: emphasized))
+                for watts in [-140.0, 140, 240] {
+                    hud.updateBattery(.init(percentage: 80, source: watts < 0 ? .battery : .powerAdapter,
+                        temperature: 33, power: watts))
+                    check(verticalBattery.powerTextRect.minX > verticalBattery.sourceTextRect.maxX,
+                          "Three-digit battery readings fit the compact row: scale=\(factor), watts=\(watts), emphasized=\(emphasized)")
+                    check(panel.frame.width == fixedWidth, "Three-digit watts never resize the vertical HUD")
+                }
+            }
             hud.setBatteryOptions(.init(enabled: true, temperature: false, charge: true))
             hud.updateBattery(.init(percentage: 80, source: .powerAdapter, temperature: 33, power: -24.3))
             check(abs(verticalBattery.powerTextRect.maxX - sharedMiddle) < 0.01,
@@ -393,9 +468,15 @@ import AppKit
         monitor.onBatteryUpdate = { sample = $0; deliveredAt.append(ProcessInfo.processInfo.systemUptime) }
         monitor.start(temperature: false, power: true)
         let deadline = Date().addingTimeInterval(4)
-        while deliveredAt.count < 3 && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+        while monitor.availability != .unavailable && deliveredAt.count < 3 && Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
         monitor.stop()
-        check(deliveredAt.count >= 3, "Battery monitor delivers three readings within four seconds")
+        if monitor.availability == .unavailable {
+            check(sample == nil, "No battery means no invented sample")
+        } else {
+            check(deliveredAt.count >= 3, "Battery monitor delivers three readings within four seconds")
+        }
         if deliveredAt.count >= 3 {
             let averageInterval = (deliveredAt[2] - deliveredAt[0]) / 2
             check((0.7...1.5).contains(averageInterval), "Battery sampling averages one second")

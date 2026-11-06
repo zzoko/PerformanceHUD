@@ -74,7 +74,7 @@ struct HUDMiscSample: Equatable {
     func text(for reading: HUDMiscReading) -> String {
         switch reading {
         case .process: return process ?? ""
-        case .resolution: return resolution?.text ?? ""
+        case .resolution: return resolution?.text ?? "-"
         case .refreshRate: return refreshRate?.text ?? ""
         case .gameMode: return gameMode.map { $0 ? "on" : "off" } ?? ""
         case .thermal: return thermal ?? ""

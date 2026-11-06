@@ -146,13 +146,16 @@ import AppKit
                                             check(abs(baseline(physical[.ramTotal]!) - baseline(swap) - rowSpacing) <= 0.5, "Swap has its own row below Physical")
                                             check(abs(baseline(swap) - baseline(pressure) - rowSpacing) <= 0.5, "Pressure has its own row below Swap")
                                             func aligned(_ field: NSTextField) -> NSRect { field.alignmentRect(forFrame: field.frame) }
+                                            let detailGap = aligned(usage[.ramTotal]!).minY - aligned(physical[.ramTotal]!).maxY
+                                            check(abs(detailGap - HUDStyle.rowSpacing(scale: scale)) <= 0.5,
+                                                  "Memory details have their own gap below the MEM heading")
                                             for (caption, value) in [(captions[.ramTotal]!, physical[.ramTotal]!), (swapTitle, swap), (pressureTitle, pressure)] {
                                                 check(abs(baseline(caption) - baseline(value)) <= 0.5, "Memory caption/value baseline matches")
                                                 check(abs(aligned(caption).minX - aligned(titles[.ramTotal]!).minX) <= 0.5, "Memory labels share the left edge")
                                                 check(abs(aligned(value).maxX - aligned(usage[.ramTotal]!).maxX) <= 0.5 && value.alignment == .right, "Memory values share the right edge")
                                                 check(aligned(caption).maxX <= aligned(value).minX, "Memory caption and value do not overlap")
                                             }
-                                            check(HUDStyle.rowHeight(for: .ramTotal, scale: scale) == HUDStyle.rowHeight(scale: scale) + 3 * rowSpacing, "Total memory reserves three separate detail rows")
+                                            check(HUDStyle.rowHeight(for: .ramTotal, scale: scale) == HUDStyle.rowHeight(scale: scale) + HUDStyle.rowSpacing(scale: scale) + 3 * rowSpacing, "Total memory reserves a heading gap and three separate detail rows")
                                         }
                                         if alignment == .vertical {
                                             check(pressure.isHidden == !(details && mode != .app), "Pressure follows its own visibility and source")

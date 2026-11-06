@@ -84,6 +84,7 @@ final class HUDBatteryIndicatorView: NSView {
     private var sourceFont: NSFont { HUDStyle.TextStyle.label.font(ofSize: 14 * scale) }
     private var valueFont: NSFont { HUDStyle.TextStyle.reading.font(ofSize: 14 * scale) }
     private var detailFont: NSFont { HUDStyle.TextStyle.label.font(ofSize: 12 * scale) }
+    private var sourceLabelFont: NSFont { horizontal ? sourceFont : detailFont }
     private var temperatureFont: NSFont {
         HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: options.temperatureHighlighted)
     }
@@ -113,6 +114,30 @@ final class HUDBatteryIndicatorView: NSView {
     }
     private var horizontalGap: CGFloat { HUDStyle.metricColumnSpacing(scale: HUDScale(rawValue: Double(scale))) }
     private var iconWidth: CGFloat { (34 * 0.85 + 0.5) * scale }
+
+    var sourceText: String {
+        let value: String
+        if let source {
+            value = horizontal ? (source == .powerAdapter ? "ADP" : "BAT")
+                : (source == .powerAdapter ? "Adapter" : "Battery")
+        } else {
+            value = !horizontal || showsUnavailableReadings ? "—" : ""
+        }
+        guard !horizontal else { return value }
+        return "Source · \(value)"
+    }
+
+    var sourceTextRect: NSRect {
+        let text = sourceText
+        guard !text.isEmpty else { return .zero }
+        let size = (text as NSString).size(withAttributes: [.font: sourceLabelFont])
+        let sourceHeight = ("Adapter" as NSString).size(withAttributes: [.font: sourceFont]).height
+        let midY = horizontal ? bounds.midY : bounds.minY + 10.5 * scale
+        return NSRect(x: bounds.minX + 2 * scale,
+                      y: midY - sourceHeight / 2 + sourceLabelFont.descender - sourceFont.descender,
+                      width: size.width, height: size.height)
+    }
+
     var powerText: String {
         if options.power, power == nil, showsUnavailableReadings { return "—" }
         guard options.power, options.flowMode != .auto || flowVisibility.isVisible else { return "" }
@@ -204,7 +229,7 @@ final class HUDBatteryIndicatorView: NSView {
 
     // Useful for standalone previews; the HUD itself has a fixed vertical width.
     var minimumAlignedRowWidth: CGFloat {
-        let titleWidth = ("Adapter" as NSString).size(withAttributes: [.font: sourceFont]).width
+        let titleWidth = ("Source · Adapter" as NSString).size(withAttributes: [.font: detailFont]).width
         return 2 * scale + titleWidth + 8 * scale + powerReferenceWidth + verticalPowerTrailingInset
     }
 
@@ -222,7 +247,7 @@ final class HUDBatteryIndicatorView: NSView {
         }
         // Keep the baseline reference independent of enabled readings. The full
         // row is fitted separately, after the controller's spacing expansion.
-        let titleWidth = ("Adapter" as NSString).size(withAttributes: [.font: valueFont]).width
+        let titleWidth = ("Source · Adapter" as NSString).size(withAttributes: [.font: detailFont]).width
         let usage = NSTextField(labelWithString: "100%")
         usage.font = valueFont
         let sizingInset = usage.intrinsicContentSize.width + 8 * scale + usage.alignmentRectInsets.right
@@ -233,34 +258,16 @@ final class HUDBatteryIndicatorView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let rowMidY = horizontal ? bounds.midY : bounds.minY + 10.5 * scale
-        let headingAttributes: [NSAttributedString.Key: Any] = [
-            .font: detailFont, .foregroundColor: HUDStyle.TextStyle.label.color(background: background)
-        ]
-        let heading = "Power Source" as NSString
-        let headingSize = heading.size(withAttributes: headingAttributes)
-        if !horizontal { heading.draw(at: NSPoint(x: bounds.minX + 2 * scale,
-                                 y: bounds.maxY - 9 * scale - headingSize.height / 2),
-                     withAttributes: headingAttributes) }
         if !powerText.isEmpty {
             (powerText as NSString).draw(at: powerTextRect.origin, withAttributes: [
                 .font: powerFont, .foregroundColor: HUDStyle.readingColor(background: background)
             ])
         }
-        let sourceHeight = ("Adapter" as NSString).size(withAttributes: [.font: sourceFont]).height
-        let sourceOriginY = rowMidY - sourceHeight / 2
-        if let source {
-            let text = horizontal ? (source == .powerAdapter ? "ADP" : "BAT")
-                : (source == .powerAdapter ? "Adapter" : "Battery")
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: sourceFont,
+        if !sourceText.isEmpty {
+            (sourceText as NSString).draw(at: sourceTextRect.origin, withAttributes: [
+                .font: sourceLabelFont,
                 .foregroundColor: HUDStyle.primaryTitleColor(for: .battery, background: background)
-            ]
-            (text as NSString).draw(at: NSPoint(x: bounds.minX + 2 * scale,
-                                               y: sourceOriginY), withAttributes: attributes)
-        } else if showsUnavailableReadings {
-            ("—" as NSString).draw(at: NSPoint(x: bounds.minX + 2 * scale, y: sourceOriginY),
-                withAttributes: [.font: sourceFont,
-                                 .foregroundColor: HUDStyle.primaryTitleColor(for: .battery, background: background)])
+            ])
         }
         if !temperatureText.isEmpty {
             (temperatureText as NSString).draw(at: temperatureTextRect.origin, withAttributes: [
@@ -283,7 +290,7 @@ final class HUDBatteryIndicatorView: NSView {
         let iconScale = scale * 0.85
         let foreground = HUDStyle.valueColor(background: background)
         let lowBattery = percentage <= 10
-        let fillColor: NSColor = lowBattery ? .systemRed : lowPower ? HUDStyle.warningYellow : foreground
+        let fillColor: NSColor = lowPower ? HUDStyle.warningYellow : lowBattery ? .systemRed : foreground
         let filledTextColor = lowBattery || lowPower || background != .light
             ? NSColor(white: 0.12, alpha: 1) : NSColor(white: 0.98, alpha: 1)
         let body = NSRect(x: bounds.maxX - 34 * iconScale - 0.5 * scale, y: rowMidY - 8.5 * iconScale,

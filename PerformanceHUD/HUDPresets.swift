@@ -15,6 +15,7 @@ enum HUDBuiltInPreset: String, CaseIterable, Codable {
 struct HUDPresetAvailability {
     var fansAvailable = true
     var powerAvailable = true
+    var batteryAvailable = true
 }
 
 /// Category and reading choices from the scrollable menu section.
@@ -105,6 +106,10 @@ struct HUDPresetConfiguration: Codable, Equatable {
             if !availability.fansAvailable {
                 result.fans.enabled = false
                 result.menuBarReadings.remove(.fanUsage)
+            }
+            if !availability.batteryAvailable {
+                result.battery.enabled = false
+                result.menuBarReadings.subtract([.batteryPower, .batteryTemperature, .batteryEnergy])
             }
             if !availability.powerAvailable {
                 result.packagePower.enabled = false

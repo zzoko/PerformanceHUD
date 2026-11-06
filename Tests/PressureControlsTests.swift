@@ -173,6 +173,7 @@ import AppKit
                                     precondition(history.isHidden == (!showsPressure || !mode.isHistory), "History follows its own style")
                                     if visible.contains(.ramTotal) {
                                         let expected: CGFloat = 21 + (details ? 36 : 0) + (showsPressure ? 18 : 0)
+                                            + (details || showsPressure ? 6 : 0)
                                             + (showsPressure && mode.isHistory ? 12.375 : 0)
                                         precondition(abs(rows[.ramTotal]!.frame.height - CGFloat(expected)) < 0.5, "Hidden rows reclaim their height")
                                         if showsPressure {

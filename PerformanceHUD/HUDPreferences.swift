@@ -307,7 +307,7 @@ enum HUDPreferences {
     static func fanOptions(in store: UserDefaults) -> HUDFanOptions {
         HUDFanOptions(enabled: isMetricEnabled(.fans, in: store),
             usage: store.object(forKey: "hud.fan.usage") as? Bool ?? true,
-            mode: store.string(forKey: "hud.fan.mode").flatMap(HUDFanMode.init(rawValue:)) ?? .bar,
+            mode: store.string(forKey: "hud.fan.mode").flatMap(HUDFanMode.init(rawValue:)) ?? .both,
             average: store.object(forKey: "hud.fan.average") as? Bool ?? true,
             averageMode: store.string(forKey: "hud.fan.averageMode").flatMap(HUDFanAverageMode.init(rawValue:)) ?? .horizontal,
             rpmHighlighted: store.bool(forKey: "hud.fan.rpmHighlighted"))
@@ -324,6 +324,22 @@ enum HUDPreferences {
 
     static var batteryOptions: HUDBatteryOptions {
         batteryOptions(in: defaults)
+    }
+
+    @discardableResult
+    static func applyBatteryAvailability(_ availability: BatteryAvailability, in store: UserDefaults = .standard) -> Bool {
+        guard availability == .unavailable else { return false }
+        let key = metricKey(.battery)
+        var changed = store.object(forKey: key) as? Bool != false
+        if changed { store.set(false, forKey: key) }
+        var menuBar = HUDMenuBarOptions.load(in: store)
+        let previous = menuBar.readings
+        menuBar.readings.subtract([.batteryPower, .batteryTemperature, .batteryEnergy])
+        if menuBar.readings != previous {
+            menuBar.save(in: store)
+            changed = true
+        }
+        return changed
     }
 
     static func batteryOptions(in store: UserDefaults) -> HUDBatteryOptions {

@@ -2,6 +2,15 @@
 
 [← Back to README](../README.md)
 
+### v3.0
+
+- Condensed the vertical Battery category into one row with **Source · Battery** or **Source · Adapter**, followed by the enabled readings. The vertical HUD is slightly wider, with restored spacing below the MEM heading.
+- Macs without an internal battery now show **Not available**, with Battery off and greyed out, matching the fanless state. Saved reading choices are retained.
+- Low Power Mode yellow now takes priority over the battery icon's red warning at 10% charge or below.
+- Added a current-reading dot and soft halo to FPS history, matching the memory-pressure graph. The dot disappears when FPS readings become unavailable.
+- Fan Use now defaults to **Both** (RPM and bar), including built-in presets and resets. Existing saved choices are preserved. Unavailable Misc resolution readings now show a dash.
+- Refreshed the README screenshots, animated banners, version badge, and Controls guide.
+
 ### v2.9
 
 - The battery icon turns red at 10% charge or below in both HUD layouts and the menu bar, taking priority over the Low Power Mode yellow.

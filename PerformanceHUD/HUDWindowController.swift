@@ -754,7 +754,8 @@ final class HUDWindowController {
             physicalLabel.setAccessibilityLabel("Physical memory")
             physicalLabel.translatesAutoresizingMaskIntoConstraints = false
             row.addSubview(physicalLabel)
-            let detailTop = detailLabel.topAnchor.constraint(equalTo: valueLabel.bottomAnchor)
+            let detailTop = detailLabel.topAnchor.constraint(equalTo: valueLabel.bottomAnchor,
+                constant: HUDStyle.rowSpacing(scale: hudScale))
             ramDetailGroupSpacingConstraints[metric] = detailTop
             let detailHeight = detailLabel.heightAnchor.constraint(equalToConstant: HUDStyle.ramDetailHeight(scale: hudScale))
             ramDetailHeightConstraints[metric] = detailHeight
@@ -790,7 +791,8 @@ final class HUDWindowController {
                 }
                 let pressureAfterDetails = pressureValue.topAnchor.constraint(equalTo: swapValue.bottomAnchor)
                 ramPressureAfterDetailsConstraint = pressureAfterDetails
-                ramPressureWithoutDetailsConstraint = pressureValue.topAnchor.constraint(equalTo: valueLabel.bottomAnchor)
+                ramPressureWithoutDetailsConstraint = pressureValue.topAnchor.constraint(equalTo: valueLabel.bottomAnchor,
+                    constant: HUDStyle.rowSpacing(scale: hudScale))
                 NSLayoutConstraint.activate([
                     swapTitle.leadingAnchor.constraint(equalTo: physicalLabel.leadingAnchor),
                     swapTitle.firstBaselineAnchor.constraint(equalTo: swapValue.firstBaselineAnchor),
@@ -1220,8 +1222,9 @@ final class HUDWindowController {
         ramSwapValueLabel?.font = ramDetailsFont
         ramPressureValueLabel?.font = ramPressureFont
         for constraint in ramDetailGroupSpacingConstraints.values {
-            constraint.constant = 0
+            constraint.constant = HUDStyle.rowSpacing(scale: scale)
         }
+        ramPressureWithoutDetailsConstraint?.constant = HUDStyle.rowSpacing(scale: scale)
 
         // Update fonts and row constraints.
 
@@ -1634,6 +1637,7 @@ final class HUDWindowController {
             let detailLines = showsRAMDetails ? (metric == .ramTotal ? 2 : 1) : 0
             let pressureLines = metric == .ramTotal && showsRAMPressure ? 1 : 0
             return HUDStyle.rowHeight(scale: scale)
+                + (detailLines + pressureLines > 0 ? HUDStyle.rowSpacing(scale: scale) : 0)
                 + CGFloat(detailLines + pressureLines) * HUDStyle.ramDetailHeight(scale: scale)
                 + (metric == .ramTotal ? pressureHistoryExtraHeight(scale: scale) : 0)
         }

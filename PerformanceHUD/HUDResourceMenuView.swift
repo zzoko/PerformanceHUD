@@ -21,8 +21,11 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     private let anePowerHighlight = HUDEmphasisButton()
     private let master = HUDResourceMasterButton(title: "", target: nil, action: nil)
     private var flowMode: HUDBatteryFlowMode = .auto
+    private var batteryAvailability: BatteryAvailability = .unknown
+    private var readingRows: [HUDCategoryMenuRow] = []
+    private let unavailableLabel = NSTextField(labelWithString: "Not available")
 
-    convenience init(batteryOptions: HUDBatteryOptions) {
+    convenience init(batteryOptions: HUDBatteryOptions, availability: BatteryAvailability = .unknown) {
         self.init(group: nil, options: HUDResourceOptions(enabled: batteryOptions.enabled,
             temperature: batteryOptions.temperature, totalUse: batteryOptions.charge, focusedApp: false,
             power: batteryOptions.power,
@@ -30,7 +33,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                               batteryOptions.powerHighlighted ? HUDReadingKind.power : nil].compactMap { $0 }),
             heatWarning: batteryOptions.heatWarning))
         flowMode = batteryOptions.flowMode
-        refresh()
+        update(batteryAvailability: availability)
     }
 
     init(group: HUDResourceGroup?, options: HUDResourceOptions, alignment: HUDAlignment = .vertical) {
@@ -47,6 +50,8 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         master.setAccessibilityLabel("Show \(title)")
         controls[0] = master
         setCategory(master)
+        unavailableLabel.font = .menuFont(ofSize: 0)
+        unavailableLabel.textColor = .disabledControlTextColor
 
         let readings: [(Int, String)] = group == .ram ? [(8, "Pressure"), (5, "Details"), (7, "Use")]
             : group == .ane ? [(4, "Power")]
@@ -128,6 +133,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                 rows.append(.init(reading: NSView(), mode: styles))
             }
         }
+        readingRows = rows
         setRows(rows)
         refresh()
     }
@@ -136,6 +142,14 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
 
     func update(alignment: HUDAlignment) {
         self.alignment = alignment
+        refresh()
+    }
+
+    func update(batteryAvailability: BatteryAvailability) {
+        guard group == nil else { return }
+        self.batteryAvailability = batteryAvailability
+        setRows(batteryAvailability == .unavailable
+            ? [.init(reading: unavailableLabel, fullWidth: true)] : readingRows)
         refresh()
     }
 
@@ -184,6 +198,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     @objc private func changed(_ sender: NSButton) {
+        guard sender.isEnabled else { return }
         if group == .ane && sender.tag == 0 {
             guard powerAvailability.allowsPowerToggle else {
                 // Remember the requested category while helper setup controls
@@ -304,6 +319,22 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     private func refresh() {
+        if group == nil {
+            let available = batteryAvailability != .unavailable
+            master.isEnabled = available
+            for tag in [4, 1, 6] {
+                if let reading = menuBarReading(for: tag) {
+                    makeMenuBarButton(for: reading, title: "Battery").isEnabled = available
+                }
+            }
+            if !available {
+                for control in controls.values { control.state = .off; control.isEnabled = false }
+                flowControl?.isEnabled = false
+                flowHighlight.isEnabled = false
+                heatWarningControl?.update(options: options.heatWarning, isEnabled: false)
+                return
+            }
+        }
         heatWarningControl?.update(options: options.heatWarning,
             isEnabled: (options.enabled && options.temperature) || isPinned(1))
         pressureModeControl?.selectedSegment = options.pressureMode == .text ? 0 : 1
