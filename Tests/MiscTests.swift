@@ -76,7 +76,7 @@ import Darwin
         let disabled = HUDResourceOptions(enabled: false, temperature: false, totalUse: false, focusedApp: false)
         var selection = HUDLogSelection(fps: false, resources: [.gpu: disabled], package: .init(enabled: false),
             fans: .init(enabled: false), battery: .init(enabled: false, temperature: false, charge: false),
-            deviceInfo: true, alignment: .vertical, misc: .init(enabled: true))
+            deviceInfo: .init(enabled: true, chipMode: .tier), alignment: .vertical, misc: .init(enabled: true))
         check(selection.columns(fanSample: .noFans) == [.process, .resolutionWidth, .resolutionHeight,
             .refreshMinimum, .refreshMaximum, .gameMode, .thermal, .chip, .os], "CSV follows Misc/menu order")
         selection.alignment = .horizontal

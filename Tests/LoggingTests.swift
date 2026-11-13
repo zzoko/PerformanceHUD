@@ -18,7 +18,7 @@ import AppKit
             resources: Dictionary(uniqueKeysWithValues: HUDResourceGroup.allCases.map { ($0, disabled) }),
             package: .init(enabled: false), fans: .init(enabled: false),
             battery: .init(enabled: false, temperature: false, charge: false),
-            deviceInfo: false, alignment: .vertical)
+            deviceInfo: .init(), alignment: .vertical)
         check(selection.columns(fanSample: .noFans).isEmpty)
         selection.fps = true
         selection.resources[.gpu] = .init(enabled: true, temperature: true, totalUse: true, focusedApp: true, power: true)
@@ -28,13 +28,14 @@ import AppKit
         selection.resources[.ram] = .init(enabled: true, temperature: false, totalUse: true, focusedApp: true, details: true)
         selection.fans = .init(enabled: true, usage: true, mode: .both, average: false)
         selection.battery = .init(enabled: true, temperature: true, charge: true)
-        selection.deviceInfo = true
+        selection.deviceInfo.enabled = true
         let fans = FanSample(status: .ready, fans: [.init(id: 1, rpm: 4000, maximumRPM: 8000), .init(id: 0, rpm: 0, maximumRPM: 6000)])
         let expected: [HUDLogColumn] = [.fps, .gpuPower, .gpuTemperature, .gpuUsage, .gpuAppUsage,
             .cpuPower, .cpuTemperature, .cpuUsage, .anePower, .socPower,
             .memoryPressure, .memoryPhysical, .memorySwap, .memoryAppPhysical, .memoryUsage, .memoryAppUsage,
             .fanUsage(0), .fanRPM(0), .fanUsage(1), .fanRPM(1), .powerSource,
-            .batteryPower, .batteryTemperature, .batteryCharge, .lowPowerMode, .chip, .os]
+            .batteryPower, .batteryTemperature, .batteryCharge, .lowPowerMode,
+            .chip, .cpuCores, .cpuEfficiencyCores, .cpuPerformanceCores, .gpuCores, .os]
         check(selection.columns(fanSample: fans) == expected, "Columns must follow menu order with individual fans sorted")
         selection.resources[.gpu]?.enabled = false
         selection.resources[.ram]?.setUsagePresentation(visible: false, highlighted: false)

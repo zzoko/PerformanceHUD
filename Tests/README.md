@@ -26,6 +26,8 @@ python3 Tests/run-all-tests.py --list
 
 Individual shell suites can still be run directly, for example `sh Tests/run-host-port-tests.sh`.
 
+`sh Tests/run-device-info-tests.sh` checks Chip Tier/Full/Off, independent OS visibility, detected core counts and fallback text, saved choices/presets, footer geometry and CSV selection.
+
 ## Optional integration tests
 
 The launchd cleanup test registers a disposable job in the current user's graphical session and verifies that launchd removes its child after the test parent is killed. It requires no administrator privileges and removes the test registration afterward:

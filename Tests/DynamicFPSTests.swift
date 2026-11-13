@@ -165,7 +165,7 @@ import AppKit
                         let horizontalLabels: [String: NSTextField] = member(styledHorizontal, "labels")
                         let valueLabel = alignment == .horizontal ? horizontalLabels["0.value"]! : values[.fps]!
                         let expected = highlighted ? HUDStyle.TextStyle.emphasizedReading : .reading
-                        check(valueLabel.font == expected.font(ofSize: 14 * CGFloat(scale.rawValue)), "FPS uses the selected style at its label size")
+                        check(valueLabel.font == expected.font(ofSize: 12 * CGFloat(scale.rawValue)), "FPS uses the selected style at its label size")
                         check(valueLabel.textColor == expected.color(background: .dark), "FPS color follows Reading or Emphasized Reading")
                         styledPanel.contentView?.layoutSubtreeIfNeeded()
                         let fpsTitle = alignment == .horizontal ? horizontalLabels["0.title"]! : titles[.fps]!
@@ -199,6 +199,19 @@ import AppKit
                               "FPS emphasis and changing digits must not resize the window or glass")
                     }
                     check(titles[.fps]?.font == HUDStyle.titleFont(for: .fps, scale: scale), "Emphasis affects only the FPS number")
+                }
+                if alignment == .vertical {
+                    let dividers: [Int: NSView] = member(styledHUD, "groupDividers")
+                    let line = dividers[1]!.subviews.first!
+                    let dividerRight = line.convert(line.bounds, to: styledContainer).maxX
+                    let plotRight = styledGraph.convert(styledGraph.plotBounds, to: styledContainer).maxX
+                    check(abs(plotRight - dividerRight) <= 0.5,
+                          "FPS history reaches the divider's right edge at \(scale.rawValue)×")
+                    let graphRight = styledGraph.convert(styledGraph.bounds, to: styledContainer).maxX
+                    check(abs(graphRight - plotRight - 3 * CGFloat(scale.rawValue)) <= 0.01,
+                          "The endpoint halo retains its full space beyond the aligned plot")
+                    check(graphRight <= styledContainer.bounds.maxX,
+                          "The halo fits inside the HUD without changing its width")
                 }
             }
         }

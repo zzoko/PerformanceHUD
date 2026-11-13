@@ -2,6 +2,13 @@
 
 [← Back to README](../README.md)
 
+### v3.1
+
+- Unified HUD text at 12 pt at normal scale, with medium-weight category labels and aligned reading baselines. Horizontal **BAT/ADP** labels now match the other category labels; reading emphasis remains independently selectable.
+- Renamed **Chip & OS** to **Mac** and added **Chip · Tier / Full / Off** plus an independent **OS** checkbox. Full adds detected CPU efficiency/performance core counts and GPU cores beneath the chip name, using the same muted label styling. The chip name and macOS version retain their original positions.
+- Mac defaults to **Full** with **OS** selected while the category stays off; the **Detailed** preset enables it. Saved presets retain these choices, older presets keep their previous name/version display, and CSV logging follows the selected information with numeric core-count columns for Full.
+- Extended FPS history to the divider's right edge while preserving space for its current-reading dot. Both memory history styles now share the FPS graph's downward fade, without a horizontal edge fade.
+
 ### v3.0
 
 - Condensed the vertical Battery category into one row with **Source · Battery** or **Source · Adapter**, followed by the enabled readings. The vertical HUD is slightly wider, with restored spacing below the MEM heading.

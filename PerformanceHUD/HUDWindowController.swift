@@ -86,7 +86,8 @@ final class HUDWindowController {
     private let miscView = HUDMiscView(frame: .zero)
     private var miscOptions = HUDPreferences.miscOptions
 
-    private var deviceInfoLabels: [NSTextField] = []
+    private var deviceInfoOptions = HUDPreferences.deviceInfoOptions
+    private let deviceInfoView = HUDDeviceInfoView()
     private var primaryLabelHeightConstraints: [HUDMetric: NSLayoutConstraint] = [:]
 
     // MARK: - Dynamic Constraints
@@ -697,7 +698,7 @@ final class HUDWindowController {
 
             valueColumnConstraint,
 
-            valueLabel.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor)
+            valueLabel.firstBaselineAnchor.constraint(equalTo: titleLabel.firstBaselineAnchor)
         ])
 
         if metric == .gpuTotal || metric == .cpuTotal {
@@ -867,35 +868,16 @@ final class HUDWindowController {
     }
 
     private func createDeviceInfoRow() -> NSView {
-        let row = NSView()
-        row.translatesAutoresizingMaskIntoConstraints = false
-        let info = HUDDeviceInfo.current
-        let chipLabel = NSTextField(labelWithString: info.chipName)
-        let versionLabel = NSTextField(labelWithString: info.macOSVersion)
-        deviceInfoLabels = [chipLabel, versionLabel]
-        chipLabel.alignment = .left
-        versionLabel.alignment = .right
-        for label in deviceInfoLabels {
-            label.font = HUDStyle.smallLabelFont(scale: hudScale)
-            label.textColor = HUDStyle.TextStyle.label.color(background: textBackground)
-            label.translatesAutoresizingMaskIntoConstraints = false
-            row.addSubview(label)
-            NSLayoutConstraint.activate([
-                label.topAnchor.constraint(equalTo: row.topAnchor),
-                label.bottomAnchor.constraint(equalTo: row.bottomAnchor)
-            ])
-        }
-        let height = row.heightAnchor.constraint(equalToConstant: HUDStyle.rowHeight(for: .deviceInfo, scale: hudScale))
-        let spacing = versionLabel.leadingAnchor.constraint(greaterThanOrEqualTo: chipLabel.trailingAnchor,
-                                                            constant: HUDStyle.metricColumnSpacing(scale: hudScale))
+        deviceInfoView.configure(options: deviceInfoOptions, scale: hudScale, background: textBackground)
+        let height = deviceInfoView.heightAnchor.constraint(equalToConstant: deviceInfoView.height(scale: hudScale))
         rowHeightConstraints[.deviceInfo] = height
-        valueSpacingConstraints[.deviceInfo] = spacing
-        NSLayoutConstraint.activate([
-            height, spacing,
-            chipLabel.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: chipLabel.alignmentRectInsets.left),
-            versionLabel.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -versionLabel.alignmentRectInsets.right)
-        ])
-        return row
+        height.isActive = true
+        return deviceInfoView
+    }
+
+    func setDeviceInfoOptions(_ options: HUDDeviceInfoOptions) {
+        deviceInfoOptions = options
+        setMetricEnabled(.deviceInfo, enabled: options.enabled)
     }
 
     // MARK: - HUD Visibility
@@ -1155,6 +1137,12 @@ final class HUDWindowController {
         enabled: Bool
     ) {
 
+        var enabled = enabled
+        if metric == .deviceInfo {
+            deviceInfoOptions.enabled = enabled
+            enabled = deviceInfoOptions.isVisible && alignment.allows(.deviceInfo)
+        }
+
         if enabled {
 
             enabledMetrics.insert(
@@ -1217,7 +1205,6 @@ final class HUDWindowController {
         batteryIndicator.applyStyle(scale: scale, background: textBackground)
         updateReadingAppearance()
 
-        for label in deviceInfoLabels { label.font = HUDStyle.smallLabelFont(scale: scale) }
         ramSwapTitleLabel?.font = HUDStyle.smallLabelFont(scale: scale)
         ramSwapValueLabel?.font = ramDetailsFont
         ramPressureValueLabel?.font = ramPressureFont
@@ -1360,6 +1347,7 @@ final class HUDWindowController {
     }
 
     private func updateReadingAppearance() {
+        deviceInfoView.configure(options: deviceInfoOptions, scale: hudScale, background: textBackground)
         miscView.configure(options: miscOptions, scale: hudScale, background: textBackground)
         ramPressureMeter.configure(mode: memoryPressureMode, scale: hudScale, background: textBackground)
         ramPressureHistory.configure(mode: memoryPressureMode, scale: hudScale, background: textBackground,
@@ -1399,9 +1387,6 @@ final class HUDWindowController {
         defer { updateReadingAppearance(); refreshHorizontalReadings() }
         fpsGraphView.applyStyle(scale: hudScale, background: textBackground)
         batteryIndicator.applyStyle(scale: hudScale, background: textBackground)
-        for label in deviceInfoLabels {
-            label.textColor = HUDStyle.TextStyle.label.color(background: textBackground)
-        }
         ramSwapTitleLabel?.textColor = HUDStyle.TextStyle.label.color(background: textBackground)
         ramPressureTitleLabel?.textColor = HUDStyle.TextStyle.label.color(background: textBackground)
         ramSwapValueLabel?.textColor = HUDStyle.readingColor(background: textBackground)
@@ -1631,6 +1616,7 @@ final class HUDWindowController {
     }
 
     private func metricRowHeight(_ metric: HUDMetric, scale: HUDScale) -> CGFloat {
+        if metric == .deviceInfo { return deviceInfoView.height(scale: scale) }
         if metric == .misc { return miscView.height(scale: scale) }
         if metric == .fans { return fanView.height(scale: scale) }
         if metric == .ram || metric == .ramTotal {
@@ -1675,6 +1661,7 @@ final class HUDWindowController {
         for metric in [HUDMetric.fps, .fpsGraph] { metricRows[metric]?.alphaValue = 1 }
         updateReadingAppearance()
         updateRAMDetailsVisibility()
+        rowHeightConstraints[.deviceInfo]?.constant = deviceInfoView.height(scale: hudScale)
         fanView.update(sample: fanSample, options: fanOptions, scale: hudScale, background: textBackground)
         rowHeightConstraints[.fans]?.constant = fanView.height(scale: hudScale)
         stackView.isHidden = alignment == .horizontal

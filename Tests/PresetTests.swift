@@ -25,8 +25,8 @@ import AppKit
         check(balanced.fps.enabled && balanced.fps.mode == .both && balanced.fps.valueHighlighted,
               "Balanced retains FPS Both and number emphasis")
         check(balanced.fans.mode == .both && balanced.battery.flowMode == .auto
-              && !balanced.misc.enabled && !balanced.deviceInfo,
-              "Balanced retains fan, battery, Misc, and Chip & OS defaults")
+              && !balanced.misc.enabled && !balanced.deviceInfo.enabled,
+              "Balanced retains fan, battery, Misc, and Mac defaults")
         check(balanced.resources[.ram]?.pressureMode == .colorHistory,
               "Balanced retains colored memory history")
         check(presets.selection(for: balanced).title == "Balanced", "Fresh settings select Balanced")
@@ -40,7 +40,7 @@ import AppKit
         expectedFPS.fans.enabled = false
         expectedFPS.battery.enabled = false
         expectedFPS.misc.enabled = false
-        expectedFPS.deviceInfo = false
+        expectedFPS.deviceInfo.enabled = false
         check(fpsOnly == expectedFPS, "FPS shows only the frame-rate value and retains other reading choices")
         check(fpsOnly.fps.visibleMetrics(alignment: .vertical) == [.fps],
               "FPS preset does not display the history graph in vertical mode")
@@ -49,8 +49,8 @@ import AppKit
             expectedFull.resources[group]?.selectUsageMode(.both)
         }
         expectedFull.misc.enabled = true
-        expectedFull.deviceInfo = true
-        check(full == expectedFull, "Detailed changes usage to Both and enables Misc and Chip & OS only")
+        expectedFull.deviceInfo.enabled = true
+        check(full == expectedFull, "Detailed changes usage to Both and enables Misc and Mac only")
 
         let designSettings: [String: Any] = [
             "hud.alignment": "horizontal", "hud.background": "dark", "hud.scale": 1.37,
@@ -176,7 +176,9 @@ import AppKit
             ("Battery charge", { $0.battery.flowMode = .always }),
             ("Battery heat", { $0.battery.heatWarning.thresholdCelsius = 47 }),
             ("Misc", { $0.misc.enabled.toggle() }),
-            ("Chip & OS", { $0.deviceInfo.toggle() })
+            ("Mac", { $0.deviceInfo.enabled.toggle() }),
+            ("Chip mode", { $0.deviceInfo.chipMode = .tier }),
+            ("OS", { $0.deviceInfo.os.toggle() })
         ]
         for (name, change) in changes {
             var changed = balanced
@@ -330,8 +332,10 @@ import AppKit
         clear()
         var legacyConfiguration = encodedObject
         legacyConfiguration.removeValue(forKey: "menuBarReadings")
+        legacyConfiguration["deviceInfo"] = customized.deviceInfo.enabled
         var legacyExpected = customized
         legacyExpected.menuBarReadings = []
+        legacyExpected.deviceInfo = .init(enabled: customized.deviceInfo.enabled, chipMode: .tier)
         legacyConfiguration.merge([
             "alignment": "vertical", "background": "light", "scale": 1.72,
             "position": ["x": 420.0, "y": 690.0], "autoHideMode": "off",

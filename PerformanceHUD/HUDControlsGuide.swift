@@ -13,7 +13,7 @@ final class HUDControlsGuide: NSWindowController {
             ("", "Show or hide the HUD. Option + H is the default shortcut. Your selections are remembered; visible menu-bar readings keep updating while the HUD is disabled.")]),
         .init(title: "Show menu-bar readings", rows: [
             ("Selection", "Click the small menu-bar symbol to the right of B beside a reading to show it in the macOS menu bar, independently of the HUD. All start off. The first use asks for confirmation: Yes enables the reading and remembers your approval; No leaves it off. Keep to a couple of readings: selections that exceed the width limit stay off and show a warning."),
-            ("Display", "Uses a scaled-down horizontal layout with shared modes, emphasis, and heat warnings. FPS shows Value only; pressure B1/B2 uses A1/A2; fan averaging follows Horizontal. Misc and Chip & OS are unavailable."),
+            ("Display", "Uses a scaled-down horizontal layout with shared modes, emphasis, and heat warnings. FPS shows Value only; pressure B1/B2 uses A1/A2; fan averaging follows Horizontal. Misc and Mac are unavailable."),
             ("Collapse / expand", "Use Show menu-bar readings or the chevron beside the bolt to hide or reveal all selections without clearing them. If a saved preset, reading mode, or display change exceeds the width limit, readings collapse until you reduce them. The HUD is unaffected. Click the bolt or readings to open the controls.")]),
         .init(title: "Reset", rows: [
             ("Position", "Return to the default position. To move the HUD, hold Option and drag with the left mouse button; release Option after dragging to avoid snapping. Edit hotkeys lets you change this modifier."),
@@ -25,14 +25,14 @@ final class HUDControlsGuide: NSWindowController {
             ("All", "Hide the whole HUD after three seconds without FPS readings and reveal it when they return. Apps without detectable FPS keep it hidden. This mode does not hide menu-bar readings. Logging continues."),
             ("Animation", "Animate HUD hiding, showing, and mode changes. On by default; turn it off for instant transitions. macOS Reduce Motion also skips animations.")]),
         .init(title: "Size", rows: [("", "Scale the HUD from 0.5× to 2×. Default: 1×. Menu-bar readings keep their own fixed scale.")]),
-        .init(title: "Alignment", rows: [("", "Vertical stacks categories; Horizontal places them in one row. Horizontal uses FPS Value only and pressure meters. Misc and Chip & OS are Vertical-only. Your Vertical choices return when switching back.")]),
+        .init(title: "Alignment", rows: [("", "Vertical stacks categories; Horizontal places them in one row. Horizontal uses FPS Value only and pressure meters. Misc and Mac are Vertical-only. Your Vertical choices return when switching back.")]),
         .init(title: "Appearance", rows: [("Light / Dark / Follow macOS", "Choose a fixed appearance or follow macOS, the default. Option + A cycles these choices; change the shortcut in Edit hotkeys. Menu-bar readings always follow macOS appearance.")]),
         .init(title: "Liquid Glass", rows: [
             ("Strength", "Adjust from Clear (0%) to Frosted (100%) for the HUD only. Starts at your current macOS strength and remembers later adjustments. Light and Dark are separate choices."),
             ("Follow macOS · default", "Follow System Settings → Appearance. The inactive slider shows the system strength. Accessibility settings such as Reduce transparency can affect either mode."),
             ("Retry Glass Compatibility", "If this appears, retry it to restore compatibility with games that may otherwise be capped at 60 FPS.")]),
         .init(title: "Preset", rows: [
-            ("FPS / Balanced / Detailed", "FPS shows only Frame rate in Value mode. Balanced uses the default readings. Detailed adds Misc and Chip & OS and sets GPU, CPU, and memory Use to Both. Built-in presets turn menu-bar selections off."),
+            ("FPS / Balanced / Detailed", "FPS shows only Frame rate in Value mode. Balanced uses the default readings. Detailed adds Misc and Mac and sets GPU, CPU, and memory Use to Both. Built-in presets turn menu-bar selections off."),
             ("Custom", "Changing categories, readings, modes, emphasis, heat warnings, or menu-bar selections shows Custom unless the choices match a preset. Size, position, alignment, appearance, Liquid Glass, Auto hide, and app settings stay independent."),
             ("Save current as… / Manage presets…", "Save your selections by name, then rename or delete saved presets. Presets include menu-bar selections, but not their global collapse state. Built-in presets cannot be edited or deleted.")]),
         .init(title: "Category controls", rows: [
@@ -71,7 +71,9 @@ final class HUDControlsGuide: NSWindowController {
             ("Refresh rate", "The display’s configured rate or variable-refresh range, not its instantaneous rate."),
             ("Game Mode", "Experimental macOS on/off status. Unavailable readings stay blank."),
             ("Thermal", "System thermal pressure: nominal, fair, serious, or critical. This is not a temperature reading.")]),
-        .init(title: "Chip & OS", rows: [("", "Chip name and macOS version. Vertical-only and off by default.")]),
+        .init(title: "Mac", rows: [
+            ("Chip", "Tier shows the chip name. Full adds CPU and GPU core counts below it. Off hides chip information."),
+            ("OS", "Shows the macOS version independently. Full and OS are selected by default; the category stays off and is Vertical-only.")]),
         .init(title: "Start / Stop logging", rows: [
             ("Recording", "Record selected HUD readings once per second to CSV. The HUD must be enabled. Option + L is the default shortcut. Columns are fixed when recording starts; start a new log to include newly selected readings. Missing readings stay blank."),
             ("Saving", "Stopping, disabling the HUD, or quitting saves the CSV to your Desktop. Auto hide keeps recording. If saving fails, an alert identifies the recovery file. Logging always starts manually.")]),

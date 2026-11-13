@@ -158,14 +158,17 @@ import AppKit
             }
             let top = pixel(x: 40, y: 12)
             let bottom = pixel(x: 40, y: 4)
-            precondition(top.alphaComponent > 0.07 && bottom.alphaComponent < 0.05,
-                         "Fill fades to transparent at its base")
+            precondition(top.alphaComponent > bottom.alphaComponent + 0.04
+                         && (0.025...0.07).contains(bottom.alphaComponent),
+                         "Fill fades downward to the faint FPS-style tint at its base")
             precondition(pixel(x: 40, y: 1).alphaComponent == 0, "There is no decorative fill below numeric zero")
             let oldest = graph.point(for: graph.history.runs[0][0], latestTime: 29)
-            let faded = pixel(x: oldest.x + 1, y: 9)
+            let edge = pixel(x: oldest.x + 1, y: 9)
             let solid = pixel(x: oldest.x + 8, y: 9)
-            precondition(solid.alphaComponent > 0.04 && faded.alphaComponent < solid.alphaComponent * 0.5,
-                         "The oldest edge fades in over six points while the interior retains its fill")
+            let right = pixel(x: graph.plotBounds.maxX - 8, y: 9)
+            precondition(solid.alphaComponent > 0.04 && abs(edge.alphaComponent - solid.alphaComponent) < 0.015
+                         && abs(right.alphaComponent - solid.alphaComponent) < 0.015,
+                         "The fill retains equal opacity across both ends, with no horizontal fade")
             if mode == .history {
                 precondition(abs(top.redComponent - top.blueComponent) < 0.02, "Style 3 is neutral")
             } else {

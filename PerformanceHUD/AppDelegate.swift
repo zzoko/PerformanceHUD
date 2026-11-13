@@ -817,9 +817,9 @@ final class AppDelegate:
             reconcileMonitoring()
         }
         categories.append(miscView)
-        let chipView = HUDDeviceInfoMenuView(selected: enabledMetrics.contains(.deviceInfo),
+        let chipView = HUDDeviceInfoMenuView(options: HUDPreferences.deviceInfoOptions,
                                              enabled: HUDPreferences.alignment.allows(.deviceInfo))
-        chipView.onChange = { [weak self] in self?.toggleDeviceInfo() }
+        chipView.onChange = { [weak self] options in self?.setDeviceInfoOptions(options) }
         deviceInfoMenuView = chipView
         categories.append(chipView)
         categoryViews = categories
@@ -1495,7 +1495,7 @@ final class AppDelegate:
             hudWindow?.setAlignment(HUDPreferences.alignment)
         }
         hudWindow?.setFPSOptions(HUDPreferences.fpsOptions)
-        hudWindow?.setMetricEnabled(.deviceInfo, enabled: enabledMetrics.contains(.deviceInfo))
+        hudWindow?.setDeviceInfoOptions(HUDPreferences.deviceInfoOptions)
         if resetDesign {
             hudWindow?.setHUDScale(hudScale)
             hudWindow?.setBackground(hudBackground)
@@ -1519,7 +1519,7 @@ final class AppDelegate:
         miscMenuView?.update(alignment: alignment)
         resourceMenuViews[.ram]?.update(alignment: alignment)
         updatePackagePowerMenu()
-        deviceInfoMenuView?.update(selected: enabledMetrics.contains(.deviceInfo),
+        deviceInfoMenuView?.update(options: HUDPreferences.deviceInfoOptions,
                                    enabled: alignment.allows(.deviceInfo))
         reconcileMonitoring()
     }
@@ -1543,15 +1543,13 @@ final class AppDelegate:
             )
     }
 
-    // MARK: - Chip & OS
+    // MARK: - Mac information
 
-    private func toggleDeviceInfo() {
+    private func setDeviceInfoOptions(_ options: HUDDeviceInfoOptions) {
         guard HUDPreferences.alignment.allows(.deviceInfo) else { return }
-        let enabled = !enabledMetrics.contains(.deviceInfo)
-        HUDPreferences.setMetricEnabled(.deviceInfo, enabled: enabled)
+        HUDPreferences.deviceInfoOptions = options
         enabledMetrics = HUDPreferences.visibleMetrics
-        deviceInfoMenuView?.update(selected: enabled, enabled: true)
-        hudWindow?.setMetricEnabled(.deviceInfo, enabled: enabled)
+        hudWindow?.setDeviceInfoOptions(options)
         reconcileMonitoring()
     }
 
@@ -1761,6 +1759,11 @@ final class AppDelegate:
                     var snapshot = logSnapshot
                     snapshot.setText(.chip, HUDDeviceInfo.current.chipName)
                     snapshot.setText(.os, HUDDeviceInfo.current.macOSVersion)
+                    let device = HUDDeviceInfo.current
+                    snapshot.set(.cpuCores, device.cpuCores.map(Double.init))
+                    snapshot.set(.cpuEfficiencyCores, device.efficiencyCores.map(Double.init))
+                    snapshot.set(.cpuPerformanceCores, device.performanceCores.map(Double.init))
+                    snapshot.set(.gpuCores, device.gpuCores.map(Double.init))
                     // Match the Energy icon; macOS does not expose High Power here.
                     snapshot.set(.lowPowerMode, snapshot.values[.batteryCharge] == nil ? nil
                         : (ProcessInfo.processInfo.isLowPowerModeEnabled ? 1 : 0))

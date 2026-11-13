@@ -119,25 +119,60 @@ private final class HUDMiscPillButton: NSButton {
 
 @MainActor
 final class HUDDeviceInfoMenuView: HUDCategoryMenuView {
-    var onChange: (() -> Void)?
-    private let master = HUDResourceMasterButton(title: "Chip & OS", target: nil, action: nil)
-    private let reading = NSTextField(labelWithString: "Name and version")
+    var onChange: ((HUDDeviceInfoOptions) -> Void)?
+    private var options: HUDDeviceInfoOptions
+    private var allowed: Bool
+    private let master = HUDResourceMasterButton(title: "Mac", target: nil, action: nil)
+    private let reading = NSTextField(labelWithString: "Chip")
+    private let chipMode = NSSegmentedControl(labels: HUDChipDisplayMode.allCases.map(\.title),
+        trackingMode: .selectOne, target: nil, action: nil)
+    private let os = HUDReadingCheckbox(title: "OS", supportsEmphasis: false)
 
-    init(selected: Bool, enabled: Bool) {
+    init(options: HUDDeviceInfoOptions, enabled: Bool) {
+        self.options = options
+        allowed = enabled
         super.init()
-        setAccessibilityLabel("Chip & OS display options")
+        setAccessibilityLabel("Mac display options")
         master.target = self; master.action = #selector(changed)
-        master.setAccessibilityLabel("Show Chip & OS")
+        master.setAccessibilityLabel("Show Mac information")
         reading.font = .menuFont(ofSize: 0)
+        chipMode.target = self; chipMode.action = #selector(modeChanged)
+        chipMode.setAccessibilityLabel("Chip display mode")
+        os.target = self; os.action = #selector(osChanged)
+        os.setControlAccessibilityLabel("Show macOS version")
         setCategory(master)
-        setRows([.init(reading: reading)])
-        update(selected: selected, enabled: enabled)
+        setRows([.init(reading: reading, mode: chipMode), .init(reading: os)])
+        refresh()
     }
-    required init?(coder: NSCoder) { fatalError("Use init(selected:enabled:)") }
-    func update(selected: Bool, enabled: Bool) {
-        master.isEnabled = enabled
-        master.state = selected && enabled ? .on : .off
-        reading.textColor = master.state == .on ? .labelColor : .disabledControlTextColor
+    required init?(coder: NSCoder) { fatalError("Use init(options:enabled:)") }
+    func update(options: HUDDeviceInfoOptions, enabled: Bool) {
+        self.options = options
+        allowed = enabled
+        refresh()
     }
-    @objc private func changed() { guard master.isEnabled else { return }; onChange?() }
+    private func refresh() {
+        master.isEnabled = allowed
+        master.state = options.enabled && allowed ? .on : .off
+        let active = allowed && options.enabled
+        reading.textColor = active ? .labelColor : .disabledControlTextColor
+        chipMode.isEnabled = active
+        chipMode.selectedSegment = HUDChipDisplayMode.allCases.firstIndex(of: options.chipMode) ?? 0
+        os.isEnabled = active
+        os.state = options.os ? .on : .off
+    }
+    @objc private func changed() {
+        guard allowed else { return }
+        options.enabled = master.state == .on
+        refresh(); onChange?(options)
+    }
+    @objc private func modeChanged() {
+        guard allowed, options.enabled, HUDChipDisplayMode.allCases.indices.contains(chipMode.selectedSegment) else { return }
+        options.chipMode = HUDChipDisplayMode.allCases[chipMode.selectedSegment]
+        refresh(); onChange?(options)
+    }
+    @objc private func osChanged() {
+        guard allowed, options.enabled else { return }
+        options.os = os.state == .on
+        refresh(); onChange?(options)
+    }
 }

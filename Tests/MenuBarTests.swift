@@ -16,7 +16,7 @@ import AppKit
                     focusedApp: false, power: false, details: false, pressure: false))
             }), package: .init(enabled: false), fans: .init(enabled: false),
             battery: .init(enabled: false, temperature: false, charge: false, flowMode: .auto),
-            deviceInfo: false, alignment: .vertical)
+            deviceInfo: .init(), alignment: .vertical)
     }
 
     static func persistence() {

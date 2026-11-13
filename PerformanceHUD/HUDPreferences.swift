@@ -29,7 +29,8 @@ enum HUDPreferences {
                     "hud.battery.power", "hud.battery.powerHighlighted", "hud.battery.flowMode",
                     "hud.battery.heatWarning.enabled", "hud.battery.heatWarning.threshold",
                     "hud.group.ram.details", "hud.group.ram.pressure", "hud.group.ram.pressureMode", "hud.group.ram.pressureGraphStyle", "hud.fan.usage", "hud.fan.mode",
-                    "hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted", "hud.misc.readings"]
+                    "hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted", "hud.misc.readings",
+                    "hud.deviceInfo.chipMode", "hud.deviceInfo.os"]
         keys += HUDMetric.allCases.map { metricKey($0) }
         for group in HUDResourceGroup.allCases {
             keys += ["enabled", "temperature", "power", "highlighted", "usageMode", "heatWarning.enabled", "heatWarning.threshold"].map {
@@ -240,6 +241,23 @@ enum HUDPreferences {
 
     // MARK: - Metric Visibility
 
+    static var deviceInfoOptions: HUDDeviceInfoOptions {
+        get { deviceInfoOptions(in: defaults) }
+        set { setDeviceInfoOptions(newValue, in: defaults) }
+    }
+
+    static func deviceInfoOptions(in store: UserDefaults) -> HUDDeviceInfoOptions {
+        HUDDeviceInfoOptions(enabled: isMetricEnabled(.deviceInfo, in: store),
+            chipMode: store.string(forKey: "hud.deviceInfo.chipMode").flatMap(HUDChipDisplayMode.init(rawValue:)) ?? .full,
+            os: store.object(forKey: "hud.deviceInfo.os") as? Bool ?? true)
+    }
+
+    static func setDeviceInfoOptions(_ options: HUDDeviceInfoOptions, in store: UserDefaults = .standard) {
+        setMetricEnabled(.deviceInfo, enabled: options.enabled, in: store)
+        store.set(options.chipMode.rawValue, forKey: "hud.deviceInfo.chipMode")
+        store.set(options.os, forKey: "hud.deviceInfo.os")
+    }
+
     static var miscOptions: HUDMiscOptions {
         get { miscOptions(in: defaults) }
         set { setMiscOptions(newValue, in: defaults) }
@@ -435,6 +453,7 @@ enum HUDPreferences {
         metrics.subtract([.fps, .fpsGraph])
         metrics.formUnion(fpsOptions.visibleMetrics(alignment: alignment))
         if miscOptions.visibleReadings.isEmpty { metrics.remove(.misc) }
+        if !deviceInfoOptions.isVisible { metrics.remove(.deviceInfo) }
         for group in HUDResourceGroup.allCases {
             if let appMetric = group.appMetric { metrics.remove(appMetric) }
             metrics.remove(group.totalMetric)

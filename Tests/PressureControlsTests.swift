@@ -196,7 +196,7 @@ import AppKit
                                 let selection = HUDLogSelection(fps: false, resources: [.ram: option],
                                     package: .init(enabled: false), fans: .init(enabled: false),
                                     battery: .init(enabled: false, temperature: false, charge: false),
-                                    deviceInfo: false, alignment: alignment)
+                                    deviceInfo: .init(), alignment: alignment)
                                 let columns = selection.columns(fanSample: .noFans)
                                 precondition(columns.contains(.memoryPressure) == showsPressure, "CSV pressure follows Pressure")
                                 precondition(columns.contains(.memoryPhysical) == (details && source != .app), "CSV physical memory follows Details")

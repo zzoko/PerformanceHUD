@@ -30,14 +30,14 @@ import AppKit
         hud.setMetricEnabled(.deviceInfo, enabled: true)
         let deviceGroup = groups.firstIndex { $0.contains(.deviceInfo) }!
         precondition(Set(dividers.filter { !$0.value.isHidden }.keys) == [deviceGroup],
-                     "Memory and Chip & OS have exactly one divider between them")
+                     "Memory and Mac have exactly one divider between them")
         hud.setMetricEnabled(.ramTotal, enabled: false)
         precondition(dividers.values.allSatisfy(\.isHidden),
-                     "Removing the preceding category removes Chip & OS's former boundary")
+                     "Removing the preceding category removes Mac's former boundary")
         hud.setMetricEnabled(.fans, enabled: true)
         precondition(Set(dividers.filter { !$0.value.isHidden }.keys) == [deviceGroup],
-                     "Fans before Chip & OS retains its separating boundary without a top divider")
-        print("PASS: singleton Memory, Chip & OS, and Fan divider boundaries")
+                     "Fans before Mac retains its separating boundary without a top divider")
+        print("PASS: singleton Memory, Mac, and Fan divider boundaries")
     }
     @MainActor static func main() throws {
         _ = NSApplication.shared

@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-3.0.svg" alt="App version 3.0 — view changelog" width="56" height="30" align="top"></a>
+## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-3.1.svg" alt="App version 3.1 — view changelog" width="56" height="30" align="top"></a>
 
 Download the ready-built app for **$3.99**, or build it yourself for free. Both offer the same features, with no subscription or feature unlocks.
 

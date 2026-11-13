@@ -23,7 +23,7 @@ import AppKit
         let fan = HUDFanMenuView(options: .init(), sample: fanSample)
         let battery = HUDResourceMenuView(batteryOptions: .init(enabled: true, temperature: true, charge: true))
         let misc = HUDMiscMenuView(options: .init(enabled: true))
-        let chip = HUDDeviceInfoMenuView(selected: true, enabled: true)
+        let chip = HUDDeviceInfoMenuView(options: .init(enabled: true), enabled: true)
         let categories: [HUDCategoryMenuView] = [fps, gpu, cpu, ane, soc, memory, fan, battery, misc, chip]
         let list = HUDCategoryListView(categories: categories)
         list.fit(availableHeight: 1000)
@@ -208,7 +208,7 @@ import AppKit
             list.needsLayout = true
             verifyGeometry()
             check(chip.frame.minY >= misc.frame.maxY && !chip.frame.intersects(fps.frame),
-                  "Chip & OS stays below Misc when a native menu measures and resizes the list")
+                  "Mac stays below Misc when a native menu measures and resizes the list")
         }
         let controls: [Int: NSButton] = member(gpu, "controls")
         let use = controls[7] as! HUDReadingCheckbox
@@ -295,26 +295,26 @@ import AppKit
         gpu.setPowerState(.ready, selected: true)
         let chipMaster: NSButton = member(chip, "master")
         let chipReading: NSTextField = member(chip, "reading")
-        var chipSelected = true
-        chip.onChange = {
-            chipSelected.toggle()
-            chip.update(selected: chipSelected, enabled: true)
+        var chipOptions = HUDDeviceInfoOptions(enabled: true)
+        chip.onChange = { options in
+            chipOptions = options
+            chip.update(options: options, enabled: true)
         }
         chipMaster.performClick(nil)
-        check(!chipSelected && chipMaster.state == .off, "Chip category switch hides the reading")
+        check(!chipOptions.enabled && chipMaster.state == .off, "Chip category switch hides the reading")
         chipMaster.performClick(nil)
-        check(chipSelected && chipReading.textColor == .labelColor, "Chip category switch restores the reading")
-        chip.update(selected: true, enabled: false)
+        check(chipOptions.enabled && chipReading.textColor == .labelColor, "Chip category switch restores the reading")
+        chip.update(options: chipOptions, enabled: false)
         check(chipReading.textColor == .disabledControlTextColor && !chipMaster.isEnabled && chipMaster.state == .off,
-              "Horizontal disables Chip & OS without changing its saved selection")
-        chip.update(selected: true, enabled: true)
-        check(chipReading.textColor == .labelColor && chipMaster.state == .on, "Vertical restores Chip & OS")
+              "Horizontal disables Mac without changing its saved selection")
+        chip.update(options: chipOptions, enabled: true)
+        check(chipReading.textColor == .labelColor && chipMaster.state == .on, "Vertical restores Mac")
         // Short displays retain an actual scrollable document, including the final row.
         list.fit(availableHeight: 240)
         check(list.frame.height == 240 && list.documentView!.frame.height > 240, "Category section fits a small display")
         let last = chip.frame
         list.documentView!.scrollToVisible(last)
-        check(list.documentVisibleRect.intersects(last), "Chip & OS stays reachable by scrolling")
+        check(list.documentVisibleRect.intersects(last), "Mac stays reachable by scrolling")
         list.fit(availableHeight: 1000)
         fan.update(sample: .noFans)
         list.layoutSubtreeIfNeeded()

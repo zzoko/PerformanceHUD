@@ -27,7 +27,7 @@ struct HUDPresetConfiguration: Codable, Equatable {
     var fans: HUDFanOptions
     var battery: HUDBatteryOptions
     var misc: HUDMiscOptions
-    var deviceInfo: Bool
+    var deviceInfo: HUDDeviceInfoOptions
     var menuBarReadings: Set<HUDMenuBarReading> = []
 
     private enum CodingKeys: String, CodingKey {
@@ -43,7 +43,7 @@ struct HUDPresetConfiguration: Codable, Equatable {
              fans: HUDPreferences.fanOptions(in: store),
              battery: HUDPreferences.batteryOptions(in: store),
              misc: HUDPreferences.miscOptions(in: store),
-             deviceInfo: HUDPreferences.isMetricEnabled(.deviceInfo, in: store),
+             deviceInfo: HUDPreferences.deviceInfoOptions(in: store),
              menuBarReadings: HUDMenuBarOptions.load(in: store).readings)
             .canonicalized()
     }
@@ -61,7 +61,7 @@ struct HUDPresetConfiguration: Codable, Equatable {
         HUDPreferences.setFanOptions(configuration.fans, in: store)
         HUDPreferences.setBatteryOptions(configuration.battery, in: store)
         HUDPreferences.setMiscOptions(configuration.misc, in: store)
-        HUDPreferences.setMetricEnabled(.deviceInfo, enabled: configuration.deviceInfo, in: store)
+        HUDPreferences.setDeviceInfoOptions(configuration.deviceInfo, in: store)
         var menuBar = HUDMenuBarOptions.load(in: store)
         menuBar.readings = configuration.menuBarReadings
         menuBar.save(in: store)
@@ -79,7 +79,7 @@ struct HUDPresetConfiguration: Codable, Equatable {
             }),
             packagePower: .init(), fans: .init(),
             battery: .init(enabled: true, temperature: true, charge: true),
-            misc: .init(), deviceInfo: false)
+            misc: .init(), deviceInfo: .init())
         switch preset {
         case .balanced: break
         case .fpsOnly:
@@ -89,13 +89,13 @@ struct HUDPresetConfiguration: Codable, Equatable {
             configuration.fans.enabled = false
             configuration.battery.enabled = false
             configuration.misc.enabled = false
-            configuration.deviceInfo = false
+            configuration.deviceInfo.enabled = false
         case .full:
             for group in [HUDResourceGroup.gpu, .cpu, .ram] {
                 configuration.resources[group]?.selectUsageMode(.both)
             }
             configuration.misc.enabled = true
-            configuration.deviceInfo = true
+            configuration.deviceInfo.enabled = true
         }
         return configuration.canonicalized()
     }
@@ -164,7 +164,13 @@ extension HUDPresetConfiguration {
         fans = try values.decode(HUDFanOptions.self, forKey: .fans)
         battery = try values.decode(HUDBatteryOptions.self, forKey: .battery)
         misc = try values.decode(HUDMiscOptions.self, forKey: .misc)
-        deviceInfo = try values.decode(Bool.self, forKey: .deviceInfo)
+        // Older saved presets only stored the category switch; retain their
+        // original name/version display rather than the new Full default.
+        if let enabled = try? values.decode(Bool.self, forKey: .deviceInfo) {
+            deviceInfo = .init(enabled: enabled, chipMode: .tier)
+        } else {
+            deviceInfo = try values.decode(HUDDeviceInfoOptions.self, forKey: .deviceInfo)
+        }
         // Presets saved before menu-bar readings existed retain an all-off selection.
         menuBarReadings = try values.decodeIfPresent(Set<HUDMenuBarReading>.self, forKey: .menuBarReadings) ?? []
     }

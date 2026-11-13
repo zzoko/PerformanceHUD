@@ -145,14 +145,11 @@ final class HUDMemoryPressureHistoryView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let latestTime = history.samples.last?.time else { return }
         let runs = history.runs
-        guard !runs.isEmpty, let context = NSGraphicsContext.current?.cgContext else { return }
+        guard !runs.isEmpty else { return }
         drawGuides()
-        // Fade only the history contour/fill. Guides and the current marker
-        // remain separate so the reference scale and latest reading stay clear.
-        context.saveGState()
-        context.beginTransparencyLayer(auxiliaryInfo: nil)
         for run in runs where run.count >= 2 {
             let points = run.map { point(for: $0, latestTime: latestTime) }
+            let fillTop = points.map(\.y).max() ?? plotBounds.maxY
             let outline = NSBezierPath()
             outline.move(to: points[0])
             for point in points.dropFirst() { outline.line(to: point) }
@@ -177,12 +174,13 @@ final class HUDMemoryPressureHistoryView: NSView {
                 NSBezierPath(rect: NSRect(x: left, y: 0, width: max(0, right - left), height: bounds.height)).addClip()
                 NSGraphicsContext.saveGraphicsState()
                 area.addClip()
-                // Retain a little more tint near the divider, then taper to
-                // transparent at zero without changing the plotted values.
-                NSGradient(colors: [tint.withAlphaComponent(0), tint.withAlphaComponent(0.06),
-                                    tint.withAlphaComponent(0.13), tint.withAlphaComponent(0.24)],
-                           atLocations: [0, 0.1, 0.35, 1], colorSpace: .deviceRGB)?
-                    .draw(in: plotBounds, angle: 90)
+                // Match FPS: fade from the history's peak to its baseline,
+                // without changing the numeric scale or fading either end.
+                if fillTop > plotBounds.minY {
+                    HUDStyle.historyFillGradient(tint: tint)?
+                        .draw(from: NSPoint(x: plotBounds.midX, y: plotBounds.minY),
+                              to: NSPoint(x: plotBounds.midX, y: fillTop), options: [])
+                }
                 NSGraphicsContext.restoreGraphicsState()
                 tint.withAlphaComponent(0.9).setStroke()
                 outline.stroke()
@@ -190,20 +188,6 @@ final class HUDMemoryPressureHistoryView: NSView {
                 start = end + 1
             }
         }
-        if let oldest = runs.first?.first,
-           let mask = CGGradient(colorSpace: CGColorSpaceCreateDeviceRGB(),
-                                 colorComponents: [1, 1, 1, 0, 1, 1, 1, 1],
-                                 locations: [0, 1], count: 2) {
-            let left = point(for: oldest, latestTime: latestTime).x
-            context.saveGState()
-            context.setBlendMode(.destinationIn)
-            context.drawLinearGradient(mask, start: CGPoint(x: left, y: 0),
-                                       end: CGPoint(x: left + 6 * scale, y: 0),
-                                       options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-            context.restoreGState()
-        }
-        context.endTransparencyLayer()
-        context.restoreGState()
         if let current = history.samples.last, HUDMemoryPressureHistory.isValid(current) {
             let center = point(for: current, latestTime: latestTime)
             let tint = color(for: current.level)

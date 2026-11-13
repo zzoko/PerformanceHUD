@@ -7,6 +7,7 @@ enum HUDLogColumn: Hashable {
     case memoryUsage, memoryPhysical, memorySwap, memoryPressure, memoryAppUsage, memoryAppPhysical
     case fanUsage(Int), fanRPM(Int), fanAverageUsage, fanAverageRPM
     case powerSource, batteryPower, batteryTemperature, batteryCharge, lowPowerMode, chip, os
+    case cpuCores, cpuEfficiencyCores, cpuPerformanceCores, gpuCores
     case process, resolutionWidth, resolutionHeight, refreshMinimum, refreshMaximum, gameMode, thermal
 
     var title: String {
@@ -38,6 +39,10 @@ enum HUDLogColumn: Hashable {
         case .batteryCharge: return "Battery Charge (%)"
         case .lowPowerMode: return "Low Power Mode (0/1)"
         case .chip: return "Chip"
+        case .cpuCores: return "CPU Cores"
+        case .cpuEfficiencyCores: return "CPU Efficiency Cores"
+        case .cpuPerformanceCores: return "CPU Performance Cores"
+        case .gpuCores: return "GPU Cores"
         case .os: return "macOS"
         case .process: return "Process"
         case .resolutionWidth: return "Resolution Width (px)"
@@ -62,7 +67,8 @@ enum HUDLogColumn: Hashable {
              .gpuUsage, .gpuAppUsage, .cpuUsage, .cpuAppUsage,
              .memoryUsage, .memoryAppUsage, .fanUsage, .fanAverageUsage, .batteryCharge:
             places = 1
-        case .fanRPM, .fanAverageRPM, .lowPowerMode, .resolutionWidth, .resolutionHeight, .gameMode:
+        case .fanRPM, .fanAverageRPM, .lowPowerMode, .resolutionWidth, .resolutionHeight, .gameMode,
+             .cpuCores, .cpuEfficiencyCores, .cpuPerformanceCores, .gpuCores:
             places = 0
         case .memoryPressure, .powerSource, .chip, .os, .process, .thermal:
             return nil
@@ -87,7 +93,7 @@ struct HUDLogSelection {
     var package: HUDPackagePowerOptions
     var fans: HUDFanOptions
     var battery: HUDBatteryOptions
-    var deviceInfo: Bool
+    var deviceInfo: HUDDeviceInfoOptions
     var alignment: HUDAlignment
     var misc = HUDMiscOptions()
 
@@ -97,7 +103,7 @@ struct HUDLogSelection {
                  ($0, HUDPreferences.resourceOptions(for: $0))
              }), package: HUDPreferences.packagePowerOptions, fans: HUDPreferences.fanOptions,
              battery: HUDPreferences.batteryOptions,
-             deviceInfo: HUDPreferences.visibleMetrics.contains(.deviceInfo),
+             deviceInfo: HUDPreferences.deviceInfoOptions,
              alignment: HUDPreferences.alignment, misc: HUDPreferences.miscOptions)
     }
 
@@ -152,7 +158,15 @@ struct HUDLogSelection {
             case .thermal: result.append(.thermal)
             }
         }
-        if deviceInfo && alignment == .vertical { result += [.chip, .os] }
+        if alignment == .vertical {
+            if deviceInfo.showsChip {
+                result.append(.chip)
+                if deviceInfo.chipMode == .full {
+                    result += [.cpuCores, .cpuEfficiencyCores, .cpuPerformanceCores, .gpuCores]
+                }
+            }
+            if deviceInfo.showsOS { result.append(.os) }
+        }
         return result
     }
 }

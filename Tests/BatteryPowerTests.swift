@@ -367,7 +367,7 @@ import IOKit.ps
             let comparison = HUDHorizontalView(frame: .zero)
             let readingFont = HUDStyle.readingFont(scale: .normal, highlighted: emphasized)
             let usageFont = HUDStyle.readingFont(scale: .normal, highlighted: false)
-            let titleFont = HUDStyle.TextStyle.label.font(ofSize: 14)
+            let titleFont = HUDStyle.titleFont(for: .battery, scale: .normal)
             for watts in [0.0, -24.3, 100.0] {
                 let power = BatteryPowerRate.text(watts)
                 let fields = [("title", "ADP", "ADP", titleFont),
@@ -498,7 +498,7 @@ import IOKit.ps
                 ("use", "80%", HUDStyle.horizontalPercentageReference)
             ].map { role, text, sizing in
                 .init(id: role, text: text, reference: sizing,
-                    font: role == "title" ? HUDStyle.TextStyle.label.font(ofSize: 14)
+                    font: role == "title" ? HUDStyle.titleFont(for: .battery, scale: .normal)
                         : HUDStyle.readingFont(scale: .normal, highlighted: false),
                     color: .white, help: nil, startsMetric: role == "title", resourceGroup: .gpu)
             }

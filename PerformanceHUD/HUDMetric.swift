@@ -57,7 +57,7 @@ enum HUDMetric: Int, CaseIterable, Hashable {
             return "Battery"
 
         case .deviceInfo:
-            return "Chip & OS"
+            return "Mac"
         case .misc:
             return "Misc"
         }
@@ -103,7 +103,7 @@ enum HUDMetric: Int, CaseIterable, Hashable {
             return "Battery"
 
         case .deviceInfo:
-            return "Chip & OS"
+            return "Mac"
         case .misc:
             return "Misc"
         }

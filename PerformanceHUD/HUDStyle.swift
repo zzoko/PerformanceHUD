@@ -3,13 +3,22 @@ import AppKit
 enum HUDStyle {
     static let warningYellow = NSColor(srgbRed: 1, green: 0.85, blue: 0.24, alpha: 1)
 
+    // Shared history fill: a long, gentle fade with a faint tint at the divider.
+    static func historyFillGradient(tint: NSColor) -> NSGradient? {
+        let locations = (0...32).map { CGFloat($0) / 32 }
+        let colors = locations.map { position in
+            tint.withAlphaComponent(0.045 + 0.295 * pow(position, 1.35))
+        }
+        return NSGradient(colors: colors, atLocations: locations, colorSpace: .deviceRGB)
+    }
+
     static func temperatureColor(_ temperature: Double?, warning: HUDHeatWarningOptions,
                                  background: HUDBackground) -> NSColor {
         warning.isTriggered(by: temperature) ? .systemRed : readingColor(background: background)
     }
 
     // Keep these names stable when discussing or refining the HUD typography.
-    // Font size belongs to the existing layout; each style changes only weight/color.
+    // HUD text shares one size; reading emphasis changes only weight/color.
     enum TextStyle: String {
         case label = "Label"
         case reading = "Reading"
@@ -184,9 +193,9 @@ enum HUDStyle {
 
     // MARK: - Fonts
 
-    // Text sizes at 1×; the FPS value matches its label size.
-    private static let baseFontSize: CGFloat = 14
-    private static let baseReadingFontSize: CGFloat = 12
+    // Uniform text at 1×; category weight provides hierarchy instead of size.
+    private static let baseFontSize: CGFloat = 12
+    private static let baseReadingFontSize: CGFloat = baseFontSize
 
     static func fpsValueFont(scale: HUDScale, highlighted: Bool) -> NSFont {
         (highlighted ? TextStyle.emphasizedReading : .reading).font(ofSize: baseFontSize * CGFloat(scale.rawValue))
@@ -207,7 +216,13 @@ enum HUDStyle {
     }
 
     static func titleFont(for metric: HUDMetric, scale: HUDScale) -> NSFont {
-        TextStyle.label.font(ofSize: baseFontSize * CGFloat(scale.rawValue))
+        switch metric {
+        case .fps, .gpu, .gpuTotal, .cpu, .cpuTotal, .aneTotal, .ram, .ramTotal, .battery:
+            // SOC shares the GPU category style. Detail captions remain regular.
+            return NSFont.systemFont(ofSize: baseFontSize * CGFloat(scale.rawValue), weight: .medium)
+        default:
+            return TextStyle.label.font(ofSize: baseFontSize * CGFloat(scale.rawValue))
+        }
     }
 
     // Together with the 6pt stack spacing, match the sample's section positions.

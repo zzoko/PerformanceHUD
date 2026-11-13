@@ -9,7 +9,7 @@ import AppKit
             for title in ["Disable", "Power Helper", "Controls guide…", "Quit"] {
                 menu.addItem(NSMenuItem(title: title, action: nil, keyEquivalent: ""))
             }
-            let chip = NSMenuItem(title: "Chip & OS", action: nil, keyEquivalent: "")
+            let chip = NSMenuItem(title: "Mac", action: nil, keyEquivalent: "")
             chip.state = checked ? .on : .off
             chip.isEnabled = enabled
             if reserve { HUDMenuLayout.reserveStateColumn(for: chip) }
@@ -36,6 +36,6 @@ import AppKit
                 }
             }
         }
-        print("PASS: native menu column stays aligned when Chip & OS is checked, unchecked, or disabled; no false checkmark")
+        print("PASS: native menu column stays aligned when Mac is checked, unchecked, or disabled; no false checkmark")
     }
 }

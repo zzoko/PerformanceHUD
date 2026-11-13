@@ -81,9 +81,13 @@ final class HUDBatteryIndicatorView: NSView {
         needsDisplay = true
     }
 
-    private var sourceFont: NSFont { HUDStyle.TextStyle.label.font(ofSize: 14 * scale) }
-    private var valueFont: NSFont { HUDStyle.TextStyle.reading.font(ofSize: 14 * scale) }
-    private var detailFont: NSFont { HUDStyle.TextStyle.label.font(ofSize: 12 * scale) }
+    private var sourceFont: NSFont {
+        let hudScale = HUDScale(rawValue: Double(scale))
+        return horizontal ? HUDStyle.titleFont(for: .battery, scale: hudScale)
+            : HUDStyle.smallLabelFont(scale: hudScale)
+    }
+    private var valueFont: NSFont { HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: false) }
+    private var detailFont: NSFont { sourceFont }
     private var sourceLabelFont: NSFont { horizontal ? sourceFont : detailFont }
     private var temperatureFont: NSFont {
         HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: options.temperatureHighlighted)

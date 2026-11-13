@@ -121,6 +121,22 @@ final class HUDFPSGraphView: NSView {
     private var hudScale: CGFloat = 1
     private var unavailableTask: Task<Void, Never>?
 
+    private var dotHaloRadius: CGFloat { 3 * hudScale }
+
+    // Align the plot with the other rows, reserving the halo in the HUD's
+    // outer padding instead of shortening the line and fill before the divider.
+    override var alignmentRectInsets: NSEdgeInsets {
+        NSEdgeInsets(top: 0, left: 0, bottom: 0, right: dotHaloRadius)
+    }
+
+    var plotBounds: NSRect {
+        let halfLineWidth = 1.35 * hudScale / 2
+        let fadeExtension = HUDStyle.fpsHistoryFadeExtension * hudScale
+        return NSRect(x: bounds.minX + halfLineWidth, y: bounds.minY + 9 * hudScale + fadeExtension,
+                      width: max(0, bounds.width - halfLineWidth - dotHaloRadius),
+                      height: max(0, bounds.height - 12 * hudScale - fadeExtension))
+    }
+
     init() {
         super.init(frame: .zero)
         setAccessibilityElement(true)
@@ -133,7 +149,10 @@ final class HUDFPSGraphView: NSView {
     deinit { unavailableTask?.cancel() }
 
     func applyStyle(scale: HUDScale, background: HUDBackground) {
-        hudScale = CGFloat(scale.rawValue)
+        if hudScale != CGFloat(scale.rawValue) {
+            hudScale = CGFloat(scale.rawValue)
+            invalidateIntrinsicContentSize()
+        }
         lineColor = HUDStyle.titleColor(for: .gpuTotal, background: background)
         needsDisplay = true
     }
@@ -175,13 +194,8 @@ final class HUDFPSGraphView: NSView {
         super.draw(dirtyRect)
         guard !history.samples.isEmpty, bounds.width > 0, bounds.height > 0 else { return }
         let lineWidth = 1.35 * hudScale
-        let dotHaloRadius = 3 * hudScale
         // Reserve the extra bottom area for the fade without moving or scaling the stroke.
-        let fadeExtension = HUDStyle.fpsHistoryFadeExtension * hudScale
-        // Keep the current-reading halo inside the graph's trailing edge.
-        let plot = NSRect(x: bounds.minX + lineWidth / 2, y: bounds.minY + 9 * hudScale + fadeExtension,
-                          width: bounds.width - lineWidth / 2 - dotHaloRadius,
-                          height: bounds.height - 12 * hudScale - fadeExtension)
+        let plot = plotBounds
         let fillBaseline = bounds.minY
         guard plot.width > 0, plot.height > 0 else { return }
         let range = history.displayRange
@@ -193,13 +207,7 @@ final class HUDFPSGraphView: NSView {
                                    / (range.upperBound - range.lowerBound)) * plot.height)
             }
         }
-        // A long, gentle tail avoids a bright shelf followed by a rapid falloff.
-        // Retain a faint tint at the divider so the fill stays visibly connected.
-        let locations = (0...32).map { CGFloat($0) / 32 }
-        let colors = locations.map { position in
-            return lineColor.withAlphaComponent(0.045 + 0.295 * pow(position, 1.35))
-        }
-        let gradient = NSGradient(colors: colors, atLocations: locations, colorSpace: .deviceRGB)
+        let gradient = HUDStyle.historyFillGradient(tint: lineColor)
         for points in segments {
             guard let first = points.first, let last = points.last else { continue }
             if points.count == 1 {
