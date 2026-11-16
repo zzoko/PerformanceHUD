@@ -21,6 +21,7 @@ final class HUDHeatWarningMenuView: NSView, NSTextFieldDelegate {
         thresholdField.font = .monospacedDigitSystemFont(ofSize: NSFont.menuFont(ofSize: 0).pointSize, weight: .regular)
         thresholdField.alignment = .center
         thresholdField.bezelStyle = .roundedBezel
+        thresholdField.drawsBackground = false
         thresholdField.delegate = self
         thresholdField.onEditingStarted = { [weak self] in self?.beginEditing() }
         thresholdField.target = self
@@ -180,6 +181,18 @@ private final class HUDHeatWarningTextField: NSTextField {
 
 @MainActor
 private final class HUDHeatWarningTextFieldCell: NSTextFieldCell {
+    override func draw(withFrame cellFrame: NSRect, in controlView: NSView) {
+        // The native rounded bezel uses an opaque black/white fill. Keep the
+        // native text and editing geometry, with a subtle tint over the menu.
+        let path = NSBezierPath(roundedRect: cellFrame.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
+        NSColor.labelColor.withAlphaComponent(isEnabled ? 0.08 : 0.04).setFill()
+        path.fill()
+        NSColor.labelColor.withAlphaComponent(isEnabled ? 0.16 : 0.08).setStroke()
+        path.lineWidth = 1
+        path.stroke()
+        drawInterior(withFrame: cellFrame, in: controlView)
+    }
+
     private let editor: HUDHeatWarningFieldEditor = {
         let editor = HUDHeatWarningFieldEditor(frame: .zero)
         editor.isFieldEditor = true

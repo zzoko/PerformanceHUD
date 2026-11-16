@@ -60,6 +60,7 @@ final class AppDelegate:
 
     private var memoryPressureMonitor:
         MemoryPressureMonitor?
+    private var memoryPressureHistory = HUDMemoryPressureHistory()
 
     // MARK: - Battery
 
@@ -537,7 +538,10 @@ final class AppDelegate:
             self?.hudWindow?.updateMemoryPressure(level?.displayText ?? "")
         }
         monitor.onHistoryUpdate = { [weak self] sample in
-            self?.hudWindow?.updateMemoryPressureHistory(sample)
+            guard let self else { return }
+            memoryPressureHistory.append(sample)
+            hudWindow?.updateMemoryPressureHistory(sample)
+            scheduleMenuBarRefresh()
         }
 
         self.memoryPressureMonitor =
@@ -993,7 +997,8 @@ final class AppDelegate:
         menuBarController?.refresh(snapshot: logSnapshot, fanSample: fanMonitor.sample,
                                    batterySample: latestBatterySample, options: options,
                                    fpsExpanded: hudWindow?.hasRecentFPSReading ?? false,
-                                   autoHideMode: HUDPreferences.autoHideMode)
+                                   autoHideMode: HUDPreferences.autoHideMode,
+                                   pressureHistory: memoryPressureHistory)
     }
 
     private func menuBarSelectionChanged() {
@@ -1719,6 +1724,10 @@ final class AppDelegate:
         else { logSnapshot.set(.cpuUsage, nil); totalCPUUsageMonitor?.stop(); hudWindow?.updateMetric(.cpuTotal, value: "") }
         if demand.totalMemory { totalRAMUsageMonitor?.start() }
         else { logSnapshot.updateMemory(nil, app: false); totalRAMUsageMonitor?.stop(); hudWindow?.updateRAM(.ramTotal, usage: nil) }
+        if !demand.pressureHistory {
+            memoryPressureHistory.clear()
+            hudWindow?.clearMemoryPressureHistory()
+        }
         if demand.pressure {
             memoryPressureMonitor?.start(includeHistory: demand.pressureHistory)
         } else {

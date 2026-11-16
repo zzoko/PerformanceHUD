@@ -182,7 +182,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         guard sender.isEnabled, HUDMemoryPressureMode.graphStyles.indices.contains(sender.selectedSegment),
               sender.isEnabled(forSegment: sender.selectedSegment) else { refresh(); return }
         let mode = HUDMemoryPressureMode.graphStyles[sender.selectedSegment]
-        guard alignment != .horizontal || !mode.isHistory else { refresh(); return }
+        guard alignment != .horizontal || !mode.isHistory || isPinned(8) else { refresh(); return }
         options.selectPressureMode(mode)
         refresh()
         onChange?(options)
@@ -368,11 +368,12 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             isEnabled: (options.enabled && options.temperature) || isPinned(1))
         pressureModeControl?.selectedSegment = options.pressureMode == .text ? 0 : 1
         pressureModeControl?.isEnabled = options.showsPressure || isPinned(8)
-        let style = options.selectedPressureGraphStyle.resolved(for: alignment)
+        let style = isPinned(8) ? options.selectedPressureGraphStyle
+            : options.selectedPressureGraphStyle.resolved(for: alignment)
         pressureStyleControl?.selectedSegment = HUDMemoryPressureMode.graphStyles.firstIndex(of: style) ?? 3
         pressureStyleControl?.isEnabled = (options.showsPressure || isPinned(8)) && options.pressureMode != .text
         for (index, mode) in HUDMemoryPressureMode.graphStyles.enumerated() {
-            pressureStyleControl?.setEnabled(alignment != .horizontal || !mode.isHistory, forSegment: index)
+            pressureStyleControl?.setEnabled(alignment != .horizontal || !mode.isHistory || isPinned(8), forSegment: index)
         }
         flowControl?.selectedSegment = HUDBatteryFlowMode.allCases.firstIndex(of: flowMode) ?? 1
         flowControl?.isEnabled = options.enabled || isPinned(4)

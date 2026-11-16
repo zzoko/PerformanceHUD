@@ -4,6 +4,87 @@ import AppKit
     @MainActor static func member<T>(_ object: Any, _ name: String) -> T {
         Mirror(reflecting: object).children.first { $0.label == name }!.value as! T
     }
+    @MainActor static func balancedCoreRows() {
+        let fixtures: [(Int, [Int])] = [(0, []), (1, [1]), (8, [8]), (11, [11]), (12, [12]),
+            (13, [7, 6]), (18, [9, 9]), (22, [11, 11]), (24, [12, 12]), (25, [9, 8, 8]),
+            (32, [11, 11, 10]), (36, [12, 12, 12]), (64, [11, 11, 11, 11, 10, 10])]
+        for (count, expected) in fixtures {
+            precondition(HUDCoreBarLayout.rowSizes(for: count) == expected,
+                         "Wrap at twelve, evenly distributed with longer rows first")
+            let bounds = NSRect(x: 5, y: 7, width: 70, height: CGFloat(max(0, expected.count - 1) * 14 + 10))
+            let rects = HUDCoreBarLayout.rects(for: count, in: bounds, scale: 1)
+            precondition(rects.count == count)
+            var offset = 0
+            for (row, size) in expected.enumerated() {
+                let line = Array(rects[offset..<(offset + size)])
+                precondition(line.last!.maxX == bounds.maxX, "Every row ends at the same reading edge")
+                precondition(line.allSatisfy { $0.size == NSSize(width: 4, height: 10)
+                    && $0.maxY == bounds.maxY - CGFloat(row * 14) && bounds.contains($0) })
+                precondition(zip(line, line.dropFirst()).allSatisfy { $1.minX - $0.maxX == 2 },
+                             "Core order runs left to right with unchanged bar widths and gaps")
+                offset += size
+            }
+        }
+
+        let types = [HUDCPUCoreType(name: "Super", count: 12), .init(name: "Performance", count: 24)]
+        let info = HUDDeviceInfo(chipName: "Simulated Ultra", macOSVersion: "macOS",
+            cpuCores: 36, gpuCores: 80, coreTypes: types)
+        let topology = CPUCoreTopology(groups: [.init(name: "Super", ids: Array(0..<12)),
+            .init(name: "Performance", ids: Array(12..<36))])
+        let hud = HUDWindowController(deviceInfo: info, cpuTopology: topology)
+        defer { hud.shutdown() }
+        hud.setAlignment(.vertical)
+        hud.setHUDScale(.normal)
+        for group in [HUDResourceGroup.gpu, .cpu] {
+            hud.setResourceOptions(.init(enabled: true, temperature: true, totalUse: true,
+                focusedApp: false, power: true), for: group)
+        }
+        hud.setGPUCoreOptions(.init(enabled: true))
+        hud.setCPUCoreOptions(.init(enabled: true, mode: .both))
+        let panel: HUDPanel = member(hud, "panel")
+        let container: NSView = member(hud, "container")
+        let cpu: HUDCoreDetailView = member(hud, "cpuCoreView")
+        let gpu: HUDCoreDetailView = member(hud, "gpuCoreView")
+        let bars = cpu.subviews.filter { String(describing: type(of: $0)).contains("BarsView") }
+        let fields = cpu.subviews.compactMap { $0 as? NSTextField }.filter {
+            $0.accessibilityLabel()?.contains("active-time-weighted frequency") == true
+        }
+        let gpuField = gpu.subviews.compactMap { $0 as? NSTextField }.first {
+            $0.accessibilityLabel() == "GPU average active frequency during sample"
+        }!
+        let powers: [HUDMetric: NSTextField] = member(hud, "powerLabels")
+        func rect(_ field: NSTextField) -> NSRect {
+            field.superview!.convert(field.alignmentRect(forFrame: field.frame), to: container)
+        }
+        for bold in [false, true] {
+            hud.setResourceOptions(.init(enabled: true, temperature: true, totalUse: true,
+                focusedApp: false, power: true, highlighted: bold ? [.power, .temperature, .totalUse] : []), for: .cpu)
+            hud.setCPUCoreOptions(.init(enabled: true, mode: .both, highlighted: bold))
+            panel.contentView?.layoutSubtreeIfNeeded()
+            let wattsEdge = rect(powers[.cpuTotal]!).maxX
+            precondition(fields.count == 2 && bars.count == 2)
+            precondition(fields.allSatisfy { $0.alignment == .right && abs(rect($0).maxX - wattsEdge) < 0.01 })
+            precondition(abs(rect(gpuField).maxX - wattsEdge) < 0.01, "GPU follows the right-aligned CPU GHz edge")
+            precondition(bars[0].frame.height == 10 && bars[1].frame.height == 24,
+                         "12 Super cores occupy one line; 24 Performance cores occupy two")
+            precondition(abs(container.bounds.width - 285) < 0.01, "Large core counts never widen the HUD")
+            for (field, bar) in zip(fields, bars) {
+                precondition(bar.frame.minX - field.alignmentRect(forFrame: field.frame).maxX >= 13,
+                             "A full twelve-bar row leaves a clear gap after GHz")
+            }
+            for label in cpu.subviews.compactMap({ $0 as? NSTextField }).filter({ !fields.contains($0) }) {
+                precondition(label.alignmentRect(forFrame: label.frame).width >= label.intrinsicContentSize.width,
+                             "Full core-type captions still fit")
+            }
+            var minimal = HUDResourceOptions(enabled: true, temperature: false, totalUse: false,
+                focusedApp: false, power: true)
+            minimal.highlighted = bold ? [.power, .temperature, .totalUse] : []
+            hud.setResourceOptions(minimal, for: .cpu)
+            panel.contentView?.layoutSubtreeIfNeeded()
+            precondition(fields.allSatisfy { abs(rect($0).maxX - wattsEdge) < 0.01 },
+                         "Hiding temperature and usage does not shift GHz into the bars")
+        }
+    }
     @MainActor static func normalizedProcessCPU() {
         let second = 1_000_000_000.0
         func value(_ busySeconds: Double, cores: Int = 10, interval: Double = 1) -> Double? {
@@ -180,6 +261,7 @@ import AppKit
         powerPlaceholders()
         try horizontalCores()
         normalizedProcessCPU()
+        balancedCoreRows()
         let balanced = HUDPresetConfiguration.builtIn(.balanced)
         let detailed = HUDPresetConfiguration.builtIn(.full)
         precondition(!balanced.process.enabled && balanced.cpuCores == .cpuDefault && balanced.gpuCores == .gpuDefault)
@@ -433,7 +515,7 @@ import AppKit
                              "CPU Bars-only cannot move GPU GHz away from the right edge")
             }
             precondition(frequencyFields.allSatisfy {
-                $0.isHidden == !mode.showsValue && $0.alignment == (mode == .value ? .right : .left)
+                $0.isHidden == !mode.showsValue && $0.alignment == .right
             })
             precondition(coreBars.allSatisfy { $0.isHidden == !mode.showsBars })
             precondition(coreView.subviews.compactMap { $0 as? NSTextField }.allSatisfy {
@@ -455,11 +537,10 @@ import AppKit
         }
         let powerLabels: [HUDMetric: NSTextField] = member(hud, "powerLabels")
         let powerLabel = powerLabels[.cpuTotal]!
-        let reference = NSTextField(labelWithString: "0.0 W"); reference.font = powerLabel.font
         let powerRect = powerLabel.superview!.convert(powerLabel.alignmentRect(forFrame: powerLabel.frame), to: container)
         let frequencyRect = coreView.convert(frequencyFields[0].alignmentRect(forFrame: frequencyFields[0].frame), to: container)
-        precondition(abs(frequencyRect.minX - (powerRect.maxX - reference.intrinsicContentSize.width)) < 0.01,
-                     "GHz starts at the full CPU reading area's left edge")
+        precondition(abs(frequencyRect.maxX - powerRect.maxX) < 0.01,
+                     "GHz ends at the full CPU watts column's right edge")
         func checkGPUAtRightEdge() {
             precondition(gpuFrequency.alignment == .right
                          && abs(readingRect(gpuFrequency).maxX - readingRect(usageLabels[.gpuTotal]!).maxX) < 0.01,
@@ -495,16 +576,16 @@ import AppKit
         hud.setGPUCoreOptions(.init(enabled: true))
         panel.contentView?.layoutSubtreeIfNeeded()
         checkMatchingFrequencyColumns()
-        // Large chips wrap at eight bars without widening the HUD. Row text
+        // Large chips wrap at twelve bars without widening the HUD. Row text
         // stays on the first line and every graph slot ends at the numeric reading edge.
-        for count in [4, 8, 9, 16, 24, 32] {
+        for count in [4, 8, 12, 13, 18, 24, 25, 32, 36, 64] {
             let types = [HUDCPUCoreType(name: "Super", count: count), .init(name: "Efficiency", count: 6)]
             let big = HUDCoreDetailView(frame: NSRect(x: 0, y: 0, width: 257, height: 250), types: types,
                 topology: .init(groups: [.init(name: "Super", ids: Array(0..<count)), .init(name: "Efficiency", ids: Array(count..<(count + 6)))]))
             big.configure(options: .init(enabled: true), scale: .normal, background: .dark)
             let expected = HUDStyle.rowSpacing(scale: .normal) + 2 * HUDStyle.ramDetailHeight(scale: .normal)
-                + CGFloat((count - 1) / 8) * 14
-            precondition(big.height(scale: .normal) == expected, "One extra bar line per eight cores")
+                + CGFloat((count - 1) / 12) * 14
+            precondition(big.height(scale: .normal) == expected, "One extra bar line per twelve cores")
             big.layoutSubtreeIfNeeded()
             let bars = big.subviews.filter { String(describing: type(of: $0)).contains("BarsView") }
             precondition(bars.count == 2 && bars[0].frame.maxX == bars[1].frame.maxX, "Graph right edges align")

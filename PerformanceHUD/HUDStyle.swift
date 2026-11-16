@@ -84,7 +84,17 @@ enum HUDStyle {
     @MainActor
     static func verticalReadingClusterWidth(scale: HUDScale, power: NSFont,
                                             temperature: NSFont, usage: NSFont) -> CGFloat {
-        let references: [(String, NSFont)] = [("0.0 W", power), ("149°C", temperature), ("100%", usage)]
+        let field = NSTextField(labelWithString: "0.0 W")
+        field.font = power
+        return field.intrinsicContentSize.width
+            + verticalPowerTrailingInset(scale: scale, temperature: temperature, usage: usage)
+    }
+
+    // The complete reading row's watts edge, even if Temperature or Use is
+    // hidden. Core GHz stays clear of its bars when other options change.
+    @MainActor
+    static func verticalPowerTrailingInset(scale: HUDScale, temperature: NSFont, usage: NSFont) -> CGFloat {
+        let references: [(String, NSFont)] = [("149°C", temperature), ("100%", usage)]
         return references.reduce(CGFloat.zero) { width, reference in
             let field = NSTextField(labelWithString: reference.0)
             field.font = reference.1
@@ -147,6 +157,14 @@ enum HUDStyle {
         18 * CGFloat(scale.rawValue)
     }
 
+    static func pressureHistoryBottomExtension(scale: HUDScale, expanded: Bool = true) -> CGFloat {
+        // Reach the next divider's centre, retaining the endpoint halo padding.
+        let base = rowSpacing(scale: scale) + dividerHeight(scale: scale, afterFPS: false)
+            + (0.25 - 5 + 3.5) * CGFloat(scale.rawValue)
+        let extra = (ramDetailHeight(scale: scale) + base - 7 * CGFloat(scale.rawValue)) * 0.5
+        return base + (expanded ? extra : 0)
+    }
+
     static func smallLabelFont(scale: HUDScale) -> NSFont {
         TextStyle.label.font(ofSize: baseReadingFontSize * CGFloat(scale.rawValue))
     }
@@ -194,11 +212,11 @@ enum HUDStyle {
     }
 
     // Share the compact FPS-only column with the FPS section of the horizontal HUD.
-    static func compactFPSValueColumnRight(scale: HUDScale) -> CGFloat {
+    static func compactFPSValueColumnRight(scale: HUDScale, valueSize: HUDFPSValueSize = .standard) -> CGFloat {
         let title = NSTextField(labelWithString: "FPS")
         title.font = titleFont(for: .fps, scale: scale)
         let value = NSTextField(labelWithString: "60")
-        value.font = valueFont(for: .fps, scale: scale)
+        value.font = fpsValueFont(scale: scale, highlighted: true, size: valueSize)
         let textWidth = title.intrinsicContentSize.width + value.intrinsicContentSize.width
         let expanded = expandedValueColumnRight(valueColumnRight(scale: scale), scale: scale)
         return textWidth + max(metricColumnSpacing(scale: scale), (expanded - textWidth) / 2)
@@ -210,8 +228,21 @@ enum HUDStyle {
     private static let baseFontSize: CGFloat = 12
     private static let baseReadingFontSize: CGFloat = baseFontSize
 
-    static func fpsValueFont(scale: HUDScale, highlighted: Bool) -> NSFont {
-        (highlighted ? TextStyle.emphasizedReading : .reading).font(ofSize: baseFontSize * CGFloat(scale.rawValue))
+    static func fpsValueFont(scale: HUDScale, highlighted: Bool, size: HUDFPSValueSize = .standard) -> NSFont {
+        (highlighted ? TextStyle.emphasizedReading : .reading).font(
+            ofSize: baseFontSize * CGFloat(scale.rawValue) * CGFloat(size.rawValue))
+    }
+
+    static func fpsValueHeight(scale: HUDScale, size: HUDFPSValueSize) -> CGFloat {
+        let value = NSTextField(labelWithString: "9999")
+        value.font = fpsValueFont(scale: scale, highlighted: true, size: size)
+        return ceil(value.intrinsicContentSize.height)
+    }
+
+    static func fpsRowHeight(scale: HUDScale, size: HUDFPSValueSize) -> CGFloat {
+        guard size != .standard else { return rowHeight(scale: scale) }
+        return rowHeight(scale: scale) + fpsValueHeight(scale: scale, size: size)
+            - fpsValueHeight(scale: scale, size: .standard)
     }
 
     // Keep the FPS sizing reference at its widest weight so emphasis does not

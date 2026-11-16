@@ -21,6 +21,7 @@ final class HUDHorizontalView: NSView {
         var barFraction: Double? = nil
         var sizingFont: NSFont? = nil
         var pressureMode: HUDMemoryPressureMode? = nil
+        var pressureHistory: HUDMemoryPressureHistory? = nil
     }
 
     let battery = HUDBatteryIndicatorView(frame: .zero)
@@ -46,6 +47,7 @@ final class HUDHorizontalView: NSView {
     private var symbols: [String: NSImageView] = [:]
     private var bars: [String: HUDFanBarView] = [:]
     private var pressureMeters: [String: HUDMemoryPressureMeterView] = [:]
+    private var pressureHistories: [String: HUDMemoryPressureHistoryView] = [:]
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -55,13 +57,16 @@ final class HUDHorizontalView: NSView {
     }
     required init?(coder: NSCoder) { fatalError("Use init(frame:)") }
 
-    func configure(sections: [[Reading]], showsBattery: Bool, scale: HUDScale, background: HUDBackground) -> NSSize {
+    func configure(sections: [[Reading]], showsBattery: Bool, scale: HUDScale, background: HUDBackground,
+                   fpsValueSize: HUDFPSValueSize = .standard) -> NSSize {
         fpsSectionWidth = 0
         fpsLabels.removeAll()
         let factor = CGFloat(scale.rawValue)
         let reference = NSTextField(labelWithString: "FPS")
         reference.font = HUDStyle.titleFont(for: .fps, scale: scale)
-        let height = HUDStyle.rowHeight(scale: scale)
+        let hasFPSValue = sections.joined().contains { $0.metric == .fps && !$0.startsMetric }
+        let fpsSize = hasFPSValue ? fpsValueSize : .standard
+        let height = HUDStyle.fpsRowHeight(scale: scale, size: fpsSize)
         let gap = HUDStyle.metricColumnSpacing(scale: scale)
         let referenceHeight = reference.intrinsicContentSize.height
         let baseline = (height - referenceHeight) / 2 + referenceHeight - reference.firstBaselineOffsetFromTop
@@ -69,6 +74,7 @@ final class HUDHorizontalView: NSView {
         symbols.values.forEach { $0.isHidden = true }
         bars.values.forEach { $0.isHidden = true }
         pressureMeters.values.forEach { $0.isHidden = true }
+        pressureHistories.values.forEach { $0.isHidden = true }
         dividers.forEach { $0.isHidden = true }
         battery.isHidden = !showsBattery
         battery.applyStyle(scale: scale, background: background)
@@ -98,7 +104,7 @@ final class HUDHorizontalView: NSView {
             addDivider()
             let sectionStart = x
             let compactFPSWidth = section.first?.metric == .fps
-                ? HUDStyle.compactFPSValueColumnRight(scale: scale) : nil
+                ? HUDStyle.compactFPSValueColumnRight(scale: scale, valueSize: fpsSize) : nil
             var previousResource: HUDResourceGroup?
             for (index, reading) in section.enumerated() {
                 if index > 0 {
@@ -115,6 +121,25 @@ final class HUDHorizontalView: NSView {
                     }
                 }
                 previousResource = reading.resourceGroup
+                if let mode = reading.pressureMode, mode.isHistory {
+                    let graph = pressureHistories[reading.id] ?? HUDMemoryPressureHistoryView()
+                    if pressureHistories[reading.id] == nil {
+                        pressureHistories[reading.id] = graph
+                        graph.translatesAutoresizingMaskIntoConstraints = true
+                        addSubview(graph)
+                    }
+                    let reference = HUDMemoryPressureHistoryView.menuBarReferenceSize
+                    let graphHeight = HUDStyle.rowHeight(scale: scale)
+                    let graphWidth = reference.width * graphHeight / reference.height
+                    graph.configure(mode: mode, scale: .normal, background: background, width: reference.width)
+                    graph.setHistory(reading.pressureHistory ?? .init())
+                    graph.showsBaseline = true
+                    graph.isHidden = false
+                    graph.frame = NSRect(x: x, y: (height - graphHeight) / 2, width: graphWidth, height: graphHeight)
+                    graph.bounds = NSRect(origin: .zero, size: reference)
+                    x += graphWidth
+                    continue
+                }
                 if let mode = reading.pressureMode, mode != .text {
                     let meter = pressureMeters[reading.id] ?? HUDMemoryPressureMeterView()
                     if pressureMeters[reading.id] == nil {
@@ -210,7 +235,10 @@ final class HUDHorizontalView: NSView {
                 // also needs its side insets in the frame, or it clips glyphs.
                 // Match the vertical FPS title's standard label inset.
                 let titleInset = reading.metric == .fps && reading.startsMetric ? label.alignmentRectInsets.left : 0
-                let alignmentRect = NSRect(x: x + titleInset, y: baseline - labelHeight + label.firstBaselineOffsetFromTop,
+                let isLargeFPS = reading.metric == .fps && !reading.startsMetric && fpsSize == .enlarged
+                let y = isLargeFPS ? (height - labelHeight) / 2
+                    : baseline - labelHeight + label.firstBaselineOffsetFromTop
+                let alignmentRect = NSRect(x: x + titleInset, y: y,
                                            width: width, height: labelHeight)
                 label.frame = label.frame(forAlignmentRect: alignmentRect)
                 x += width

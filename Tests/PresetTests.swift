@@ -24,6 +24,8 @@ import AppKit
               "Balanced exactly matches pre-preset fresh preferences")
         check(balanced.fps.enabled && balanced.fps.mode == .both && balanced.fps.valueHighlighted,
               "Balanced retains FPS Both and number emphasis")
+        check([balanced, fpsOnly, full].allSatisfy { $0.fps.valueSize == .standard },
+              "Every built-in preset defaults to 1× FPS")
         check(balanced.fans.mode == .both && balanced.battery.flowMode == .auto
               && !balanced.misc.enabled,
               "Balanced retains fan, battery, and Misc defaults")
@@ -156,6 +158,7 @@ import AppKit
             ("FPS enable", { $0.fps.enabled.toggle() }),
             ("FPS mode", { $0.fps.mode = .value }),
             ("FPS emphasis", { $0.fps.valueHighlighted.toggle() }),
+            ("FPS number size", { $0.fps.valueSize = .enlarged }),
             ("GPU category", { $0.resources[.gpu]?.enabled.toggle() }),
             ("GPU temperature", { $0.resources[.gpu]?.temperature.toggle() }),
             ("CPU power", { $0.resources[.cpu]?.power.toggle() }),

@@ -93,7 +93,7 @@ import AppKit
             (.fps, ["fps"]), (.gpuPower, ["power"]), (.gpuTemperature, ["gpuTemperature"]),
             (.gpuUsage, ["gpuUsage"]), (.cpuPower, ["power"]), (.cpuTemperature, ["cpuTemperature"]),
             (.cpuUsage, ["cpuUsage"]), (.anePower, ["power"]), (.socPower, ["power"]),
-            (.memoryPressure, ["pressure"]), (.memoryDetails, ["totalMemory"]),
+            (.memoryPressure, ["pressure", "pressureHistory"]), (.memoryDetails, ["totalMemory"]),
             (.memoryUsage, ["totalMemory"]), (.fanUsage, ["fans"]),
             (.batteryPower, ["battery", "batteryPower"]),
             (.batteryTemperature, ["battery", "batteryTemperature"]), (.batteryEnergy, ["battery"])]
@@ -146,7 +146,7 @@ import AppKit
             let expected = totalOnly
             check(activeCollectors(demand([.gpuUsage, .cpuUsage, .memoryUsage], selection: selection)) == expected,
                   "Pinned Use remains system-wide despite a legacy \(mode.rawValue) setting")
-            check(activeCollectors(demand([.memoryPressure], selection: selection)) == ["pressure"],
+            check(activeCollectors(demand([.memoryPressure], selection: selection)) == ["pressure", "pressureHistory"],
                   "System pressure remains independently pinnable even when memory Use is App-only")
         }
         for mode in HUDMemoryPressureMode.allCases {
@@ -158,10 +158,14 @@ import AppKit
             check(overlay.pressure && overlay.pressureHistory == mode.isHistory,
                   "Visible vertical overlay alone requests pressure history for B styles")
             selection.alignment = .horizontal
-            check(!demand([.memoryPressure], selection: selection, enabled: true, visible: true).pressureHistory,
-                  "Horizontal presentations never request history even when B is remembered")
-            check(!demand([.memoryPressure], selection: selection).pressureHistory,
-                  "Menu-bar pressure never requests B-style history data")
+            check(!demand([], selection: selection, enabled: true, visible: true).pressureHistory,
+                  "The Horizontal HUD alone keeps using pressure meters")
+            check(demand([.memoryPressure], selection: selection, enabled: true, visible: true).pressureHistory == mode.isHistory,
+                  "A menu-bar pin requests B history even with a Horizontal HUD")
+            check(demand([.memoryPressure], selection: selection).pressureHistory == mode.isHistory,
+                  "Pinned B history keeps sampling while the HUD is off")
+            check(!demand([.memoryPressure], selection: selection, collapsed: true).pressureHistory,
+                  "Collapsed pins do not request history when the HUD is off")
         }
         selection = disabled
         selection.misc = .init(enabled: true, readings: [.resolution])
@@ -273,6 +277,26 @@ import AppKit
         check(details.emphasisControl?.isEnabled == true, "Pinned system Details can be emphasized with the HUD off")
         detailsPin.performClick(nil)
         check(details.emphasisControl?.isEnabled == false, "Removing the pin restores inactive emphasis")
+        memory.update(alignment: .horizontal)
+        let pressurePin = memory.subviews.compactMap { $0 as? HUDMenuBarButton }
+            .first { $0.accessibilityLabel() == "Show MEM Pressure in menu bar" }!
+        let styles: NSSegmentedControl = member(memory, "pressureStyleControl") as NSSegmentedControl?
+            ?? { fatalError("Missing pressure styles") }()
+        check(!styles.isEnabled(forSegment: 2) && !styles.isEnabled(forSegment: 3),
+              "Unpinned Horizontal pressure keeps its meter-only choices")
+        pressurePin.performClick(nil)
+        check(styles.isEnabled && styles.isEnabled(forSegment: 2) && styles.isEnabled(forSegment: 3)
+              && styles.selectedSegment == 3, "Pinning exposes the remembered B2 style independently of HUD layout")
+        styles.selectedSegment = 2
+        _ = styles.sendAction(styles.action, to: styles.target)
+        let memoryOptions: HUDResourceOptions = member(memory, "options")
+        check(memoryOptions.pressureMode == .history && !memoryOptions.enabled,
+              "Changing a pinned B style cannot enable the hidden HUD category")
+        check(memoryOptions.pressureMode.resolved(for: .horizontal) == .meter,
+              "The Horizontal HUD retains its A fallback independently of the menu-bar graph")
+        pressurePin.performClick(nil)
+        check(!styles.isEnabled(forSegment: 2) && styles.selectedSegment == 0,
+              "Unpinning restores the Horizontal meter indication without losing the saved B choice")
 
         let noFans = HUDFanMenuView(options: .init(enabled: true), sample: .noFans)
         check(noFans.subviews.compactMap { $0 as? HUDMenuBarButton }.allSatisfy { !$0.isEnabled },
@@ -352,8 +376,8 @@ import AppKit
             let pressure = sections([.memoryPressure]).flatMap { $0 }
             check(pressure.map(\.text) == ["MEM", "warning"],
                   "Pressure pin retains system context while the overlay's memory source is App")
-            check(pressure.last?.pressureMode == mode.resolved(for: .horizontal),
-                  "B1 and B2 pressure styles resolve to their horizontal A1 and A2 equivalents")
+            check(pressure.last?.pressureMode == mode,
+                  "The menu-bar pressure pin retains the selected Text/A/B style")
         }
         style.battery.enabled = false
         style.battery.temperature = false
@@ -757,12 +781,89 @@ import AppKit
         hud.onFPSAvailabilityChange = nil
     }
 
+    @MainActor static func pressureHistoryPresentation() {
+        let configuration = HUDPresetConfiguration.builtIn(.balanced)
+        var style = HUDMenuBarPresentation.Style(resources: configuration.resources,
+            fpsHighlighted: true, packageHighlighted: false, fans: configuration.fans, battery: configuration.battery)
+        var snapshot = HUDLogSnapshot()
+        snapshot.setText(.memoryPressure, "warning")
+        var history = HUDMemoryPressureHistory()
+        for second in 0...30 {
+            let level: MemoryPressureMonitor.Level = second < 10 ? .low : second < 20 ? .high : .medium
+            let value = second < 10 ? 25.0 : second < 20 ? 80.0 : 45.0
+            history.append(.init(time: Double(second), level: level, numericValue: value + Double(second % 3)))
+        }
+        for background in [HUDBackground.light, .dark] {
+            let view = HUDHorizontalView(frame: .zero)
+            view.isHidden = false
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 150, height: 21),
+                styleMask: [], backing: .buffered, defer: false)
+            window.contentView = view
+            view.wantsLayer = true
+            view.layer?.backgroundColor = NSColor(white: background == .light ? 0.9 : 0.14, alpha: 1).cgColor
+            var originalSize: NSSize?
+            for mode in [HUDMemoryPressureMode.history, .colorHistory] {
+                style.resources[.ram]?.pressureMode = mode
+                func configure(_ samples: HUDMemoryPressureHistory) -> NSSize {
+                    let sections = HUDMenuBarPresentation.sections(snapshot: snapshot, fanSample: .noFans,
+                        readings: [.memoryPressure], style: style, background: background, pressureHistory: samples)
+                    let size = view.configure(sections: sections, showsBattery: false, scale: .normal, background: background)
+                    view.setFrameSize(size)
+                    return size
+                }
+                let size = configure(history)
+                if let originalSize { check(size == originalSize, "B1 and B2 reserve identical menu-bar space") }
+                originalSize = size
+                let graphs: [String: HUDMemoryPressureHistoryView] = member(view, "pressureHistories")
+                let graph = graphs["ram.pressure"]!
+                let meters: [String: HUDMemoryPressureMeterView] = member(view, "pressureMeters")
+                check(!graph.isHidden && meters.values.allSatisfy(\.isHidden), "B styles draw the real history view, not a meter")
+                check(graph.history.samples.count == 31 && graph.history.samples.last!.numericValue == 45,
+                      "The complete sampled 30-second history reaches the renderer")
+                check(size.height == 21 && graph.frame.height == 21 && view.bounds.contains(graph.frame),
+                      "The compact graph fits the existing menu-bar row")
+                check(abs(graph.frame.width / graph.bounds.width - graph.frame.height / graph.bounds.height) < 0.000001,
+                      "The existing Vertical graph scales uniformly, preserving its proportions")
+                check(graph.showsBaseline && graph.toolTip == nil, "The compact graph keeps its bottom edge without hover tooltips")
+                let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+                view.cacheDisplay(in: view.bounds, to: bitmap)
+                var coloredPixels = 0
+                for y in 0..<bitmap.pixelsHigh {
+                    for x in 0..<bitmap.pixelsWide {
+                        let color = bitmap.colorAt(x: x, y: y)!.usingColorSpace(.deviceRGB)!
+                        if max(color.redComponent, color.greenComponent, color.blueComponent)
+                            - min(color.redComponent, color.greenComponent, color.blueComponent) > 0.1 { coloredPixels += 1 }
+                    }
+                }
+                check(mode == .history ? coloredPixels == 0 : coloredPixels > 5,
+                      "B1 stays neutral while B2 retains the history's pressure-state colours")
+                try! bitmap.representation(using: .png, properties: [:])!.write(to:
+                    URL(fileURLWithPath: "/tmp/phud-menubar-pressure-\(mode.rawValue)-\(background.rawValue).png"))
+                var unavailable = history
+                unavailable.append(.init(time: 31, level: nil, numericValue: nil))
+                check(configure(unavailable) == size && graph.history.samples.last!.numericValue == nil,
+                      "Unavailable pressure reaches the graph without moving neighboring icons")
+                check(configure(.init()) == size && graph.history.samples.isEmpty,
+                      "Clearing history removes old samples without changing the reserved width")
+            }
+            style.resources[.ram]?.pressureMode = .colorMeter
+            let sections = HUDMenuBarPresentation.sections(snapshot: snapshot, fanSample: .noFans,
+                readings: [.memoryPressure], style: style, background: background)
+            _ = view.configure(sections: sections, showsBattery: false, scale: .normal, background: background)
+            let graphs: [String: HUDMemoryPressureHistoryView] = member(view, "pressureHistories")
+            let meters: [String: HUDMemoryPressureMeterView] = member(view, "pressureMeters")
+            check(graphs.values.allSatisfy(\.isHidden) && meters["ram.pressure"]?.isHidden == false,
+                  "Returning to A2 restores the existing meter")
+        }
+    }
+
     @MainActor static func main() {
         _ = NSApplication.shared
         persistence()
         monitoring()
         categoryControls()
         presentation()
+        pressureHistoryPresentation()
         nativeStatusControl()
         widthSafety()
         fpsMenuAutoHide()

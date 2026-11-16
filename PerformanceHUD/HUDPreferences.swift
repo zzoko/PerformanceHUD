@@ -23,7 +23,7 @@ enum HUDPreferences {
     // authoritative. The controller resets position separately; helper registration
     // and independent “Don’t show this again” choices stay.
     static func resetOptions(in store: UserDefaults = .standard) {
-        var keys = [hudEnabledKey, hudScaleKey, "hud.menuBar.readings", "hud.menuBar.collapsed", "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.fps.valueHighlighted", "hud.autoHide", "hud.autoHide.mode", "hud.autoHide.animated",
+        var keys = [hudEnabledKey, hudScaleKey, "hud.menuBar.readings", "hud.menuBar.collapsed", "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.fps.valueHighlighted", "hud.fps.valueSize", "hud.autoHide", "hud.autoHide.mode", "hud.autoHide.animated",
                     "hud.glass.mode", "hud.glass.strength", "hud.process.options", "hud.cpu.cores", "hud.gpu.cores", "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
                     "hud.battery.power", "hud.battery.powerHighlighted", "hud.battery.flowMode",
@@ -151,12 +151,14 @@ enum HUDPreferences {
         let mode: HUDFPSDisplayMode = value && history ? .both : value ? .value : history ? .history
             : store.string(forKey: "hud.fps.displayMode").flatMap(HUDFPSDisplayMode.init(rawValue:)) ?? .both
         return HUDFPSOptions(enabled: value || history, mode: mode,
-                             valueHighlighted: store.object(forKey: "hud.fps.valueHighlighted") as? Bool ?? true)
+                             valueHighlighted: store.object(forKey: "hud.fps.valueHighlighted") as? Bool ?? true,
+                             valueSize: HUDFPSValueSize(rawValue: store.integer(forKey: "hud.fps.valueSize")) ?? .standard)
     }
 
     static func setFPSOptions(_ options: HUDFPSOptions, in store: UserDefaults) {
         store.set(options.mode.rawValue, forKey: "hud.fps.displayMode")
         store.set(options.valueHighlighted, forKey: "hud.fps.valueHighlighted")
+        store.set(options.valueSize.rawValue, forKey: "hud.fps.valueSize")
         let metrics = options.visibleMetrics(alignment: .vertical)
         store.set(metrics.contains(.fps), forKey: metricKey(.fps))
         store.set(metrics.contains(.fpsGraph), forKey: metricKey(.fpsGraph))

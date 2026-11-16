@@ -47,7 +47,8 @@ enum HUDMenuBarPresentation {
 
     static func sections(snapshot: HUDLogSnapshot, fanSample: FanSample,
                          readings: Set<HUDMenuBarReading>, style: Style,
-                         background: HUDBackground) -> [[HUDHorizontalView.Reading]] {
+                         background: HUDBackground,
+                         pressureHistory: HUDMemoryPressureHistory = .init()) -> [[HUDHorizontalView.Reading]] {
         typealias Reading = HUDHorizontalView.Reading
         let scale = HUDScale.normal
         let valueColor = HUDStyle.readingColor(background: background)
@@ -148,7 +149,7 @@ enum HUDMenuBarPresentation {
                         color: valueColor, help: "Memory pressure: \(pressureText)", startsMetric: false,
                         resourceGroup: .ram, metric: .ramTotal,
                         sizingFont: HUDStyle.readingFont(scale: scale, highlighted: true),
-                        pressureMode: options.pressureMode.resolved(for: .horizontal)))
+                        pressureMode: options.pressureMode, pressureHistory: pressureHistory))
                 }
                 if usage {
                     resources.append(value(.ramTotal, role: "value", text: text(.memoryUsage, suffix: "%"),
@@ -218,6 +219,7 @@ final class HUDMenuBarController: NSObject {
     private let bolt = HUDMenuBarPassiveImageView(frame: .zero)
     private let collapse = HUDMenuBarCollapseButton(frame: .zero)
     private var latestSnapshot = HUDLogSnapshot()
+    private var latestPressureHistory = HUDMemoryPressureHistory()
     private var latestFans = FanSample.checking
     private var latestBattery: BatterySample?
     private var latestOptions = HUDMenuBarOptions()
@@ -271,8 +273,10 @@ final class HUDMenuBarController: NSObject {
 
     func refresh(snapshot: HUDLogSnapshot, fanSample: FanSample,
                  batterySample: BatterySample?, options: HUDMenuBarOptions,
-                 fpsExpanded: Bool = true, autoHideMode: HUDAutoHideMode = .off) {
+                 fpsExpanded: Bool = true, autoHideMode: HUDAutoHideMode = .off,
+                 pressureHistory: HUDMemoryPressureHistory = .init()) {
         latestSnapshot = snapshot
+        latestPressureHistory = pressureHistory
         latestFans = fanSample
         latestBattery = batterySample
         latestOptions = options
@@ -328,7 +332,7 @@ final class HUDMenuBarController: NSObject {
         let chargeOnly = readings.contains(.batteryPower) && !batteryOptions.temperature && !batteryOptions.charge
         let showsBattery = batteryOptions.enabled && (!chargeOnly || view.battery.hasVisiblePowerFlow)
         let sections = HUDMenuBarPresentation.sections(snapshot: latestSnapshot, fanSample: latestFans,
-            readings: readings, style: style, background: background)
+            readings: readings, style: style, background: background, pressureHistory: latestPressureHistory)
         return view.configure(sections: sections, showsBattery: showsBattery,
             scale: .normal, background: background)
     }

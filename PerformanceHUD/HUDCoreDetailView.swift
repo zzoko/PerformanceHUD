@@ -1,5 +1,41 @@
 import AppKit
 
+nonisolated enum HUDCoreBarLayout {
+    static let maximumColumns = 12
+    static let barWidth: CGFloat = 4
+    static let barHeight: CGFloat = 10
+    static let columnGap: CGFloat = 2
+    static let rowStride: CGFloat = 14
+    static var width: CGFloat {
+        CGFloat(maximumColumns) * barWidth + CGFloat(maximumColumns - 1) * columnGap
+    }
+
+    static func rowSizes(for count: Int) -> [Int] {
+        guard count > 0 else { return [] }
+        let rows = (count - 1) / maximumColumns + 1
+        let base = count / rows, extra = count % rows
+        return (0..<rows).map { base + ($0 < extra ? 1 : 0) }
+    }
+
+    // Keep processor order, with longer rows first and every row ending at
+    // the same reading edge. The same row calculation also sizes the HUD.
+    static func rects(for count: Int, in bounds: NSRect, scale: CGFloat) -> [NSRect] {
+        let sizes = rowSizes(for: count)
+        guard let columns = sizes.first else { return [] }
+        let gap = columnGap * scale
+        let width = min(barWidth * scale,
+            max(0, (bounds.width - gap * CGFloat(columns - 1)) / CGFloat(columns)))
+        return sizes.enumerated().flatMap { row, columns in
+            let rowWidth = CGFloat(columns) * width + CGFloat(columns - 1) * gap
+            return (0..<columns).map { column in
+                NSRect(x: bounds.maxX - rowWidth + CGFloat(column) * (width + gap),
+                    y: bounds.maxY - barHeight * scale - CGFloat(row) * rowStride * scale,
+                    width: width, height: barHeight * scale)
+            }
+        }
+    }
+}
+
 @MainActor
 final class HUDCoreDetailView: NSView {
     struct FrequencyColumn {
@@ -21,7 +57,7 @@ final class HUDCoreDetailView: NSView {
     private var sample = CPUCoreSample.unavailable
     private var frequencies = CPUFrequencySample.unavailable
     private let gpu: Bool
-    private var cpuReadingWidth: CGFloat = 0
+    private var cpuPowerTrailingInset: CGFloat = 0
     private var matchingFrequencyColumn: FrequencyColumn?
     private var gpuFrequency: Double?
     override var isFlipped: Bool { true }
@@ -52,8 +88,9 @@ final class HUDCoreDetailView: NSView {
         HUDStyle.rowSpacing(scale: scale) + rows.reduce(0) { $0 + rowHeight($1, scale: scale) }
     }
     private func rowHeight(_ row: Row, scale: HUDScale) -> CGFloat {
-        let lines = !gpu && options.mode.showsBars ? max(1, (row.type.count + 7) / 8) : 1
-        return HUDStyle.ramDetailHeight(scale: scale) + CGFloat(lines - 1) * 14 * CGFloat(scale.rawValue)
+        let lines = !gpu && options.mode.showsBars ? max(1, HUDCoreBarLayout.rowSizes(for: row.type.count).count) : 1
+        return HUDStyle.ramDetailHeight(scale: scale)
+            + CGFloat(lines - 1) * HUDCoreBarLayout.rowStride * CGFloat(scale.rawValue)
     }
 
     // Both sections use the same column description when CPU GHz is visible.
@@ -65,17 +102,17 @@ final class HUDCoreDetailView: NSView {
             return matchingFrequencyColumn ?? rightAligned
         }
         if options.mode == .value { return rightAligned }
-        let inset = 46 * CGFloat(scale.rawValue) + HUDStyle.metricColumnSpacing(scale: scale)
-        return FrequencyColumn(trailingInset: inset, width: max(0, cpuReadingWidth - inset), alignment: .left)
+        return FrequencyColumn(trailingInset: cpuPowerTrailingInset,
+            width: rightAligned.width, alignment: .right)
     }
 
     func configure(options: HUDCoreOptions, scale: HUDScale, background: HUDBackground,
-                   readingWidth: CGFloat? = nil, matchingFrequencyColumn: FrequencyColumn? = nil) {
+                   powerTrailingInset: CGFloat? = nil, matchingFrequencyColumn: FrequencyColumn? = nil) {
         self.options = options; self.scale = scale
         self.matchingFrequencyColumn = matchingFrequencyColumn
         let referenceFont = HUDStyle.readingFont(scale: scale, highlighted: false)
-        cpuReadingWidth = readingWidth ?? HUDStyle.verticalReadingClusterWidth(scale: scale,
-            power: referenceFont, temperature: referenceFont, usage: referenceFont)
+        cpuPowerTrailingInset = powerTrailingInset ?? HUDStyle.verticalPowerTrailingInset(scale: scale,
+            temperature: referenceFont, usage: referenceFont)
         for row in rows {
             row.label.font = HUDStyle.smallLabelFont(scale: scale)
             row.label.textColor = HUDStyle.TextStyle.label.color(background: background)
@@ -158,10 +195,11 @@ final class HUDCoreDetailView: NSView {
             place(row.label, x: labelLeft, width: max(0, frequencyLeft - gap - labelLeft))
             place(row.frequency, x: frequencyLeft, width: column.width)
             if let bars = row.bars {
-                let graphWidth = 46 * factor // Eight 4 pt bars and seven 2 pt gaps.
+                let graphWidth = HUDCoreBarLayout.width * factor
                 let graphLeft = right - graphWidth
-                bars.frame = NSRect(x: graphLeft, y: y + (height - 10 * factor) / 2,
-                    width: graphWidth, height: 10 * factor + rowHeight(row, scale: scale) - height)
+                let barHeight = HUDCoreBarLayout.barHeight * factor
+                bars.frame = NSRect(x: graphLeft, y: y + (height - barHeight) / 2,
+                    width: graphWidth, height: barHeight + rowHeight(row, scale: scale) - height)
             }
         }
     }
@@ -174,23 +212,13 @@ private final class HUDCPUCoreBarsView: NSView {
     var tint = NSColor.labelColor { didSet { needsDisplay = true } }
     override func draw(_ dirtyRect: NSRect) {
         guard !values.isEmpty else { return }
-        let columns = min(8, values.count)
-        let gap = 2 * scale
-        let width = min(4 * scale, max(0, (bounds.width - gap * CGFloat(columns - 1)) / CGFloat(columns)))
-        for (index, value) in values.enumerated() {
-            // Each row ends at the reading edge and grows leftward, while
-            // processor IDs keep their left-to-right order within that row.
-            let countInRow = min(8, values.count - (index / 8) * 8)
-            let rowWidth = CGFloat(countInRow) * width + CGFloat(countInRow - 1) * gap
-            let rect = NSRect(x: bounds.width - rowWidth + CGFloat(index % 8) * (width + gap),
-                              y: bounds.height - 10 * scale - CGFloat(index / 8) * 14 * scale,
-                              width: width, height: 10 * scale)
+        for (rect, value) in zip(HUDCoreBarLayout.rects(for: values.count, in: bounds, scale: scale), values) {
             let path = NSBezierPath(roundedRect: rect, xRadius: scale, yRadius: scale)
             tint.withAlphaComponent(0.18).setFill(); path.fill()
             guard let value else { continue }
             NSGraphicsContext.saveGraphicsState(); path.addClip()
             tint.withAlphaComponent(0.85).setFill()
-            NSRect(x: rect.minX, y: rect.minY, width: width, height: rect.height * CGFloat(min(100, max(0, value)) / 100)).fill()
+            NSRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height * CGFloat(min(100, max(0, value)) / 100)).fill()
             NSGraphicsContext.restoreGraphicsState()
         }
     }

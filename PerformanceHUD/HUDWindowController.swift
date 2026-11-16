@@ -69,6 +69,8 @@ final class HUDWindowController {
     private let fanView = HUDFanView(frame: .zero)
     private var fanOptions = HUDPreferences.fanOptions
     private var fpsValueHighlighted = HUDPreferences.fpsOptions.valueHighlighted
+    private var fpsValueSize = HUDPreferences.fpsOptions.valueSize
+    private var fpsValueHeightConstraint: NSLayoutConstraint?
     private var fanSample = FanSample.checking
     private var alignment = HUDPreferences.alignment
     private var ramDetailTitleLabels: [HUDMetric: NSTextField] = [:]
@@ -83,7 +85,7 @@ final class HUDWindowController {
     private var memoryPressureMode = HUDPreferences.resourceOptions(for: .ram).pressureMode
     private let batteryIndicator = HUDBatteryIndicatorView(frame: .zero)
     private let processView = HUDProcessView(frame: .zero)
-    private let cpuCoreView = HUDCoreDetailView(frame: .zero)
+    private let cpuCoreView: HUDCoreDetailView
     private var processOptions = HUDPreferences.processOptions
     private var cpuCoreOptions = HUDPreferences.cpuCoreOptions
     private var cpuResourceOptions = HUDPreferences.resourceOptions(for: .cpu)
@@ -93,7 +95,7 @@ final class HUDWindowController {
     private var gpuCoreOptions = HUDPreferences.gpuCoreOptions
     private var gpuResourceOptions = HUDPreferences.resourceOptions(for: .gpu)
     private var gpuFrequency: Double?
-    private let miscView = HUDMiscView(frame: .zero)
+    private let miscView: HUDMiscView
     private var miscOptions = HUDPreferences.miscOptions
 
     private var primaryLabelHeightConstraints: [HUDMetric: NSLayoutConstraint] = [:]
@@ -226,7 +228,10 @@ final class HUDWindowController {
 
     // MARK: - Init
 
-    init() {
+    init(deviceInfo: HUDDeviceInfo = .current, cpuTopology: CPUCoreTopology = .current) {
+
+        cpuCoreView = HUDCoreDetailView(frame: .zero, types: deviceInfo.coreTypes, topology: cpuTopology)
+        miscView = HUDMiscView(frame: .zero, info: deviceInfo)
 
         panel = HUDPanel(
             contentRect: NSRect(
@@ -699,13 +704,22 @@ final class HUDWindowController {
         )
         primaryLabelHeightConstraints[metric] = primaryLabelHeightConstraint
 
+        let valueHeightConstraint: NSLayoutConstraint
+        if metric == .fps {
+            valueHeightConstraint = valueLabel.heightAnchor.constraint(equalToConstant:
+                HUDStyle.fpsValueHeight(scale: hudScale, size: fpsValueSize))
+            fpsValueHeightConstraint = valueHeightConstraint
+        } else {
+            valueHeightConstraint = valueLabel.heightAnchor.constraint(equalTo: titleLabel.heightAnchor)
+        }
+
         // MARK: Constraints
 
         NSLayoutConstraint.activate([
 
             rowHeightConstraint,
             primaryLabelHeightConstraint,
-            valueLabel.heightAnchor.constraint(equalTo: titleLabel.heightAnchor),
+            valueHeightConstraint,
 
             titleLabel.leadingAnchor.constraint(
                 equalTo: row.leadingAnchor,
@@ -721,7 +735,9 @@ final class HUDWindowController {
 
             valueColumnConstraint,
 
-            valueLabel.firstBaselineAnchor.constraint(equalTo: titleLabel.firstBaselineAnchor)
+            metric == .fps
+                ? valueLabel.centerYAnchor.constraint(equalTo: row.centerYAnchor)
+                : valueLabel.firstBaselineAnchor.constraint(equalTo: titleLabel.firstBaselineAnchor)
         ])
 
         if metric == .gpuTotal || metric == .cpuTotal {
@@ -1147,8 +1163,10 @@ final class HUDWindowController {
 
     func setFPSOptions(_ options: HUDFPSOptions) {
         let visible = options.visibleMetrics(alignment: alignment)
+        let sizeChanged = fpsValueSize != options.valueSize
         fpsValueHighlighted = options.valueHighlighted
-        if enabledMetrics.intersection([.fps, .fpsGraph]) == visible {
+        fpsValueSize = options.valueSize
+        if enabledMetrics.intersection([.fps, .fpsGraph]) == visible && !sizeChanged {
             // A text-only change preserves FPS history, animation and window geometry.
             updateReadingAppearance()
             refreshHorizontalReadings()
@@ -1343,7 +1361,7 @@ final class HUDWindowController {
     // MARK: - Text Appearance
 
     private func readingFont(for metric: HUDMetric, kind: HUDReadingKind) -> NSFont {
-        metric == .fps ? HUDStyle.fpsValueFont(scale: hudScale, highlighted: fpsValueHighlighted)
+        metric == .fps ? HUDStyle.fpsValueFont(scale: hudScale, highlighted: fpsValueHighlighted, size: fpsValueSize)
             : HUDStyle.readingFont(scale: hudScale, highlighted: highlightedReadings[metric, default: []].contains(kind))
     }
 
@@ -1374,8 +1392,12 @@ final class HUDWindowController {
     }
 
     private func updateReadingAppearance() {
+        fpsValueHeightConstraint?.constant = HUDStyle.fpsValueHeight(scale: hudScale, size: fpsValueSize)
+        rowHeightConstraints[.fps]?.constant = HUDStyle.fpsRowHeight(scale: hudScale, size: fpsValueSize)
         processView.configure(options: processOptions, scale: hudScale, background: textBackground)
-        cpuCoreView.configure(options: cpuCoreOptions, scale: hudScale, background: textBackground, readingWidth: fullCPUReadingWidth)
+        cpuCoreView.configure(options: cpuCoreOptions, scale: hudScale, background: textBackground,
+            powerTrailingInset: HUDStyle.verticalPowerTrailingInset(scale: hudScale,
+                temperature: temperatureFont(for: .cpuTotal), usage: readingFont(for: .cpuTotal, kind: .totalUse)))
         rowHeightConstraints[.cpuCores]?.constant = cpuCoreView.height(scale: hudScale)
         let matchCPUFrequency = alignment == .vertical && cpuResourceOptions.enabled
             && cpuCoreOptions.enabled && cpuCoreOptions.mode.showsValue
@@ -1446,18 +1468,13 @@ final class HUDWindowController {
     }
 
     private func pressureHistoryBaseBottomExtension(scale: HUDScale) -> CGFloat {
-        // Section dividers draw a 0.5 pt line 5 pt above their bottom edge.
-        HUDStyle.rowSpacing(scale: scale) + HUDStyle.dividerHeight(scale: scale, afterFPS: false)
-            + (0.25 - 5 + 3.5) * CGFloat(scale.rawValue)
+        HUDStyle.pressureHistoryBottomExtension(scale: scale, expanded: false)
     }
 
     private func pressureHistoryExtraHeight(scale: HUDScale) -> CGFloat {
         guard alignment == .vertical, showsRAMPressure, memoryPressureMode.isHistory else { return 0 }
-        // Enlarge the numeric plot by 50%, keeping its top and the caption in
-        // place. The enclosing row gains the same amount so its divider follows.
-        let originalPlotHeight = HUDStyle.ramDetailHeight(scale: scale)
-            + pressureHistoryBaseBottomExtension(scale: scale) - 7 * CGFloat(scale.rawValue)
-        return originalPlotHeight * 0.5
+        return HUDStyle.pressureHistoryBottomExtension(scale: scale)
+            - HUDStyle.pressureHistoryBottomExtension(scale: scale, expanded: false)
     }
 
     private var fullCPUReadingWidth: CGFloat {
@@ -1540,7 +1557,8 @@ final class HUDWindowController {
                     readings.append(.init(id: "\(metric.rawValue).\(role)", text: field.stringValue,
                         reference: reference, font: font, color: color, help: field.toolTip, startsMetric: title,
                         resourceGroup: resourceGroup, metric: metric,
-                        sizingFont: metric == .fps && !title ? HUDStyle.fpsValueFont(scale: hudScale, highlighted: true) : nil))
+                        sizingFont: metric == .fps && !title
+                            ? HUDStyle.fpsValueFont(scale: hudScale, highlighted: true, size: fpsValueSize) : nil))
                 }
                 append(title, role: "title", reference: metric.hudTitle, title: true)
                 if powerMetrics.contains(metric) { append(powerLabels[metric], role: "power", reference: HUDStyle.horizontalPowerReference) }
@@ -1584,7 +1602,7 @@ final class HUDWindowController {
             if !readings.isEmpty { sections.append(readings) }
         }
         let size = horizontalView.configure(sections: sections, showsBattery: enabledMetrics.contains(.battery),
-                                            scale: hudScale, background: textBackground)
+                                            scale: hudScale, background: textBackground, fpsValueSize: fpsValueSize)
         let horizontalPadding = HUDStyle.horizontalPadding(scale: hudScale)
         let verticalPadding = HUDStyle.verticalPadding(scale: hudScale)
         horizontalView.frame = NSRect(x: horizontalPadding, y: verticalPadding, width: size.width, height: size.height)
@@ -1643,6 +1661,7 @@ final class HUDWindowController {
     }
 
     private func metricRowHeight(_ metric: HUDMetric, scale: HUDScale) -> CGFloat {
+        if metric == .fps { return HUDStyle.fpsRowHeight(scale: scale, size: fpsValueSize) }
         if metric == .cpuCores { return cpuCoreView.height(scale: scale) }
         if metric == .gpuCores { return gpuCoreView.height(scale: scale) }
         if metric == .misc { return miscView.height(scale: scale) }
@@ -1765,7 +1784,7 @@ final class HUDWindowController {
         // retains its deliberately compact presentation.
         let fpsOnly = enabledMetrics == [.fps] && !showsPackagePower
         let valueColumnRight = fpsOnly
-            ? HUDStyle.compactFPSValueColumnRight(scale: hudScale)
+            ? HUDStyle.compactFPSValueColumnRight(scale: hudScale, valueSize: fpsValueSize)
             : HUDStyle.verticalValueColumnRight(scale: hudScale)
         readingColumnRight = valueColumnRight
         updateReadingPositions()

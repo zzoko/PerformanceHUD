@@ -17,6 +17,133 @@ import AppKit
         hud.setHUDEnabled(true)
         return hud
     }
+    @MainActor static func valueSizing() {
+        let suiteName = "FPSValueSize.tests.\(UUID().uuidString)"
+        let store = UserDefaults(suiteName: suiteName)!
+        defer { store.removePersistentDomain(forName: suiteName) }
+        check(HUDPreferences.fpsOptions(in: store).valueSize == .standard, "New and existing settings default to 1×")
+        let legacy = Data(#"{"enabled":true,"mode":"both","valueHighlighted":false}"#.utf8)
+        let decoded = try! JSONDecoder().decode(HUDFPSOptions.self, from: legacy)
+        check(decoded.valueSize == .standard && !decoded.valueHighlighted, "Old presets keep their emphasis and default to 1×")
+        let enlarged = HUDFPSOptions(enabled: false, mode: .history, valueHighlighted: false, valueSize: .enlarged)
+        HUDPreferences.setFPSOptions(enlarged, in: store)
+        check(HUDPreferences.fpsOptions(in: store) == enlarged, "Hidden FPS remembers its size and emphasis")
+        check(try! JSONDecoder().decode(HUDFPSOptions.self, from: JSONEncoder().encode(enlarged)) == enlarged,
+              "Saved presets preserve FPS size")
+        HUDPreferences.resetOptions(in: store)
+        check(HUDPreferences.fpsOptions(in: store).valueSize == .standard, "Reset restores 1×")
+
+        let menu = HUDFPSMenuView(options: .init(enabled: true, mode: .both), alignment: .vertical)
+        let selector: NSSegmentedControl = member(menu, "valueSizeControl")
+        let mode: NSSegmentedControl = member(menu, "control")
+        menu.layoutSubtreeIfNeeded()
+        let sizeRect = selector.alignmentRect(forFrame: selector.frame)
+        let modeRect = mode.alignmentRect(forFrame: mode.frame)
+        check(sizeRect.minX == modeRect.minX && sizeRect.size == modeRect.size && sizeRect.minY > modeRect.maxY,
+              "The size selector uses the shared bezel height and column below Frame rate")
+        var changed: HUDFPSOptions?
+        menu.onChange = { changed = $0 }
+        selector.selectedSegment = 1
+        _ = selector.sendAction(selector.action, to: selector.target)
+        check(changed?.valueSize == .enlarged && changed?.mode == .both && changed?.valueHighlighted == true,
+              "2× changes only the number size")
+        menu.update(options: enlarged, alignment: .horizontal)
+        check(!selector.isEnabled && selector.selectedSegment == 1, "Hidden category retains the size without enabling it")
+        menu.update(options: .init(enabled: true, mode: .history, valueSize: .enlarged), alignment: .vertical)
+        check(!selector.isEnabled && selector.selectedSegment == 1, "History-only disables the size control")
+        menu.update(options: .init(enabled: true, mode: .history, valueSize: .enlarged), alignment: .horizontal)
+        check(selector.isEnabled && selector.selectedSegment == 1, "Horizontal Value still permits 2×")
+
+        let hud = activeHUD()
+        defer { hud.shutdown() }
+        hud.setAutoHideMode(.off)
+        hud.setHUDScale(.normal)
+        hud.setPackagePowerOptions(.init(enabled: false))
+        hud.setCPUCoreOptions(.init(enabled: false))
+        hud.setGPUCoreOptions(.init(enabled: false))
+        for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
+        hud.setResourceOptions(.init(enabled: true, temperature: true, totalUse: true,
+            focusedApp: false, power: true), for: .gpu)
+        hud.updateMetric(.gpuTotal, value: "42%")
+        hud.updateTemperatures(.init(cpu: 50, gpu: 48))
+        hud.updatePower(.init(cpu: 1, gpu: 3.5, package: 4.5))
+        let panel: HUDPanel = member(hud, "panel")
+        let container: NSView = member(hud, "container")
+        let values: [HUDMetric: NSTextField] = member(hud, "valueLabels")
+        let titles: [HUDMetric: NSTextField] = member(hud, "titleLabels")
+        let graph: HUDFPSGraphView = member(hud, "fpsGraphView")
+        let horizontal: HUDHorizontalView = member(hud, "horizontalView")
+        for alignment in HUDAlignment.allCases {
+            hud.setAlignment(alignment)
+            hud.setFPSOptions(.init(enabled: true, mode: .both))
+            hud.updateFPS(144)
+            panel.contentView?.layoutSubtreeIfNeeded()
+            let normal = container.bounds.size
+            let graphSize = graph.bounds.size
+            let before: FPSHistory = member(graph, "history")
+            hud.setFPSOptions(.init(enabled: true, mode: .both, valueSize: .enlarged))
+            panel.contentView?.layoutSubtreeIfNeeded()
+            check(values[.fps]!.font!.pointSize == 24 && values[.gpuTotal]!.font!.pointSize == 12
+                  && titles[.fps]!.font!.pointSize == 12, "Only the FPS number doubles")
+            let after: FPSHistory = member(graph, "history")
+            check(before.samples.count == after.samples.count, "Resizing FPS preserves history")
+            if alignment == .vertical {
+                check(container.bounds.width == normal.width && container.bounds.height > normal.height,
+                      "Vertical reserves height for the number without widening the HUD")
+                check(graph.bounds.size == graphSize, "FPS history keeps its existing size")
+            }
+            let enlargedFrame = container.bounds.size
+            for highlighted in [false, true] {
+                hud.setFPSOptions(.init(enabled: true, mode: .both, valueHighlighted: highlighted, valueSize: .enlarged))
+                for reading: Double? in [9, 144, 9999, nil] {
+                    if let reading { hud.updateFPS(reading) }
+                    else { hud.markFPSUnavailable() }
+                    panel.contentView?.layoutSubtreeIfNeeded()
+                    let field: NSTextField
+                    if alignment == .horizontal {
+                        let fields: [String: NSTextField] = member(horizontal, "labels")
+                        field = fields["\(HUDMetric.fps.rawValue).value"]!
+                        check(fields["\(HUDMetric.gpuTotal.rawValue).value"]!.font!.pointSize == 12,
+                              "Horizontal keeps other readings at their normal font size")
+                    } else { field = values[.fps]! }
+                    let rect = field.alignmentRect(forFrame: field.frame)
+                    check(field.font!.pointSize == 24 && rect.height >= field.intrinsicContentSize.height,
+                          "Both emphasis weights retain the full 2× number")
+                    check(rect.minY >= -0.5 && rect.maxY <= field.superview!.bounds.height + 0.5,
+                          "Enlarged FPS fits its row")
+                    check(container.bounds.size == enlargedFrame, "Digits, missing readings and B cannot resize enlarged FPS")
+                }
+            }
+            if CommandLine.arguments.contains("--preview") {
+                hud.updateFPS(144)
+                let glass: NativeGlassHUDBackground = member(hud, "backgroundView")
+                let surface: NSView = member(glass, "glass")
+                surface.isHidden = true
+                container.wantsLayer = true
+                container.layer?.backgroundColor = NSColor(white: 0.14, alpha: 1).cgColor
+                panel.contentView?.layoutSubtreeIfNeeded()
+                let bitmap = container.bitmapImageRepForCachingDisplay(in: container.bounds)!
+                container.cacheDisplay(in: container.bounds, to: bitmap)
+                try! bitmap.representation(using: .png, properties: [:])!.write(to:
+                    URL(fileURLWithPath: "/tmp/phud-fps-2x-\(alignment.rawValue).png"))
+            }
+            hud.setFPSOptions(.init(enabled: true, mode: .both))
+            panel.contentView?.layoutSubtreeIfNeeded()
+            check(container.bounds.size == normal, "1× restores the original layout exactly")
+        }
+        let defaults = UserDefaults.standard
+        let original = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        var doubled = original; doubled["hud.fps.valueSize"] = 2
+        defaults.setVolatileDomain(doubled, forName: UserDefaults.argumentDomain)
+        defer { defaults.setVolatileDomain(original, forName: UserDefaults.argumentDomain) }
+        let pinned = HUDMenuBarPresentation.sections(snapshot: .init(), fanSample: .noFans,
+            readings: [.fps], style: .current, background: .dark)
+        let menuBar = HUDHorizontalView(frame: .zero)
+        let size = menuBar.configure(sections: pinned, showsBattery: false, scale: .normal, background: .dark)
+        let pinnedFields: [String: NSTextField] = member(menuBar, "labels")
+        check(pinnedFields["fps.value"]!.font!.pointSize == 12 && size.height == HUDStyle.rowHeight(scale: .normal),
+              "Pinned menu-bar FPS retains 1× even when the HUD preference is 2×")
+    }
     @MainActor static func main() async {
         _ = NSApplication.shared
         var availability = HUDFPSAvailability()
@@ -37,6 +164,7 @@ import AppKit
         let domain: [String: Any] = ["hud.enabled": false, "hud.autoHide.mode": "off", "hud.background": "dark", "hud.alignment": "vertical",
             "hud.fps.dynamic": false]
         UserDefaults.standard.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
+        valueSizing()
         check(HUDPreferences.autoHideMode == .off, "Off preserves static FPS")
         let suiteName = "DynamicFPS.tests.\(UUID().uuidString)"
         let suite = UserDefaults(suiteName: suiteName)!

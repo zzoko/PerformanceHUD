@@ -61,7 +61,9 @@ struct HUDMonitoringDemand {
                 let memoryPinned = !pins.isDisjoint(with: [.memoryUsage, .memoryDetails])
                 demand.totalMemory = (shown && (options.totalUse || options.showsDetails)) || memoryPinned
                 demand.pressure = (shown && options.showsPressure) || pins.contains(.memoryPressure)
-                demand.pressureHistory = shown && options.showsPressure && selection.alignment == .vertical && options.pressureMode.isHistory
+                demand.pressureHistory = options.pressureMode.isHistory
+                    && ((shown && options.showsPressure && selection.alignment == .vertical)
+                        || pins.contains(.memoryPressure))
             }
         }
         demand.power = demand.power || demand.gpuCores || (cpuCoresShown && cpuCoreMode.showsValue) || (overlay && selection.package.enabled) || pins.contains(.socPower)

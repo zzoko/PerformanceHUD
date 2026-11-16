@@ -64,6 +64,18 @@ nonisolated struct HUDMemoryPressureHistory {
 
 @MainActor
 final class HUDMemoryPressureHistoryView: NSView {
+    // The regular Vertical graph, uniformly scaled into the menu-bar row.
+    // A stable reference keeps neighboring readings fixed through emphasis changes.
+    static let menuBarReferenceSize: NSSize = {
+        let scale = HUDScale.normal
+        let font = HUDStyle.readingFont(scale: scale, highlighted: false)
+        let field = NSTextField(labelWithString: "")
+        let width = HUDStyle.verticalReadingClusterWidth(scale: scale, power: font, temperature: font, usage: font)
+            + field.alignmentRectInsets.right + 4
+        let height = HUDStyle.ramDetailHeight(scale: scale) + HUDStyle.pressureHistoryBottomExtension(scale: scale)
+        return NSSize(width: width, height: height)
+    }()
+
     private(set) var history = HUDMemoryPressureHistory()
     private var colored = false
     private var scale: CGFloat = 1
@@ -107,11 +119,24 @@ final class HUDMemoryPressureHistoryView: NSView {
 
     func append(_ sample: MemoryPressureMonitor.Sample) {
         history.append(sample)
-        guard let sample = history.samples.last else { return }
+        updateAccessibilityValue()
+        needsDisplay = true
+    }
+
+    func setHistory(_ history: HUDMemoryPressureHistory) {
+        self.history = history
+        updateAccessibilityValue()
+        needsDisplay = true
+    }
+
+    private func updateAccessibilityValue() {
+        guard let sample = history.samples.last else {
+            setAccessibilityValue("Waiting for pressure history")
+            return
+        }
         if HUDMemoryPressureHistory.isValid(sample), let value = sample.numericValue {
             setAccessibilityValue("\(sample.level?.displayText ?? "Unknown status"), numeric level \(Int(value))")
         } else { setAccessibilityValue("Current numeric pressure unavailable") }
-        needsDisplay = true
     }
 
     func clear() {

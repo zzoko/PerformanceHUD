@@ -2,6 +2,14 @@
 
 [← Back to README](../README.md)
 
+### v3.3
+
+- Pinned memory pressure now follows the selected B1/B2 history style, using the existing graph scaled to fit the menu bar. Numeric history keeps updating with the HUD hidden, and B1/B2 stay selectable whenever Pressure is pinned. The Horizontal HUD retains its A1/A2 meter fallback.
+- Added **1× / 2×** beneath Frame rate to enlarge only the FPS number in either HUD layout. Defaults and built-in presets use 1×; saved presets remember the selection. Emphasis stays independent, and pinned menu-bar FPS keeps its normal size.
+- Right-aligned CPU GHz with the full-row watts column in Vertical **Cores · Both**. GPU GHz follows that column while CPU GHz is visible; Value-only continues to use the numeric right edge.
+- Increased CPU core graphs to 12 bars per line. Larger groups split evenly across lines, with longer lines first, preserving core order, right alignment, and the existing HUD width.
+- Softened the Heat warning temperature fields with a translucent fill that blends with the menu in Light and Dark appearance.
+
 ### v3.2
 
 - Added a Vertical-only **Process** category below FPS, with independent GPU, CPU, and memory checkboxes and per-reading emphasis. It combines app readings into one row named after the frontmost app. GPU, CPU, and MEM **Use** now control system totals through simple checkboxes.
