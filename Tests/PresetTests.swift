@@ -25,8 +25,8 @@ import AppKit
         check(balanced.fps.enabled && balanced.fps.mode == .both && balanced.fps.valueHighlighted,
               "Balanced retains FPS Both and number emphasis")
         check(balanced.fans.mode == .both && balanced.battery.flowMode == .auto
-              && !balanced.misc.enabled && !balanced.deviceInfo.enabled,
-              "Balanced retains fan, battery, Misc, and Mac defaults")
+              && !balanced.misc.enabled,
+              "Balanced retains fan, battery, and Misc defaults")
         check(balanced.resources[.ram]?.pressureMode == .colorHistory,
               "Balanced retains colored memory history")
         check(presets.selection(for: balanced).title == "Balanced", "Fresh settings select Balanced")
@@ -40,17 +40,16 @@ import AppKit
         expectedFPS.fans.enabled = false
         expectedFPS.battery.enabled = false
         expectedFPS.misc.enabled = false
-        expectedFPS.deviceInfo.enabled = false
         check(fpsOnly == expectedFPS, "FPS shows only the frame-rate value and retains other reading choices")
         check(fpsOnly.fps.visibleMetrics(alignment: .vertical) == [.fps],
               "FPS preset does not display the history graph in vertical mode")
         var expectedFull = balanced
-        for group in [HUDResourceGroup.gpu, .cpu, .ram] {
-            expectedFull.resources[group]?.selectUsageMode(.both)
-        }
+        expectedFull.process.enabled = true
+        expectedFull.cpuCores.enabled = true
+        expectedFull.cpuCores.mode = .both
+        expectedFull.gpuCores.enabled = true
         expectedFull.misc.enabled = true
-        expectedFull.deviceInfo.enabled = true
-        check(full == expectedFull, "Detailed changes usage to Both and enables Misc and Mac only")
+        check(full == expectedFull, "Detailed adds Process, CPU/GPU cores, and Misc")
 
         let designSettings: [String: Any] = [
             "hud.alignment": "horizontal", "hud.background": "dark", "hud.scale": 1.37,
@@ -160,7 +159,12 @@ import AppKit
             ("GPU category", { $0.resources[.gpu]?.enabled.toggle() }),
             ("GPU temperature", { $0.resources[.gpu]?.temperature.toggle() }),
             ("CPU power", { $0.resources[.cpu]?.power.toggle() }),
-            ("CPU usage", { $0.resources[.cpu]?.selectUsageMode(.both) }),
+            ("CPU usage", { $0.resources[.cpu]?.totalUse.toggle() }),
+            ("Process", { $0.process.enabled.toggle() }),
+            ("Process CPU", { $0.process.readings.remove(.cpu) }),
+            ("Process emphasis", { $0.process.highlighted.insert(.gpu) }),
+            ("CPU cores", { $0.cpuCores.enabled.toggle() }),
+            ("GPU cores", { $0.gpuCores.enabled.toggle() }),
             ("Hidden usage", { $0.resources[.ram]?.setUsagePresentation(visible: false, highlighted: false) }),
             ("Memory details", { $0.resources[.ram]?.details.toggle() }),
             ("Memory pressure", { $0.resources[.ram]?.pressure.toggle() }),
@@ -176,9 +180,9 @@ import AppKit
             ("Battery charge", { $0.battery.flowMode = .always }),
             ("Battery heat", { $0.battery.heatWarning.thresholdCelsius = 47 }),
             ("Misc", { $0.misc.enabled.toggle() }),
-            ("Mac", { $0.deviceInfo.enabled.toggle() }),
-            ("Chip mode", { $0.deviceInfo.chipMode = .tier }),
-            ("OS", { $0.deviceInfo.os.toggle() })
+            ("Chip", { $0.misc.readings.remove(.chip) }),
+            ("Chip mode", { $0.misc.chipMode = .tier }),
+            ("OS", { $0.misc.readings.remove(.os) })
         ]
         for (name, change) in changes {
             var changed = balanced
@@ -332,10 +336,14 @@ import AppKit
         clear()
         var legacyConfiguration = encodedObject
         legacyConfiguration.removeValue(forKey: "menuBarReadings")
-        legacyConfiguration["deviceInfo"] = customized.deviceInfo.enabled
+        legacyConfiguration["deviceInfo"] = true
+        let legacyMisc = HUDMiscOptions(enabled: customized.misc.enabled,
+            readings: customized.misc.readings.intersection(HUDMiscReading.liveReadings))
+        legacyConfiguration["misc"] = ["enabled": legacyMisc.enabled,
+            "readings": legacyMisc.readings.map(\.rawValue)]
         var legacyExpected = customized
         legacyExpected.menuBarReadings = []
-        legacyExpected.deviceInfo = .init(enabled: customized.deviceInfo.enabled, chipMode: .tier)
+        legacyExpected.misc = legacyMisc.mergingLegacyMac(.init(enabled: true, chipMode: .tier))
         legacyConfiguration.merge([
             "alignment": "vertical", "background": "light", "scale": 1.72,
             "position": ["x": 420.0, "y": 690.0], "autoHideMode": "off",

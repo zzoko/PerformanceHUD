@@ -16,7 +16,8 @@ final class HUDBackgroundMenuView: NSView {
         let label = NSTextField(labelWithString: "Appearance")
         label.font = .menuFont(ofSize: 0)
         shortcutLabel.font = .menuFont(ofSize: 0)
-        shortcutLabel.textColor = .secondaryLabelColor
+        // Match the native menu shortcuts and the Reset row's drag hint.
+        shortcutLabel.textColor = .tertiaryLabelColor
         shortcutLabel.alignment = .right
         shortcutLabel.setAccessibilityLabel("Cycle appearance shortcut")
         control.segmentStyle = .rounded

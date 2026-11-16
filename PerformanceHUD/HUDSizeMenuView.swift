@@ -30,7 +30,7 @@ final class HUDSizeMenuView: NSView {
         slider.setAccessibilityLabel("HUD size")
 
         valueLabel.font = .monospacedDigitSystemFont(ofSize: NSFont.menuFont(ofSize: 0).pointSize, weight: .regular)
-        valueLabel.textColor = .secondaryLabelColor
+        valueLabel.textColor = .labelColor
         valueLabel.alignment = .center
 
         let stack = NSStackView(views: [label, slider, valueLabel])

@@ -2,6 +2,20 @@
 
 [← Back to README](../README.md)
 
+### v3.2
+
+- Added a Vertical-only **Process** category below FPS, with independent GPU, CPU, and memory checkboxes and per-reading emphasis. It combines app readings into one row named after the frontmost app. GPU, CPU, and MEM **Use** now control system totals through simple checkboxes.
+- Process CPU usage now uses the same 0–100% whole-Mac capacity scale as total CPU usage, including CSV. Its Vertical row reserves equal CPU/GPU percentage columns and stable gaps, leaving the remaining width for the app name.
+- Added CPU **Cores · Value / Bars / Both**, grouping GHz and individual core bars by the core types reported by macOS. CPU bars align with the numeric right edge, extend leftward, and wrap after eight cores without widening the HUD. GPU **Cores** is a simple checkbox showing GHz, right-aligned on its own or aligned with CPU GHz when that value is visible. Bars-only CPU mode leaves GPU GHz at the right edge.
+- CPU GHz combines clusters using activity from the same sampling interval. GHz uses Power Helper; CPU usage bars remain available without it. Balanced enables CPU Cores in Bars mode and leaves GPU Cores off. Detailed keeps CPU Cores in Both mode, GPU Cores on, and Process enabled. CPU Value-only aligns GHz at the right edge; Both places it to the left of the bars. Per-core graphs retain their position between Bars and Both, and GPU GHz follows the CPU frequency column.
+- Both core controls work in Horizontal, using the existing detail label/value spacing and compact C / S / P / E captions. Vertical retains full labels. CPU uses Value only there, restores the saved Vertical mode on return, and does not poll hidden per-core bars. CSV follows the visible GHz readings.
+- Brief GHz gaps retain the last valid reading for up to five seconds independently for each CPU core type and GPU, matching watts. Valid new readings replace it immediately. Enabled unavailable watt readings now show a dash like GHz; Battery Charge on Auto retains its existing hide behavior.
+- Corrected hardware labels and CSV columns to distinguish Super, Performance, and Efficiency cores, including chips without Efficiency cores. Misc Full uses compact core descriptions without parentheses.
+- Kept a faint bottom edge on FPS and memory-pressure history graphs when they are the last visible category, matching the existing divider without doubling it when another category follows.
+- Added brief on-screen confirmations for the appearance and logging hotkeys. Appearance identifies Light, Dark, or Follow macOS; logging confirms successful starts/stops. HUD visibility and dragging remain silent.
+- Moved Chip and OS from the separate Mac category into Misc. OS and Chip use the same pill buttons as other Misc choices, with OS first and Tier/Full joined inside the Chip pill. Full shows CPU/GPU core counts as additional rows. All of these readings now follow Misc's label-left, value-right layout.
+- Updated presets, saved-setting migration, CSV selections, and the Controls guide for the combined category. Misc remains off by default and available only in Vertical.
+
 ### v3.1
 
 - Unified HUD text at 12 pt at normal scale, with medium-weight category labels and aligned reading baselines. Horizontal **BAT/ADP** labels now match the other category labels; reading emphasis remains independently selectable.

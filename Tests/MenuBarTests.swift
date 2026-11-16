@@ -16,7 +16,7 @@ import AppKit
                     focusedApp: false, power: false, details: false, pressure: false))
             }), package: .init(enabled: false), fans: .init(enabled: false),
             battery: .init(enabled: false, temperature: false, charge: false, flowMode: .auto),
-            deviceInfo: .init(), alignment: .vertical)
+            alignment: .vertical)
     }
 
     static func persistence() {
@@ -142,11 +142,10 @@ import AppKit
         for mode in HUDUsageMode.allCases {
             selection = disabled
             for group in [HUDResourceGroup.cpu, .gpu, .ram] { selection.resources[group]?.usageMode = mode }
-            let appOnly: Set<String> = ["gpuAppUsage", "cpuAppUsage", "appMemory"]
             let totalOnly: Set<String> = ["gpuUsage", "cpuUsage", "totalMemory"]
-            let expected = mode == .app ? appOnly : mode == .total ? totalOnly : appOnly.union(totalOnly)
+            let expected = totalOnly
             check(activeCollectors(demand([.gpuUsage, .cpuUsage, .memoryUsage], selection: selection)) == expected,
-                  "Pinned use follows shared \(mode.rawValue) source without enabling hidden overlay readings")
+                  "Pinned Use remains system-wide despite a legacy \(mode.rawValue) setting")
             check(activeCollectors(demand([.memoryPressure], selection: selection)) == ["pressure"],
                   "System pressure remains independently pinnable even when memory Use is App-only")
         }
@@ -266,19 +265,14 @@ import AppKit
               "A menu-bar FPS pin does not change the remembered overlay mode")
 
         let memory = HUDResourceMenuView(group: .ram, options: off)
-        let memoryMode: NSSegmentedControl = member(memory, "usageModeControl")
         let detailsPin = memory.subviews.compactMap { $0 as? HUDMenuBarButton }
             .first { $0.accessibilityLabel() == "Show MEM Details in menu bar" }!
-        var memoryOptions = off
-        memory.onChange = { memoryOptions = $0 }
+        let memoryControls: [Int: NSButton] = member(memory, "controls")
+        let details = memoryControls[5] as! HUDReadingCheckbox
         detailsPin.performClick(nil)
-        check(memoryMode.isEnabled, "Pinned memory Details can change source while HUD memory and Use are off")
-        memoryMode.selectedSegment = 1
-        NSApp.sendAction(memoryMode.action!, to: memoryMode.target, from: memoryMode)
-        check(memoryOptions.selectedUsageMode == .app && !memoryOptions.enabled && !memoryOptions.usageVisible,
-              "Changing the source for pinned Details leaves HUD memory and Use off")
+        check(details.emphasisControl?.isEnabled == true, "Pinned system Details can be emphasized with the HUD off")
         detailsPin.performClick(nil)
-        check(!memoryMode.isEnabled, "Removing the only memory pin restores the inactive mode control")
+        check(details.emphasisControl?.isEnabled == false, "Removing the pin restores inactive emphasis")
 
         let noFans = HUDFanMenuView(options: .init(enabled: true), sample: .noFans)
         check(noFans.subviews.compactMap { $0 as? HUDMenuBarButton }.allSatisfy { !$0.isEnabled },
@@ -460,6 +454,14 @@ import AppKit
             controller.refresh(snapshot: snapshot, fanSample: .noFans, batterySample: battery, options: selected)
             RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
         }
+        func waitForOverflow(after count: Int) {
+            // Overflow is reported asynchronously. Wait for that event rather
+            // than assuming WindowServer/main-queue work always fits in 20 ms.
+            let deadline = Date(timeIntervalSinceNow: 1)
+            while overflows <= count && Date() < deadline {
+                RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
+            }
+        }
         refresh()
         let measured = controller.expandedWidth(for: pins)
         let content: NSView = member(controller, "content")
@@ -477,9 +479,10 @@ import AppKit
         }
         widthBudget = measured - 0.5
         refresh()
+        waitForOverflow(after: 0)
         let collapse = item.button!.subviews.compactMap { $0 as? NSButton }.first!
         check(item.length == 40 && content.isHidden && overflows > 0 && item.menu === menu,
-              "An expanded reading that no longer fits collapses safely and reports overflow without losing settings access")
+              "An expanded reading that no longer fits collapses safely and reports overflow without losing settings access: length=\(item.length), hidden=\(content.isHidden), callbacks=\(overflows), menu=\(item.menu === menu)")
         check(collapse.accessibilityLabel() == "Show menu-bar readings",
               "Automatic overflow fallback shows the same accessible expand control as manual collapse")
 
@@ -489,6 +492,7 @@ import AppKit
               "A fitting selection can expand again with its original proportions")
         let beforeOversizedPreset = overflows
         refresh(.init(readings: Set(HUDMenuBarReading.allCases)))
+        waitForOverflow(after: beforeOversizedPreset)
         check(item.length == 40 && content.isHidden && overflows > beforeOversizedPreset,
               "Oversized selections loaded from a saved preset use the same safe collapsed fallback")
         let beforeManualCollapse = overflows

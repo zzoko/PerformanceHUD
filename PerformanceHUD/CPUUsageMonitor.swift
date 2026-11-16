@@ -1,6 +1,20 @@
 import Foundation
 import Darwin
 
+nonisolated enum ProcessCPUUsage {
+    /// The selected process's share of all logical CPU time, on the same
+    /// 0–100% capacity scale as total CPU usage. Round only for presentation.
+    static func percentage(cpuNanoseconds: Double, elapsedNanoseconds: Double,
+                           logicalCPUCount: Int) -> Double? {
+        guard cpuNanoseconds.isFinite, cpuNanoseconds >= 0,
+              elapsedNanoseconds.isFinite, elapsedNanoseconds > 0,
+              logicalCPUCount > 0 else { return nil }
+        let usage = cpuNanoseconds / elapsedNanoseconds / Double(logicalCPUCount) * 100
+        guard usage.isFinite else { return nil }
+        return min(100, usage)
+    }
+}
+
 @MainActor
 final class CPUUsageMonitor {
     var onCPUUsageUpdate: ((Double?) -> Void)?
@@ -35,10 +49,9 @@ nonisolated private final class CPUCounterSampler: @unchecked Sendable {
         guard let previousTime, let previousTimestamp,
               current >= previousTime, now > previousTimestamp else { return nil }
         let delta = Double(current - previousTime) * Double(timebase.numer) / Double(timebase.denom)
-        let usage = delta / Double(now - previousTimestamp) * 100
-        guard usage.isFinite, usage >= 0 else { return nil }
-        // One fully used logical CPU is 100%; app CPU can exceed 100%.
-        return usage
+        return ProcessCPUUsage.percentage(cpuNanoseconds: delta,
+            elapsedNanoseconds: Double(now - previousTimestamp),
+            logicalCPUCount: ProcessInfo.processInfo.activeProcessorCount)
     }
     // MARK: - Read Process CPU Time
 

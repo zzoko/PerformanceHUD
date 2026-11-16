@@ -25,31 +25,23 @@ import Foundation
             }
             return
         }
-        check(HUDMetric.battery.rawValue == 8 && HUDMetric.deviceInfo.rawValue == 9 && HUDMetric.fpsGraph.rawValue == 10,
-              "adding ANE preserves existing saved metric identifiers")
+        check(HUDMetric.battery.rawValue == 8 && HUDMetric(rawValue: 9) == nil && HUDMetric.fpsGraph.rawValue == 10,
+              "removing Mac preserves all other metric identifiers")
         check(HUDMetric.allCases.allSatisfy { HUDAlignment.vertical.allows($0) }, "vertical permits all metric choices")
-        check(!HUDAlignment.horizontal.allows(.fpsGraph) && !HUDAlignment.horizontal.allows(.deviceInfo),
-              "horizontal excludes history and device info")
+        check(!HUDAlignment.horizontal.allows(.fpsGraph) && !HUDAlignment.horizontal.allows(.misc),
+              "horizontal excludes history and Misc")
         check(HUDAlignment.horizontal.allows(.fps) && HUDAlignment.horizontal.allows(.aneTotal)
               && HUDAlignment.horizontal.allows(.battery), "horizontal retains main readings")
-        for mode in HUDUsageMode.allCases {
-            var options = HUDResourceOptions(enabled: true, temperature: false, totalUse: mode != .app,
-                                             focusedApp: mode != .total, details: false, pressure: false)
-            check(options.selectedUsageMode == mode, "existing usage choices migrate to the corresponding mode")
+        for legacy in HUDUsageMode.allCases {
+            var options = HUDResourceOptions(enabled: true, temperature: false, totalUse: legacy != .app,
+                                             focusedApp: legacy != .total, details: false, pressure: false).systemOnly
+            check(!options.focusedApp && options.selectedUsageMode == .total, "Legacy modes resolve to system usage")
             options.setUsagePresentation(visible: true, highlighted: true)
-            options.selectUsageMode(.both)
-            check(options.visibleMetrics(for: .ram) == [.ram, .ramTotal] && options.usageHighlighted,
-                  "Both includes both readings and preserves emphasis")
+            check(options.visibleMetrics(for: .ram) == [.ramTotal] && options.usageHighlighted, "Use shows only system memory")
             options.setUsagePresentation(visible: false, highlighted: false)
-            options.selectUsageMode(mode)
-            check(options.visibleMetrics(for: .ram).isEmpty && options.selectedUsageMode == mode,
-                  "changing mode while Usage is off remembers mode without showing readings")
-            options.setUsagePresentation(visible: true, highlighted: false)
-            let expected: Set<HUDMetric> = mode == .total ? [.ramTotal] : mode == .app ? [.ram] : [.ram, .ramTotal]
-            check(options.visibleMetrics(for: .ram) == expected && !options.usageHighlighted,
-                  "enabling Usage restores the chosen mode with faint text")
+            check(options.visibleMetrics(for: .ram).isEmpty, "Use off leaves no usage row")
             options.enabled = false
-            check(options.visibleMetrics(for: .ram).isEmpty, "master switch still hides all usage modes")
+            check(options.visibleMetrics(for: .ram).isEmpty, "Master switch hides system usage")
         }
         for mode in HUDUsageMode.allCases {
             for rememberedDetails in [false, true] {
@@ -84,13 +76,13 @@ import Foundation
                                 totalUse: usage, focusedApp: false, details: details, pressure: pressure, usageMode: mode)
                             options.setUsagePresentation(visible: usage, highlighted: false)
                             var expected: Set<HUDMetric> = !enabled || (!details && !usage) ? []
-                                : mode == .total ? [.ramTotal] : mode == .app ? [.ram] : [.ram, .ramTotal]
-                            if enabled && pressure && mode != .app { expected.insert(.ramTotal) }
+                                : [.ramTotal]
+                            if enabled && pressure { expected.insert(.ramTotal) }
                             check(options.visibleMetrics(for: .ram) == expected,
                                   "independent Details, Pressure and Use keep the correct memory sources in every mode")
                             check(options.showsDetails == (enabled && details), "Details follows only its own and the master checkbox")
-                            check(options.showsPressure == (enabled && pressure && mode != .app),
-                                  "Pressure remains available with Use and Details off, except in App mode")
+                            check(options.showsPressure == (enabled && pressure),
+                                  "Pressure remains available with Use and Details off, independently of old source modes")
                         }
                     }
                 }
@@ -221,6 +213,79 @@ import Foundation
         let resumed = HelperPowerReading(cpu: 6, gpu: 4, package: 10, timestamp: base.addingTimeInterval(10), ane: 0)
         check(continuity.update(resumed, now: base.addingTimeInterval(10))?.package == 10,
               "new readings replace retained values immediately")
+
+        // Regression: watt continuity used to discard all CPU/GPU frequency
+        // fields before the sample reached PowerMonitor and the HUD.
+        var frequencyContinuity = PowerReadingContinuity(cpuCoreGroups: [[0, 1]])
+        let cpuFrequencies = CPUFrequencySample(frequencies: [0: 2, 1: 4], activeResidencies: [0: 0.25, 1: 0.75])
+        let frequencyReading = HelperPowerReading(cpu: 4, gpu: 2, package: 6, timestamp: base,
+            cpuFrequencies: cpuFrequencies, gpuFrequency: 1.35)
+        let displayed = frequencyContinuity.update(frequencyReading, now: base)
+        check(displayed?.cpuFrequencies == cpuFrequencies && displayed?.gpuFrequency == 1.35,
+              "CPU and GPU GHz survive the watt continuity stage")
+        check(displayed?.cpuFrequencies.average(for: [0, 1]) == 3.5,
+              "Clock values retain residency weights from the same sample")
+        let delayed = frequencyContinuity.update(nil, now: base.addingTimeInterval(2))
+        check(delayed?.cpuFrequencies == cpuFrequencies && delayed?.gpuFrequency == 1.35,
+              "Brief missing replies retain the whole frequency sample")
+        let changedFrequencies = CPUFrequencySample(frequencies: [0: 1, 1: 3], activeResidencies: [0: 0.75, 1: 0.25])
+        let changedFrequencyReading = HelperPowerReading(cpu: 3, gpu: 1, package: 4,
+            timestamp: base.addingTimeInterval(3), cpuFrequencies: changedFrequencies, gpuFrequency: 0.5)
+        let changedDisplay = frequencyContinuity.update(changedFrequencyReading, now: base.addingTimeInterval(3))
+        check(changedDisplay?.cpuFrequencies.average(for: [0, 1]) == 1.5 && changedDisplay?.gpuFrequency == 0.5,
+              "New clocks and weights replace the previous interval together")
+        let oldFrequencyReply = frequencyContinuity.update(frequencyReading, now: base.addingTimeInterval(4))
+        check(oldFrequencyReply?.cpuFrequencies == changedFrequencies && oldFrequencyReply?.gpuFrequency == 0.5,
+              "An older reply cannot overwrite newer frequency readings")
+        check(frequencyContinuity.update(nil, now: base.addingTimeInterval(8.1)) == nil,
+              "Frequency continuity expires without renewing the original timestamp")
+        _ = frequencyContinuity.update(frequencyReading, now: base)
+        let idleFrequencyReading = HelperPowerReading(cpu: 1, gpu: 0, package: 1, timestamp: base.addingTimeInterval(1),
+            cpuFrequencies: .init(frequencies: [0: 2, 1: 4], activeResidencies: [0: 0, 1: 0]))
+        let idleDisplay = frequencyContinuity.update(idleFrequencyReading, now: base.addingTimeInterval(1))
+        check(idleDisplay?.cpuFrequencies == cpuFrequencies && idleDisplay?.gpuFrequency == 1.35,
+              "A brief idle or unavailable frequency retains the last valid interval")
+        frequencyContinuity.reset()
+        check(frequencyContinuity.update(nil, now: base.addingTimeInterval(2)) == nil,
+              "Stop and disconnect clear frequency continuity too")
+
+        // Super and Efficiency can become unavailable independently, including
+        // one type spanning clusters with different clocks and residency weights.
+        var perType = PowerReadingContinuity(cpuCoreGroups: [[0, 1], [2, 3]])
+        func typedReading(_ offset: Double, frequencies: [Int: Double], weights: [Int: Double], gpu: Double? = nil) -> HelperPowerReading {
+            HelperPowerReading(cpu: 3, gpu: 1, package: 4, timestamp: base.addingTimeInterval(offset),
+                cpuFrequencies: .init(frequencies: frequencies, activeResidencies: weights), gpuFrequency: gpu)
+        }
+        let original = typedReading(0, frequencies: [0: 2, 1: 4, 2: 1, 3: 1],
+            weights: [0: 0.25, 1: 0.75, 2: 0.5, 3: 0.5], gpu: 1.35)
+        _ = perType.update(original, now: base)
+        for offset in [1.0, 4.0, 5.0] {
+            let partial = typedReading(offset, frequencies: [0: 0, 1: 0, 2: 2, 3: 2],
+                weights: [0: 0, 1: 0, 2: 0.9, 3: 0.1])
+            let result = perType.update(partial, now: base.addingTimeInterval(offset))!
+            check(result.cpuFrequencies.average(for: [0, 1]) == 3.5
+                  && result.cpuFrequencies.activeResidencies[0] == 0.25
+                  && result.cpuFrequencies.average(for: [2, 3]) == 2 && result.gpuFrequency == 1.35,
+                  "Only the unavailable type is retained, with its original clocks and weights")
+        }
+        let expired = perType.update(typedReading(5.01, frequencies: [2: 2.5, 3: 2.5],
+            weights: [2: 0.5, 3: 0.5]), now: base.addingTimeInterval(5.01))!
+        check(expired.cpuFrequencies.average(for: [0, 1]) == nil
+              && expired.cpuFrequencies.average(for: [2, 3]) == 2.5 && expired.gpuFrequency == nil,
+              "Fresh watts and Efficiency samples cannot renew expired Super or GPU GHz")
+        let lowerClock = typedReading(6, frequencies: [0: 0.8, 1: 1.2], weights: [0: 0.5, 1: 0.5], gpu: 0.3)
+        let recovered = perType.update(lowerClock, now: base.addingTimeInterval(6))!
+        check(recovered.cpuFrequencies.average(for: [0, 1]) == 1
+              && recovered.cpuFrequencies.average(for: [2, 3]) == 2.5 && recovered.gpuFrequency == 0.3,
+              "A valid lower clock immediately replaces the last display, without averaging lag")
+        let repeatedOld = perType.update(original, now: base.addingTimeInterval(6.5))!
+        check(repeatedOld.cpuFrequencies.average(for: [0, 1]) == 1 && repeatedOld.gpuFrequency == 0.3,
+              "An old sample cannot overwrite or extend a recovered frequency")
+        perType.reset()
+        check(perType.update(nil, now: base.addingTimeInterval(6.5)) == nil,
+              "Reset clears each retained core type")
+        check(perType.update(lowerClock, now: base.addingTimeInterval(6.5))?.cpuFrequencies.average(for: [0, 1]) == 1,
+              "Reset preserves the runtime topology for later samples")
 
         // Real subprocess lifecycle with a deterministic, unprivileged producer.
         let lock = NSLock()

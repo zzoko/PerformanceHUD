@@ -9,8 +9,8 @@ import AppKit
     }
     @MainActor static func main() throws {
         _ = NSApplication.shared
-        let options = HUDResourceOptions(enabled: true, temperature: true, totalUse: true, focusedApp: true,
-                                         power: true, highlighted: [.power, .totalUse, .focusedApp])
+        let options = HUDResourceOptions(enabled: true, temperature: true, totalUse: true, focusedApp: false,
+                                         power: true, highlighted: [.power, .totalUse])
         let fps = HUDFPSMenuView(options: .init(enabled: true, mode: .both), alignment: .vertical)
         let gpu = HUDResourceMenuView(group: .gpu, options: options)
         let cpu = HUDResourceMenuView(group: .cpu, options: options)
@@ -23,8 +23,7 @@ import AppKit
         let fan = HUDFanMenuView(options: .init(), sample: fanSample)
         let battery = HUDResourceMenuView(batteryOptions: .init(enabled: true, temperature: true, charge: true))
         let misc = HUDMiscMenuView(options: .init(enabled: true))
-        let chip = HUDDeviceInfoMenuView(options: .init(enabled: true), enabled: true)
-        let categories: [HUDCategoryMenuView] = [fps, gpu, cpu, ane, soc, memory, fan, battery, misc, chip]
+        let categories: [HUDCategoryMenuView] = [fps, gpu, cpu, ane, soc, memory, fan, battery, misc]
         let list = HUDCategoryListView(categories: categories)
         list.fit(availableHeight: 1000)
         let window = NSWindow(contentRect: list.frame, styleMask: [], backing: .buffered, defer: false)
@@ -186,14 +185,9 @@ import AppKit
         check(!pressureMode.isEnabled && !memoryOptions.pressure && !memoryOptions.details, "Pressure can turn off independently")
         memoryControls[8]!.performClick(nil)
         memoryControls[5]!.performClick(nil)
-        let memoryUse: NSSegmentedControl = member(memory, "usageModeControl") as NSSegmentedControl?
-            ?? { fatalError("Missing memory source") }()
-        memoryUse.selectedSegment = 1
-        memoryUse.sendAction(memoryUse.action, to: memoryUse.target)
-        check(!pressureMode.isEnabled, "App-only memory has no system pressure display")
-        memoryUse.selectedSegment = 2
-        memoryUse.sendAction(memoryUse.action, to: memoryUse.target)
-        check(pressureMode.isEnabled, "Total memory restores the pressure control")
+        memoryControls[7]!.performClick(nil)
+        check(pressureMode.isEnabled && !memoryOptions.totalUse, "Pressure is independent of the system Use checkbox")
+        memoryControls[7]!.performClick(nil)
         memoryControls[0]!.performClick(nil)
         check(!pressureMode.isEnabled, "Memory category off disables pressure mode")
         memoryControls[0]!.performClick(nil)
@@ -207,30 +201,64 @@ import AppKit
             list.fit(availableHeight: height)
             list.needsLayout = true
             verifyGeometry()
-            check(chip.frame.minY >= misc.frame.maxY && !chip.frame.intersects(fps.frame),
-                  "Mac stays below Misc when a native menu measures and resizes the list")
+            check(misc.frame.minY >= battery.frame.maxY && !misc.frame.intersects(fps.frame),
+                  "Misc stays below Battery when a native menu measures and resizes the list")
         }
         let controls: [Int: NSButton] = member(gpu, "controls")
         let use = controls[7] as! HUDReadingCheckbox
-        let mode: NSSegmentedControl = member(gpu, "usageModeControl") as NSSegmentedControl?
-            ?? { fatalError("Missing usage selector") }()
-        var changed = options
+        var changed = options.systemOnly
         gpu.onChange = { changed = $0 }
         use.performClick(nil)
-        check(!changed.usageVisible && changed.selectedUsageMode == .both && changed.usageHighlighted,
-              "Hiding Use preserves mode and emphasis")
-        check(use.emphasisControl?.isEnabled == false, "Hidden reading disables only emphasis")
-        mode.selectedSegment = 1
-        mode.sendAction(mode.action, to: mode.target)
-        check(!changed.usageVisible && changed.selectedUsageMode == .app, "Changing mode cannot enable a hidden reading")
+        check(!changed.usageVisible && !changed.focusedApp && changed.usageHighlighted,
+              "Hiding system Use retains emphasis")
+        check(use.emphasisControl?.isEnabled == false, "Hidden reading disables emphasis")
         use.performClick(nil)
-        check(changed.focusedApp && !changed.totalUse && changed.usageHighlighted, "Use restores saved mode and emphasis")
+        check(changed.totalUse && !changed.focusedApp && changed.usageHighlighted, "Use restores system usage")
         use.emphasisControl!.performClick(nil)
-        check(!changed.usageHighlighted && changed.focusedApp && changed.power, "Emphasis is independent of visibility and other readings")
+        check(!changed.usageHighlighted && changed.totalUse && changed.power, "Emphasis is independent")
         controls[0]!.performClick(nil)
-        check(!changed.enabled && !mode.isEnabled && !use.isEnabled, "Category switch disables subordinate controls")
+        check(!changed.enabled && !use.isEnabled, "Category switch disables subordinate controls")
         controls[0]!.performClick(nil)
-        check(changed.enabled && changed.focusedApp && changed.power && mode.isEnabled, "Category returns with its selections")
+        check(changed.enabled && changed.totalUse && changed.power, "Category retains its selections")
+        for category in [gpu, cpu] {
+            let coreControls: [Int: NSButton] = member(category, "controls")
+            let coreMode: NSSegmentedControl? = member(category, "coreModeControl")
+            var options: HUDCoreOptions?
+            category.onCoresChange = { options = $0 }
+            if coreControls[9]!.state == .on { coreControls[9]!.performClick(nil) }
+            coreControls[9]!.performClick(nil)
+            check(options?.enabled == true, "Core details are independently enabled")
+            if category === cpu {
+                check(coreMode?.isEnabled == true, "CPU keeps its core selector")
+                coreMode!.selectedSegment = 1
+                coreMode!.sendAction(coreMode!.action, to: coreMode!.target)
+                check(options?.mode == .bars, "CPU core mode switches to Bars")
+            } else {
+                check(coreMode == nil, "GPU Cores has no mode selector")
+                let coreCheck = coreControls[9] as! HUDReadingCheckbox
+                check(coreCheck.emphasisControl?.isEnabled == true, "GPU GHz retains its B control")
+                coreCheck.emphasisControl!.performClick(nil)
+                check(options?.highlighted == coreCheck.emphasized, "GPU GHz emphasis is independently selectable")
+            }
+            category.update(alignment: .horizontal)
+            check(coreControls[9]!.isEnabled && (coreMode == nil || coreMode!.isEnabled),
+                  "Both core checkboxes work in Horizontal")
+            check(coreMode == nil || coreMode!.selectedSegment == 0, "Horizontal CPU Cores displays Value")
+            if let coreMode {
+                check(coreMode.isEnabled(forSegment: 0) && !coreMode.isEnabled(forSegment: 1)
+                      && !coreMode.isEnabled(forSegment: 2), "Only Value is available in Horizontal, matching FPS")
+            }
+            let horizontalCoreCheck = coreControls[9] as! HUDReadingCheckbox
+            check(horizontalCoreCheck.emphasisControl?.isEnabled == true,
+                  "Horizontal GHz has B even when Vertical was Bars-only")
+            coreControls[9]!.performClick(nil)
+            check(options?.enabled == false, "Horizontal core checkbox can disable GHz")
+            coreControls[9]!.performClick(nil)
+            check(options?.enabled == true, "Horizontal core checkbox can restore GHz")
+            category.update(alignment: .vertical)
+            check(coreControls[9]!.isEnabled && (coreMode == nil || (coreMode!.isEnabled && coreMode!.selectedSegment == 1)),
+                  "Vertical retains the core controls")
+        }
         let aneMaster: NSButton = member(ane, "master")
         let aneHighlight: HUDEmphasisButton = member(ane, "anePowerHighlight")
         let aneLabel = ane.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == "Power" }
@@ -293,28 +321,12 @@ import AppKit
         check(setupCount == 1 && controls[4]!.state == .off, "Unavailable watts still offer helper setup")
         check((controls[4] as! HUDReadingCheckbox).emphasisControl?.isEnabled == false, "Unavailable power cannot be emphasized")
         gpu.setPowerState(.ready, selected: true)
-        let chipMaster: NSButton = member(chip, "master")
-        let chipReading: NSTextField = member(chip, "reading")
-        var chipOptions = HUDDeviceInfoOptions(enabled: true)
-        chip.onChange = { options in
-            chipOptions = options
-            chip.update(options: options, enabled: true)
-        }
-        chipMaster.performClick(nil)
-        check(!chipOptions.enabled && chipMaster.state == .off, "Chip category switch hides the reading")
-        chipMaster.performClick(nil)
-        check(chipOptions.enabled && chipReading.textColor == .labelColor, "Chip category switch restores the reading")
-        chip.update(options: chipOptions, enabled: false)
-        check(chipReading.textColor == .disabledControlTextColor && !chipMaster.isEnabled && chipMaster.state == .off,
-              "Horizontal disables Mac without changing its saved selection")
-        chip.update(options: chipOptions, enabled: true)
-        check(chipReading.textColor == .labelColor && chipMaster.state == .on, "Vertical restores Mac")
         // Short displays retain an actual scrollable document, including the final row.
         list.fit(availableHeight: 240)
         check(list.frame.height == 240 && list.documentView!.frame.height > 240, "Category section fits a small display")
-        let last = chip.frame
+        let last = misc.frame
         list.documentView!.scrollToVisible(last)
-        check(list.documentVisibleRect.intersects(last), "Mac stays reachable by scrolling")
+        check(list.documentVisibleRect.intersects(last), "Misc stays reachable by scrolling")
         list.fit(availableHeight: 1000)
         fan.update(sample: .noFans)
         list.layoutSubtreeIfNeeded()

@@ -26,7 +26,13 @@ python3 Tests/run-all-tests.py --list
 
 Individual shell suites can still be run directly, for example `sh Tests/run-host-port-tests.sh`.
 
-`sh Tests/run-device-info-tests.sh` checks Chip Tier/Full/Off, independent OS visibility, detected core counts and fallback text, saved choices/presets, footer geometry and CSV selection.
+`sh Tests/run-device-info-tests.sh` checks Chip Tier/Full and independent OS visibility within Misc, detected core counts and fallback text, migration from the former Mac category, saved choices/presets, Misc row geometry and CSV selection.
+
+`sh Tests/run-hotkey-tests.sh` also checks the brief appearance/logging confirmations: message text, click-through placement, no focus change, replacement on repeated presses, and dismissal without an idle timer. These checks show a disposable notification panel.
+
+`sh Tests/run-scale-layout-tests.sh --normal-size` checks the complete layout at normal size; omit the flag for the full scale matrix.
+
+`sh Tests/run-process-core-tests.sh` checks independent Process controls, whole-capacity CPU normalization and stable Process column spacing, CPU/GPU GHz in both layouts, Vertical bar modes, independent collector demand, horizontal spacing and missing-value stability, presets/reset, CPU topology and live per-core counters, activity-weighted frequency decoding and helper replies (including unequal same-type clusters), CSV, and eight-core wrapping through 32 cores. An optional `--preview` writes offscreen fixture images to `/tmp/performancehud-v32-process-core-preview.png` and `/tmp/performancehud-v32-horizontal-cores.png`; it does not launch the installed app. Add `--frequency-sample /path/to/sample.plist` to replay a captured `powermetrics` sample through IPC decoding, watt continuity, PowerMonitor, and the actual CPU/GPU HUD fields. The test rebases only the sample timestamp to pass freshness checks.
 
 ## Optional integration tests
 

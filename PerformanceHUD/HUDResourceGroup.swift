@@ -157,22 +157,21 @@ struct HUDResourceOptions: Codable, Equatable {
         if mode != .text { pressureGraphStyle = mode }
     }
 
-    var usageVisible: Bool { totalUse || focusedApp }
+    var usageVisible: Bool { totalUse }
     var detailsAvailable: Bool { enabled }
     var showsDetails: Bool { detailsAvailable && details }
-    var showsPressure: Bool { enabled && pressure && selectedUsageMode != .app }
-    var usageHighlighted: Bool { !highlighted.isDisjoint(with: [.totalUse, .focusedApp]) }
+    var showsPressure: Bool { enabled && pressure }
+    var usageHighlighted: Bool { highlighted.contains(.totalUse) }
     var selectedUsageMode: HUDUsageMode {
         usageMode ?? (totalUse && focusedApp ? .both : focusedApp ? .app : .total)
     }
 
     mutating func setUsagePresentation(visible: Bool, highlighted emphasis: Bool) {
-        let mode = selectedUsageMode
-        usageMode = mode
-        totalUse = visible && mode != .app
-        focusedApp = visible && mode != .total
+        usageMode = .total
+        totalUse = visible
+        focusedApp = false
         highlighted.subtract([.totalUse, .focusedApp])
-        if emphasis { highlighted.formUnion([.totalUse, .focusedApp]) }
+        if emphasis { highlighted.insert(.totalUse) }
     }
 
     mutating func selectUsageMode(_ mode: HUDUsageMode) {
@@ -182,18 +181,19 @@ struct HUDResourceOptions: Codable, Equatable {
         setUsagePresentation(visible: visible, highlighted: emphasis)
     }
 
+    /// Old app-mode fields remain decodable; current categories own system readings only.
+    var systemOnly: Self {
+        var result = self
+        result.focusedApp = false
+        result.usageMode = .total
+        result.highlighted.remove(.focusedApp)
+        return result
+    }
+
     func visibleMetrics(for group: HUDResourceGroup) -> Set<HUDMetric> {
         guard enabled else { return [] }
-        var metrics = Set<HUDMetric>()
-        if group == .ram {
-            if selectedUsageMode != .app && (usageVisible || showsDetails || showsPressure) { metrics.insert(.ramTotal) }
-            if selectedUsageMode != .total && (usageVisible || showsDetails) { metrics.insert(.ram) }
-            return metrics
-        }
-        if focusedApp, let appMetric = group.appMetric { metrics.insert(appMetric) }
-        if (group.supportsTotalUse && totalUse) || (group.supportsTemperature && temperature) || (group.supportsPower && power) {
-            metrics.insert(group.totalMetric)
-        }
-        return metrics
+        if group == .ram { return totalUse || details || pressure ? [.ramTotal] : [] }
+        return (group.supportsTotalUse && totalUse) || (group.supportsTemperature && temperature)
+            || (group.supportsPower && power) ? [group.totalMetric] : []
     }
 }

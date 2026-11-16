@@ -13,7 +13,7 @@ final class HUDControlsGuide: NSWindowController {
             ("", "Show or hide the HUD. Option + H is the default shortcut. Your selections are remembered; visible menu-bar readings keep updating while the HUD is disabled.")]),
         .init(title: "Show menu-bar readings", rows: [
             ("Selection", "Click the small menu-bar symbol to the right of B beside a reading to show it in the macOS menu bar, independently of the HUD. All start off. The first use asks for confirmation: Yes enables the reading and remembers your approval; No leaves it off. Keep to a couple of readings: selections that exceed the width limit stay off and show a warning."),
-            ("Display", "Uses a scaled-down horizontal layout with shared modes, emphasis, and heat warnings. FPS shows Value only; pressure B1/B2 uses A1/A2; fan averaging follows Horizontal. Misc and Mac are unavailable."),
+            ("Display", "Uses a scaled-down horizontal layout with shared modes, emphasis, and heat warnings. FPS shows Value only; pressure B1/B2 uses A1/A2; fan averaging follows Horizontal. Process, core details, and Misc are unavailable."),
             ("Collapse / expand", "Use Show menu-bar readings or the chevron beside the bolt to hide or reveal all selections without clearing them. If a saved preset, reading mode, or display change exceeds the width limit, readings collapse until you reduce them. The HUD is unaffected. Click the bolt or readings to open the controls.")]),
         .init(title: "Reset", rows: [
             ("Position", "Return to the default position. To move the HUD, hold Option and drag with the left mouse button; release Option after dragging to avoid snapping. Edit hotkeys lets you change this modifier."),
@@ -25,36 +25,41 @@ final class HUDControlsGuide: NSWindowController {
             ("All", "Hide the whole HUD after three seconds without FPS readings and reveal it when they return. Apps without detectable FPS keep it hidden. This mode does not hide menu-bar readings. Logging continues."),
             ("Animation", "Animate HUD hiding, showing, and mode changes. On by default; turn it off for instant transitions. macOS Reduce Motion also skips animations.")]),
         .init(title: "Size", rows: [("", "Scale the HUD from 0.5× to 2×. Default: 1×. Menu-bar readings keep their own fixed scale.")]),
-        .init(title: "Alignment", rows: [("", "Vertical stacks categories; Horizontal places them in one row. Horizontal uses FPS Value only and pressure meters. Misc and Mac are Vertical-only. Your Vertical choices return when switching back.")]),
-        .init(title: "Appearance", rows: [("Light / Dark / Follow macOS", "Choose a fixed appearance or follow macOS, the default. Option + A cycles these choices; change the shortcut in Edit hotkeys. Menu-bar readings always follow macOS appearance.")]),
+        .init(title: "Alignment", rows: [("", "Vertical stacks categories; Horizontal places them in one row. Horizontal uses FPS Value only, CPU core GHz only, and pressure meters. Process and Misc are Vertical-only. Your Vertical choices return when switching back.")]),
+        .init(title: "Appearance", rows: [("Light / Dark / Follow macOS", "Choose a fixed appearance or follow macOS, the default. Option + A cycles these choices and briefly shows the selected mode onscreen; change the shortcut in Edit hotkeys. Menu-bar readings always follow macOS appearance.")]),
         .init(title: "Liquid Glass", rows: [
             ("Strength", "Adjust from Clear (0%) to Frosted (100%) for the HUD only. Starts at your current macOS strength and remembers later adjustments. Light and Dark are separate choices."),
             ("Follow macOS · default", "Follow System Settings → Appearance. The inactive slider shows the system strength. Accessibility settings such as Reduce transparency can affect either mode."),
             ("Retry Glass Compatibility", "If this appears, retry it to restore compatibility with games that may otherwise be capped at 60 FPS.")]),
         .init(title: "Preset", rows: [
-            ("FPS / Balanced / Detailed", "FPS shows only Frame rate in Value mode. Balanced uses the default readings. Detailed adds Misc and Mac and sets GPU, CPU, and memory Use to Both. Built-in presets turn menu-bar selections off."),
+            ("FPS / Balanced / Detailed", "FPS shows only Frame rate in Value mode. Balanced uses the default readings with CPU core bars and GPU Cores off. Detailed adds CPU GHz (Both mode), GPU GHz, Process, and all Misc readings. Built-in presets turn menu-bar selections off."),
             ("Custom", "Changing categories, readings, modes, emphasis, heat warnings, or menu-bar selections shows Custom unless the choices match a preset. Size, position, alignment, appearance, Liquid Glass, Auto hide, and app settings stay independent."),
             ("Save current as… / Manage presets…", "Save your selections by name, then rename or delete saved presets. Presets include menu-bar selections, but not their global collapse state. Built-in presets cannot be edited or deleted.")]),
         .init(title: "Category controls", rows: [
             ("Switches and checkboxes", "A category switch shows or hides its readings without clearing choices. Checkboxes control individual readings; adjacent buttons choose their mode. Scroll to reach more categories."),
             ("B · Emphasis", "Highlight a reading without changing its size. A filled B means on. Formatting controls remain available for readings selected in the menu bar, even when hidden in the HUD.")]),
         .init(title: "FPS", rows: [("Value / History / Both", "Show the focused app’s FPS number, its last 60 seconds of history, or both. History is sampled about once per second, not per frame; the dot marks the latest available reading. Availability depends on the app and macOS. Both is the default; B emphasizes the number.")]),
+        .init(title: "Process", rows: [
+            ("GPU / CPU / Memory", "Vertical-only. Shows the frontmost app’s name with its selected GPU %, CPU %, and memory GB in one row. CPU is its share of the Mac’s total CPU capacity, from 0–100%, matching system Use. One fully busy core on a 10-core Mac is 10%. CSV uses the same scale. Long names shorten with an ellipsis; helper processes may be excluded. B emphasizes each value independently.")]),
         .init(title: "GPU", rows: [
             ("Power", "Estimated system GPU watts. Requires Power Helper."),
             ("Temperature / Heat warning", "Average of available GPU temperature sensors. Heat warning turns the number red at or above the chosen temperature; enabled at 95°C by default. Accepts whole degrees from 1–149°C and follows the rounded displayed value. B controls emphasis independently."),
-            ("Use · Total / App / Both", "Choose whole-system usage, the focused app’s tracked process, or both. App readings depend on macOS support and may exclude helper processes. Power and temperature always remain system-wide.")]),
+            ("Use", "Whole-system GPU usage from 0–100%. App readings are selected in Process."),
+            ("Cores", "Shows GPU GHz in both layouts, labelled C in Horizontal. In Vertical, aligns right unless CPU GHz is visible, then follows its column. Requires Power Helper; B emphasizes the value. Off in Balanced; enabled in Detailed.")]),
         .init(title: "CPU", rows: [
             ("Power", "Estimated system CPU watts. Requires Power Helper."),
             ("Temperature / Heat warning", "Average of available CPU temperature sensors; coverage varies by chip. Heat warning changes only the number’s colour, with a separate threshold enabled at 95°C by default."),
-            ("Use · Total / App / Both", "Total ranges from 0–100% across all cores. App uses 100% per fully used logical core, so it can exceed 100%; helper processes may be excluded. Power and temperature remain system-wide.")]),
+            ("Use", "Whole-system usage from 0–100% across all CPU cores. App readings are selected in Process."),
+            ("Cores · Value / Bars / Both", "Shows each detected core type, such as Super, Performance, or Efficiency. Vertical adds one row per type; Horizontal uses GHz only with S / P / E labels and retains your Vertical mode. Value shows right-aligned GHz; Bars shows individual core activity; Both places GHz to the left of the bars. Graphs keep the same right edge in Bars and Both, extending leftward up to eight cores per line; extra cores wrap downward. B emphasizes GHz only. Enabled in Bars mode in Balanced and Both mode in Detailed."),
+            ("GHz", "Power Helper supplies average active frequency over each sampling interval. Multiple clusters of one type share one row, with GHz weighted by each core’s active time in that same sample. Bars remain individual cores. Each type retains its last valid GHz for up to five seconds during brief gaps, then shows a dash. New readings appear immediately. Usage bars work without the helper.")]),
         .init(title: "ANE", rows: [("Power", "Apple Neural Engine watts. The category switch controls this single reading; Power Helper is required.")]),
         .init(title: "SOC", rows: [("Combined power", "Combined CPU, GPU, and Neural Engine watts, independent of their individual Power switches. Excludes the display and other whole-Mac components. Requires Power Helper.")]),
         .init(title: "MEM", rows: [
-            ("Pressure · Text / Graph", "Show system memory pressure independently of Details. Text displays the state; B emphasizes only the text. HUD pressure requires Total or Both; menu-bar pressure remains system-wide in any usage mode."),
+            ("Pressure · Text / Graph", "Show system memory pressure independently of Details. Text displays the state; B emphasizes only the text. Pressure is independent of the Use checkbox."),
             ("A1 / A2 · Meters", "One filled segment means normal, two warning, three critical. A1 is neutral; A2 uses green, yellow, or red for the current state."),
             ("B1 / B2 · History", "Show 30 seconds of numeric pressure on a fixed 0–100 scale, not memory usage percentage. Dots across the top mark 100; the rightmost dot marks now. B1 is neutral; B2 uses macOS pressure colours and is the default. Vertical-only: Horizontal and the menu bar use the matching A1/A2 meter."),
-            ("Details", "Physical is memory in use; Swap is disk space used for swap. App details show the tracked process’s physical memory only. B emphasizes these values, not the pressure graph. Horizontal labels are PHY and SWP."),
-            ("Use · Total / App / Both", "Choose system memory, the focused app’s tracked process, or both. This also selects the source for Details, even when the Use percentage is hidden.")]),
+            ("Details", "Physical is memory in use; Swap is disk space used for swap. B emphasizes these values, not the pressure graph. Horizontal labels are PHY and SWP."),
+            ("Use", "System memory usage percentage. The Process category has its own app-memory checkbox; Details always shows system Physical and Swap.")]),
         .init(title: "FAN", rows: [
             ("Average · Vertical / Horizontal / Both", "Combine two or more fans in the chosen layouts. A marks an average; numbered badges identify individual fans. Horizontal averaging is on by default."),
             ("Use · Total / RPM / Both", "Total shows a bar relative to the fan’s maximum speed; RPM shows its speed as a number. Both shows both and is the default; B emphasizes RPM only. A stopped fan can correctly show 0 RPM."),
@@ -66,20 +71,18 @@ final class HUDControlsGuide: NSWindowController {
             ("Availability", "Macs without an internal battery show Not available with Battery off and greyed out.")]),
         .init(title: "Misc", rows: [
             ("", "Vertical-only and off by default. Its buttons toggle each reading independently."),
-            ("Process", "The focused app being tracked."),
             ("Resolution", "Reported Metal output dimensions, which may differ from internal rendering resolution with upscaling. A dash means unavailable."),
             ("Refresh rate", "The display’s configured rate or variable-refresh range, not its instantaneous rate."),
             ("Game Mode", "Experimental macOS on/off status. Unavailable readings stay blank."),
-            ("Thermal", "System thermal pressure: nominal, fair, serious, or critical. This is not a temperature reading.")]),
-        .init(title: "Mac", rows: [
-            ("Chip", "Tier shows the chip name. Full adds CPU and GPU core counts below it. Off hides chip information."),
-            ("OS", "Shows the macOS version independently. Full and OS are selected by default; the category stays off and is Vertical-only.")]),
+            ("Thermal", "System thermal pressure: nominal, fair, serious, or critical. This is not a temperature reading."),
+            ("OS", "Shows the macOS version independently."),
+            ("Chip", "The Chip button shows or hides chip information. Tier shows the name; Full adds detected CPU core types and GPU core count. OS and Chip Full are selected by default; Misc stays off.")]),
         .init(title: "Start / Stop logging", rows: [
-            ("Recording", "Record selected HUD readings once per second to CSV. The HUD must be enabled. Option + L is the default shortcut. Columns are fixed when recording starts; start a new log to include newly selected readings. Missing readings stay blank."),
+            ("Recording", "Record selected HUD readings once per second to CSV. The HUD must be enabled. Option + L briefly confirms when logging starts or stops. Columns are fixed when recording starts; start a new log to include newly selected readings. Missing readings stay blank."),
             ("Saving", "Stopping, disabling the HUD, or quitting saves the CSV to your Desktop. Auto hide keeps recording. If saving fails, an alert identifies the recovery file. Logging always starts manually.")]),
         .init(title: "Power Helper", rows: [
-            ("Setup & approval", "Required for CPU, GPU, ANE, and SOC watts. Click a Power control or Set Up Power Readings and follow macOS approval prompts. Battery watts and other sensors do not need it."),
-            ("Remove Power Helper", "Unregister the helper while keeping other readings available. An approved helper only samples when the HUD, visible menu-bar readings, or logging needs watts.")]),
+            ("Setup & approval", "Required for CPU, GPU, ANE, and SOC watts and CPU/GPU GHz. Enable a Power or GHz Cores reading, or choose Set Up Power Readings, then follow macOS approval prompts. Battery watts, system usage, and CPU core bars do not need it."),
+            ("Remove Power Helper", "Unregister the helper while keeping other readings available. An approved helper only samples when the HUD, visible menu-bar readings, or logging needs watts or GHz.")]),
         .init(title: "Edit hotkeys", rows: [
             ("Shortcuts", "Click an action and record a combination containing Control, Option, or Command. Escape cancels; Delete or Clear removes it. Defaults: Option + H for the HUD, Option + L for logging, Option + A for appearance, and Option + drag to move."),
             ("Availability", "Shortcuts work across apps while PerformanceHUD is running and pause while the editor is open. Conflicting shortcuts need a different combination. Changes save immediately and survive Reset → All.")]),

@@ -72,24 +72,31 @@ nonisolated struct PowerReadingContinuity {
     static let maximumAge: TimeInterval = 5
 
     private struct Value {
-        let watts: Double
+        let number: Double
         let timestamp: Date
     }
     private var cpu: Value?
     private var gpu: Value?
     private var ane: Value?
     private var package: Value?
+    private let cpuCoreGroups: [[Int]]
+    // Retain each core type's complete valid interval, never individual clocks
+    // or weights from different samples. One type cannot renew another's age.
+    private var cpuFrequencySamples: [Int: HelperPowerReading] = [:]
+    private var gpuFrequency: Value?
 
-    mutating func reset() { self = Self() }
+    init(cpuCoreGroups: [[Int]] = []) { self.cpuCoreGroups = cpuCoreGroups }
+
+    mutating func reset() { self = Self(cpuCoreGroups: cpuCoreGroups) }
 
     mutating func update(_ sample: HelperPowerReading?, now: Date = Date()) -> HelperPowerReading? {
-        func refreshed(_ previous: Value?, with watts: Double?) -> Value? {
+        func refreshed(_ previous: Value?, with number: Double?) -> Value? {
             var value = previous
-            if let sample, let watts, watts.isFinite, watts >= 0,
+            if let sample, let number, number.isFinite, number >= 0,
                value == nil || sample.timestamp > value!.timestamp {
                 let age = now.timeIntervalSince(sample.timestamp)
                 if age >= 0 && age <= Self.maximumAge {
-                    value = Value(watts: watts, timestamp: sample.timestamp)
+                    value = Value(number: number, timestamp: sample.timestamp)
                 }
             }
             guard let value else { return nil }
@@ -102,9 +109,30 @@ nonisolated struct PowerReadingContinuity {
         // Retain the helper's coherent package total; never sum readings from
         // different intervals when just one component is temporarily missing.
         package = refreshed(package, with: sample?.package)
-        let timestamps = [cpu, gpu, ane, package].compactMap { $0?.timestamp }
+        gpuFrequency = refreshed(gpuFrequency, with: sample?.gpuFrequency.flatMap { (0...20).contains($0) ? $0 : nil })
+        var cpuFrequencies = CPUFrequencySample.unavailable
+        for (index, ids) in cpuCoreGroups.enumerated() {
+            if let sample, sample.cpuFrequencies.average(for: ids) != nil,
+               cpuFrequencySamples[index] == nil || sample.timestamp > cpuFrequencySamples[index]!.timestamp {
+                let age = now.timeIntervalSince(sample.timestamp)
+                if age >= 0 && age <= Self.maximumAge { cpuFrequencySamples[index] = sample }
+            }
+            guard let retained = cpuFrequencySamples[index] else { continue }
+            let age = now.timeIntervalSince(retained.timestamp)
+            guard age >= 0 && age <= Self.maximumAge else {
+                cpuFrequencySamples[index] = nil
+                continue
+            }
+            for id in ids {
+                cpuFrequencies.frequencies[id] = retained.cpuFrequencies.frequencies[id]
+                cpuFrequencies.activeResidencies[id] = retained.cpuFrequencies.activeResidencies[id]
+            }
+        }
+        let timestamps = [cpu, gpu, ane, package, gpuFrequency].compactMap { $0?.timestamp }
+            + cpuFrequencySamples.values.map(\.timestamp)
         guard let oldest = timestamps.min() else { return nil }
-        return HelperPowerReading(cpu: cpu?.watts, gpu: gpu?.watts, package: package?.watts,
-                                  timestamp: oldest, ane: ane?.watts)
+        return HelperPowerReading(cpu: cpu?.number, gpu: gpu?.number, package: package?.number,
+                                  timestamp: oldest, ane: ane?.number,
+                                  cpuFrequencies: cpuFrequencies, gpuFrequency: gpuFrequency?.number)
     }
 }

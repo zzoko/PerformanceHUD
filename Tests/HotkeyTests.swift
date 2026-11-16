@@ -152,6 +152,51 @@ struct HotkeyTests {
             root.cacheDisplay(in: root.bounds, to: bitmap)
             try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: output))
         }
-        print("Hotkey tests passed: persistence/migration, drag modifiers and menu hints, validation, registration, editor pause, key repeat, appearance order, and editor layout.")
+        testShortcutFeedback()
+        print("Hotkey tests passed: persistence/migration, drag modifiers and menu hints, validation, registration, editor pause, key repeat, appearance order, editor layout, and transient feedback.")
+    }
+
+    @MainActor static func testShortcutFeedback() {
+        func member<T>(_ object: Any, _ name: String) -> T {
+            Mirror(reflecting: object).children.first { $0.label == name }!.value as! T
+        }
+        let controller = HUDShortcutFeedbackController()
+        defer { controller.dismiss() }
+        let panel: NSPanel = member(controller, "panel")
+        let label: NSTextField = member(controller, "label")
+        let icon: NSImageView = member(controller, "icon")
+        precondition(!panel.isVisible, "No feedback appears until a shortcut requests it")
+        let screen = NSScreen.main!
+        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        for appearance in HUDBackground.allCases {
+            controller.show(.appearance(appearance), on: screen, appearance: appearance)
+            precondition(label.stringValue == "Appearance · \(appearance.menuTitle)")
+            precondition(icon.image != nil && panel.isVisible && panel.ignoresMouseEvents)
+            precondition(!panel.canBecomeKey && !panel.canBecomeMain && !panel.isKeyWindow)
+            precondition(panel.level == .screenSaver && panel.collectionBehavior.contains(.fullScreenAuxiliary))
+            precondition(screen.visibleFrame.contains(panel.frame) && abs(panel.frame.midX - screen.visibleFrame.midX) < 1)
+            precondition(panel.contentView!.bounds.contains(label.frame) && label.frame.width >= label.intrinsicContentSize.width)
+        }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        precondition(panel.alphaValue > 0.95, "Feedback fades fully into view")
+        precondition(NSWorkspace.shared.frontmostApplication?.processIdentifier == frontmost,
+                     "Feedback does not steal focus from the current app")
+        let oldTimer: Timer? = member(controller, "timer")
+        controller.show(.loggingStarted, on: screen, appearance: .dark)
+        precondition(label.stringValue == "Logging started" && oldTimer?.isValid == false,
+                     "A new shortcut replaces the message and cancels its old deadline")
+        RunLoop.main.run(until: Date().addingTimeInterval(1))
+        controller.show(.loggingStopped, on: screen, appearance: .light)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        precondition(panel.isVisible && panel.alphaValue > 0.95 && label.stringValue == "Logging stopped",
+                     "The previous message's deadline cannot dismiss the latest confirmation")
+        RunLoop.main.run(until: Date().addingTimeInterval(1.1))
+        let idleTimer: Timer? = member(controller, "timer")
+        precondition(!panel.isVisible && idleTimer == nil, "Feedback disappears and leaves no idle timer")
+        controller.show(.loggingRequiresHUD, on: screen, appearance: .system)
+        precondition(label.stringValue == "Enable HUD to start logging", "A blocked start never claims to record")
+        let pending: Timer? = member(controller, "timer")
+        controller.dismiss()
+        precondition(!panel.isVisible && pending?.isValid == false, "Shutdown or a silent HUD toggle cancels feedback")
     }
 }

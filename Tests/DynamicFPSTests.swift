@@ -202,7 +202,7 @@ import AppKit
                 }
                 if alignment == .vertical {
                     let dividers: [Int: NSView] = member(styledHUD, "groupDividers")
-                    let line = dividers[1]!.subviews.first!
+                    let line = dividers[2]!.subviews.first!
                     let dividerRight = line.convert(line.bounds, to: styledContainer).maxX
                     let plotRight = styledGraph.convert(styledGraph.plotBounds, to: styledContainer).maxX
                     check(abs(plotRight - dividerRight) <= 0.5,
@@ -220,13 +220,14 @@ import AppKit
         // Changing hidden FPS content must not resize the HUD or move its arrow
         // and first divider. Compare modes on the same live layout.
         let collapsedBodies: [(Set<HUDMetric>, Bool)] = [([], false), ([], true), ([.cpuTotal], false),
-            ([.ramTotal], false), ([.fans], false), ([.battery], false), ([.deviceInfo], false),
+            ([.ramTotal], false), ([.fans], false), ([.battery], false), ([.misc], false),
             ([.cpuTotal, .ramTotal, .battery], false)]
         for scale in [HUDScale.small, HUDScale(rawValue: 0.51), HUDScale(rawValue: 0.75), .normal,
                       HUDScale(rawValue: 1.01), HUDScale(rawValue: 1.25), .large] {
             for (body, packageEnabled) in collapsedBodies {
                 let compactHUD = HUDWindowController()
                 compactHUD.setHUDEnabled(false)
+                compactHUD.setMiscOptions(.init(enabled: true, readings: [.chip, .os]))
                 compactHUD.setPackagePowerOptions(.init(enabled: packageEnabled))
                 for metric in HUDMetric.allCases { compactHUD.setMetricEnabled(metric, enabled: body.contains(metric)) }
                 compactHUD.setHUDScale(scale)
@@ -261,8 +262,9 @@ import AppKit
         for scale in [HUDScale.small, HUDScale(rawValue: 0.51), HUDScale(rawValue: 0.75), .normal,
                       HUDScale(rawValue: 1.01), HUDScale(rawValue: 1.25), HUDScale.large] {
             for fpsMetrics: Set<HUDMetric> in [[.fps], [.fpsGraph], [.fps, .fpsGraph]] {
-                for body: Set<HUDMetric> in [[], [.cpuTotal], [.ramTotal], [.fans], [.battery], [.deviceInfo], [.cpuTotal, .ramTotal, .battery]] {
+                for body: Set<HUDMetric> in [[], [.cpuTotal], [.ramTotal], [.fans], [.battery], [.misc], [.cpuTotal, .ramTotal, .battery]] {
                     let hud = activeHUD()
+                    hud.setMiscOptions(.init(enabled: true, readings: [.chip, .os]))
                     hud.setPackagePowerOptions(.init(enabled: false))
                     for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: fpsMetrics.union(body).contains(metric)) }
                     hud.setHUDScale(scale)
@@ -339,6 +341,7 @@ import AppKit
             for background in [HUDBackground.dark, .light] {
                 for body: Set<HUDMetric> in [[], [.cpuTotal], [.ramTotal, .battery], [.fans]] {
                     let hud = activeHUD()
+                    hud.setMiscOptions(.init(enabled: true, readings: [.chip, .os]))
                     hud.setAutoHideMode(.off)
                     hud.setAlignment(.horizontal)
                     hud.setBackground(background)

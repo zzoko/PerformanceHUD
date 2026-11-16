@@ -12,16 +12,21 @@ enum HUDMetric: Int, CaseIterable, Hashable {
     case ramTotal
     // Preserve existing metric identifiers after removing the separate pressure option.
     case battery = 8
-    case deviceInfo
     case aneTotal = 11
     case fans = 12
     case misc = 13
+    case process = 14
+    case cpuCores = 15
+    case gpuCores = 16
 
     // MARK: - Menu Titles
 
     var menuTitle: String {
 
         switch self {
+        case .process: return "Process"
+        case .cpuCores: return "CPU cores"
+        case .gpuCores: return "GPU cores"
 
         case .fps:
             return "FPS"
@@ -56,8 +61,6 @@ enum HUDMetric: Int, CaseIterable, Hashable {
         case .battery:
             return "Battery"
 
-        case .deviceInfo:
-            return "Mac"
         case .misc:
             return "Misc"
         }
@@ -68,6 +71,9 @@ enum HUDMetric: Int, CaseIterable, Hashable {
     var hudTitle: String {
 
         switch self {
+        case .process: return "Process"
+        case .cpuCores: return "CPU cores"
+        case .gpuCores: return "GPU cores"
 
         case .fps:
             return "FPS"
@@ -102,8 +108,6 @@ enum HUDMetric: Int, CaseIterable, Hashable {
         case .battery:
             return "Battery"
 
-        case .deviceInfo:
-            return "Mac"
         case .misc:
             return "Misc"
         }

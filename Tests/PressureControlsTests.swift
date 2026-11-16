@@ -196,11 +196,11 @@ import AppKit
                                 let selection = HUDLogSelection(fps: false, resources: [.ram: option],
                                     package: .init(enabled: false), fans: .init(enabled: false),
                                     battery: .init(enabled: false, temperature: false, charge: false),
-                                    deviceInfo: .init(), alignment: alignment)
+                                    alignment: alignment)
                                 let columns = selection.columns(fanSample: .noFans)
                                 precondition(columns.contains(.memoryPressure) == showsPressure, "CSV pressure follows Pressure")
-                                precondition(columns.contains(.memoryPhysical) == (details && source != .app), "CSV physical memory follows Details")
-                                precondition(columns.contains(.memorySwap) == (details && source != .app), "CSV swap follows Details")
+                                precondition(columns.contains(.memoryPhysical) == details, "CSV physical memory follows Details")
+                                precondition(columns.contains(.memorySwap) == details, "CSV swap follows Details")
                                 if showsPressure { precondition(columns.first == .memoryPressure, "CSV follows menu order") }
                             }
                         }

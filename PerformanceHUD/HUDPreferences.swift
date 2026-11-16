@@ -24,13 +24,13 @@ enum HUDPreferences {
     // and independent “Don’t show this again” choices stay.
     static func resetOptions(in store: UserDefaults = .standard) {
         var keys = [hudEnabledKey, hudScaleKey, "hud.menuBar.readings", "hud.menuBar.collapsed", "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.fps.valueHighlighted", "hud.autoHide", "hud.autoHide.mode", "hud.autoHide.animated",
-                    "hud.glass.mode", "hud.glass.strength", "hud.package.power", "hud.package.highlighted",
+                    "hud.glass.mode", "hud.glass.strength", "hud.process.options", "hud.cpu.cores", "hud.gpu.cores", "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
                     "hud.battery.power", "hud.battery.powerHighlighted", "hud.battery.flowMode",
                     "hud.battery.heatWarning.enabled", "hud.battery.heatWarning.threshold",
                     "hud.group.ram.details", "hud.group.ram.pressure", "hud.group.ram.pressureMode", "hud.group.ram.pressureGraphStyle", "hud.fan.usage", "hud.fan.mode",
                     "hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted", "hud.misc.readings",
-                    "hud.deviceInfo.chipMode", "hud.deviceInfo.os"]
+                    "hud.misc.chipMode", "hud.metric.deviceInfo", "hud.deviceInfo.chipMode", "hud.deviceInfo.os"]
         keys += HUDMetric.allCases.map { metricKey($0) }
         for group in HUDResourceGroup.allCases {
             keys += ["enabled", "temperature", "power", "highlighted", "usageMode", "heatWarning.enabled", "heatWarning.threshold"].map {
@@ -241,37 +241,31 @@ enum HUDPreferences {
 
     // MARK: - Metric Visibility
 
-    static var deviceInfoOptions: HUDDeviceInfoOptions {
-        get { deviceInfoOptions(in: defaults) }
-        set { setDeviceInfoOptions(newValue, in: defaults) }
-    }
-
-    static func deviceInfoOptions(in store: UserDefaults) -> HUDDeviceInfoOptions {
-        HUDDeviceInfoOptions(enabled: isMetricEnabled(.deviceInfo, in: store),
-            chipMode: store.string(forKey: "hud.deviceInfo.chipMode").flatMap(HUDChipDisplayMode.init(rawValue:)) ?? .full,
-            os: store.object(forKey: "hud.deviceInfo.os") as? Bool ?? true)
-    }
-
-    static func setDeviceInfoOptions(_ options: HUDDeviceInfoOptions, in store: UserDefaults = .standard) {
-        setMetricEnabled(.deviceInfo, enabled: options.enabled, in: store)
-        store.set(options.chipMode.rawValue, forKey: "hud.deviceInfo.chipMode")
-        store.set(options.os, forKey: "hud.deviceInfo.os")
-    }
-
     static var miscOptions: HUDMiscOptions {
         get { miscOptions(in: defaults) }
         set { setMiscOptions(newValue, in: defaults) }
     }
 
     static func miscOptions(in store: UserDefaults) -> HUDMiscOptions {
-        HUDMiscOptions(enabled: store.bool(forKey: metricKey(.misc)),
-            readings: store.stringArray(forKey: "hud.misc.readings")
-                .map { Set($0.compactMap(HUDMiscReading.init(rawValue:))) } ?? Set(HUDMiscReading.allCases))
+        let selected = store.stringArray(forKey: "hud.misc.readings")
+            .map { Set($0.compactMap(HUDMiscReading.init(rawValue:))) }
+        if let mode = store.string(forKey: "hud.misc.chipMode") {
+            return HUDMiscOptions(enabled: store.bool(forKey: metricKey(.misc)),
+                readings: selected ?? Set(HUDMiscReading.allCases),
+                chipMode: HUDChipDisplayMode(rawValue: mode) ?? .full)
+        }
+        let oldMisc = HUDMiscOptions(enabled: store.bool(forKey: metricKey(.misc)),
+            readings: selected ?? Set(HUDMiscReading.liveReadings))
+        let oldMac = HUDDeviceInfoOptions(enabled: store.bool(forKey: "hud.metric.deviceInfo"),
+            chipMode: store.string(forKey: "hud.deviceInfo.chipMode").flatMap(HUDChipDisplayMode.init(rawValue:)) ?? .full,
+            os: store.object(forKey: "hud.deviceInfo.os") as? Bool ?? true)
+        return oldMisc.mergingLegacyMac(oldMac)
     }
 
     static func setMiscOptions(_ options: HUDMiscOptions, in store: UserDefaults) {
         store.set(options.enabled, forKey: metricKey(.misc))
         store.set(options.readings.map(\.rawValue).sorted(), forKey: "hud.misc.readings")
+        store.set(options.chipMode == .tier ? "tier" : "full", forKey: "hud.misc.chipMode")
     }
 
     static func isMetricEnabled(_ metric: HUDMetric, in store: UserDefaults = .standard) -> Bool {
@@ -427,6 +421,7 @@ enum HUDPreferences {
             pressureMode: defaults.string(forKey: "hud.group.ram.pressureMode").flatMap(HUDMemoryPressureMode.init(storedValue:)) ?? .colorHistory,
             pressureGraphStyle: defaults.string(forKey: "hud.group.ram.pressureGraphStyle").flatMap(HUDMemoryPressureMode.init(storedValue:)) ?? .colorHistory,
             heatWarning: heatWarningOptions(for: group, in: defaults))
+        options = options.systemOnly
         options.setUsagePresentation(visible: options.usageVisible, highlighted: options.usageHighlighted)
         return options
     }
@@ -453,12 +448,19 @@ enum HUDPreferences {
         metrics.subtract([.fps, .fpsGraph])
         metrics.formUnion(fpsOptions.visibleMetrics(alignment: alignment))
         if miscOptions.visibleReadings.isEmpty { metrics.remove(.misc) }
-        if !deviceInfoOptions.isVisible { metrics.remove(.deviceInfo) }
+        else { metrics.insert(.misc) }
         for group in HUDResourceGroup.allCases {
             if let appMetric = group.appMetric { metrics.remove(appMetric) }
             metrics.remove(group.totalMetric)
             metrics.formUnion(resourceOptions(for: group).visibleMetrics(for: group))
         }
+        if processOptions.enabled { metrics.insert(.process) } else { metrics.remove(.process) }
+        if resourceOptions(for: .cpu).enabled && cpuCoreOptions.enabled {
+            metrics.formUnion([.cpuTotal, .cpuCores])
+        } else { metrics.remove(.cpuCores) }
+        if resourceOptions(for: .gpu).enabled && gpuCoreOptions.enabled {
+            metrics.formUnion([.gpuTotal, .gpuCores])
+        } else { metrics.remove(.gpuCores) }
         return Set(metrics.filter { alignment.allows($0) })
     }
 
@@ -467,6 +469,9 @@ enum HUDPreferences {
     ) -> String {
 
         switch metric {
+        case .process: return "hud.metric.process"
+        case .cpuCores: return "hud.metric.cpuCores"
+        case .gpuCores: return "hud.metric.gpuCores"
 
         case .fps:
             return "hud.metric.fps"
@@ -501,8 +506,6 @@ enum HUDPreferences {
         case .battery:
             return "hud.metric.battery"
 
-        case .deviceInfo:
-            return "hud.metric.deviceInfo"
         case .misc:
             return "hud.metric.misc"
         }

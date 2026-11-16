@@ -89,13 +89,7 @@ enum HUDMenuBarPresentation {
             let usage = readings.contains(gpu ? .gpuUsage : .cpuUsage)
             let power = readings.contains(gpu ? .gpuPower : .cpuPower)
             let temperature = readings.contains(gpu ? .gpuTemperature : .cpuTemperature)
-            if usage, options.selectedUsageMode != .total, let metric = group.appMetric {
-                resources.append(title(metric, group: group))
-                resources.append(value(metric, role: "value", text: text(gpu ? .gpuAppUsage : .cpuAppUsage, suffix: "%"),
-                    reference: gpu ? HUDStyle.horizontalPercentageReference : "\(ProcessInfo.processInfo.activeProcessorCount * 100)%",
-                    group: group, highlighted: options.usageHighlighted))
-            }
-            let totalUsage = usage && options.selectedUsageMode != .app
+            let totalUsage = usage
             guard power || temperature || totalUsage else { continue }
             let metric = group.totalMetric
             resources.append(title(metric, group: group))
@@ -141,17 +135,9 @@ enum HUDMenuBarPresentation {
                     color: valueColor, help: nil, startsMetric: false, resourceGroup: .ram, metric: metric,
                     tightLeading: true, leftAligned: true)]
             }
-            if (usage || details) && options.selectedUsageMode != .total {
-                resources.append(title(.ram, group: .ram))
-                if usage {
-                    resources.append(value(.ram, role: "value", text: text(.memoryAppUsage, suffix: "%"),
-                        reference: HUDStyle.horizontalPercentageReference, group: .ram, highlighted: options.usageHighlighted))
-                }
-                if details { resources += detail(.ram, abbreviation: "PHY", column: .memoryAppPhysical) }
-            }
-            if ((usage || details) && options.selectedUsageMode != .app) || pressure {
+            if (usage || details) || pressure {
                 resources.append(title(.ramTotal, group: .ram))
-                if details && options.selectedUsageMode != .app {
+                if details {
                     resources += detail(.ramTotal, abbreviation: "PHY", column: .memoryPhysical)
                     resources += detail(.ramTotal, abbreviation: "SWP", column: .memorySwap)
                 }
@@ -164,7 +150,7 @@ enum HUDMenuBarPresentation {
                         sizingFont: HUDStyle.readingFont(scale: scale, highlighted: true),
                         pressureMode: options.pressureMode.resolved(for: .horizontal)))
                 }
-                if usage && options.selectedUsageMode != .app {
+                if usage {
                     resources.append(value(.ramTotal, role: "value", text: text(.memoryUsage, suffix: "%"),
                         reference: HUDStyle.horizontalPercentageReference, group: .ram, highlighted: options.usageHighlighted))
                 }
@@ -424,7 +410,7 @@ final class HUDMenuBarController: NSObject {
                 horizontal.setFPSOpacity(fpsCollapsed ? 0 : 1)
                 horizontal.frame = NSRect(x: -fpsOffset, y: 0, width: size.width, height: size.height)
                 collapsedFPSIndicator.isHidden = !fpsCollapsed
-                collapsedFPSIndicator.contentTintColor = HUDStyle.titleColor(for: .deviceInfo, background: background)
+                collapsedFPSIndicator.contentTintColor = HUDStyle.TextStyle.label.color(background: background)
                 collapsedFPSIndicator.frame = NSRect(x: (headerWidth - 12) / 2,
                     y: (size.height - 12) / 2, width: 12, height: 12)
                 let scaled = HUDMenuBarPresentation.scaledSize(visibleSize, menuBarHeight: height)

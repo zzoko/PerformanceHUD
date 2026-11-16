@@ -143,7 +143,7 @@ final class HUDBatteryIndicatorView: NSView {
     }
 
     var powerText: String {
-        if options.power, power == nil, showsUnavailableReadings { return "—" }
+        if options.power, power == nil, showsUnavailableReadings || options.flowMode == .always { return "—" }
         guard options.power, options.flowMode != .auto || flowVisibility.isVisible else { return "" }
         return BatteryPowerRate.text(power)
     }

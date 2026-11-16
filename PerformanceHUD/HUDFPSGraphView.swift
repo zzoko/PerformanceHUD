@@ -118,8 +118,14 @@ enum FPSHistoryCurve {
 final class HUDFPSGraphView: NSView {
     private var history = FPSHistory()
     private var lineColor = NSColor.secondaryLabelColor
+    private var baselineColor = HUDStyle.separatorColor(background: .dark)
     private var hudScale: CGFloat = 1
     private var unavailableTask: Task<Void, Never>?
+
+    // A following category supplies this line when its divider is visible.
+    var showsBaseline = true {
+        didSet { if showsBaseline != oldValue { needsDisplay = true } }
+    }
 
     private var dotHaloRadius: CGFloat { 3 * hudScale }
 
@@ -154,6 +160,7 @@ final class HUDFPSGraphView: NSView {
             invalidateIntrinsicContentSize()
         }
         lineColor = HUDStyle.titleColor(for: .gpuTotal, background: background)
+        baselineColor = HUDStyle.separatorColor(background: background)
         needsDisplay = true
     }
 
@@ -242,6 +249,11 @@ final class HUDFPSGraphView: NSView {
             circle(radius: dotHaloRadius).fill()
             lineColor.setFill()
             circle(radius: 1.6 * hudScale).fill()
+        }
+        if showsBaseline {
+            baselineColor.setFill()
+            NSRect(x: bounds.minX, y: fillBaseline, width: plot.maxX - bounds.minX,
+                   height: 0.5 * hudScale).fill()
         }
     }
 }

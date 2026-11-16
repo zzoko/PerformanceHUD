@@ -87,6 +87,7 @@ final class AppDelegate:
     private var lastMenuBarReadings = HUDPreferences.menuBarOptions.readings
 
     private let hotkeys = HUDHotkeyMonitor()
+    private var shortcutFeedback: HUDShortcutFeedbackController?
 
     private var hudVisibilityMenuItem:
         NSMenuItem?
@@ -94,7 +95,6 @@ final class AppDelegate:
     private var autoHideMenuView: HUDAutoHideMenuView?
 
     private var categoryMenuView: HUDCategoryListView?
-    private var deviceInfoMenuView: HUDDeviceInfoMenuView?
 
     private var sizeMenuView:
         HUDSizeMenuView?
@@ -126,6 +126,8 @@ final class AppDelegate:
     private var batteryMenuView: HUDResourceMenuView?
     private let powerMonitor = PowerMonitor()
     private var packagePowerMenuView: HUDPackagePowerMenuView?
+    private var processMenuView: HUDProcessMenuView?
+    private let cpuCoreMonitor = CPUCoreMonitor()
     private var resourceMenuViews: [HUDResourceGroup: HUDResourceMenuView] = [:]
     private var powerHelperStatusItem: NSMenuItem?
     private var powerHelperSetupItem: NSMenuItem?
@@ -178,6 +180,10 @@ final class AppDelegate:
         // CPU
         setupCPUUsageMonitor()
         setupTotalCPUUsageMonitor()
+        cpuCoreMonitor.onUpdate = { [weak self] sample in
+            self?.hudWindow?.updateCPUCores(sample)
+            self?.logSnapshot.updateCPUCores(sample)
+        }
         temperatureMonitor.onUpdate = { [weak self] sample in
             self?.logSnapshot.set(.cpuTemperature, sample.cpu)
             self?.logSnapshot.set(.gpuTemperature, sample.gpu)
@@ -260,6 +266,9 @@ final class AppDelegate:
         hud.setBatteryOptions(HUDPreferences.batteryOptions)
         hud.setFanOptions(HUDPreferences.fanOptions)
         hud.setMiscOptions(HUDPreferences.miscOptions)
+        hud.setProcessOptions(HUDPreferences.processOptions)
+        hud.setCPUCoreOptions(HUDPreferences.cpuCoreOptions)
+        hud.setGPUCoreOptions(HUDPreferences.gpuCoreOptions)
 
         // Restore metric visibility.
         for metric in HUDMetric.allCases {
@@ -751,6 +760,15 @@ final class AppDelegate:
         }
         fpsMenuView = fpsView
         categories.append(fpsView)
+        let process = HUDProcessMenuView(options: HUDPreferences.processOptions, alignment: HUDPreferences.alignment)
+        process.onChange = { [weak self] options in
+            HUDPreferences.processOptions = options
+            self?.enabledMetrics = HUDPreferences.visibleMetrics
+            self?.hudWindow?.setProcessOptions(options)
+            self?.reconcileMonitoring()
+        }
+        processMenuView = process
+        categories.append(process)
         for group in HUDResourceGroup.allCases {
             let view = HUDResourceMenuView(group: group, options: HUDPreferences.resourceOptions(for: group),
                                           alignment: HUDPreferences.alignment)
@@ -761,6 +779,25 @@ final class AppDelegate:
                 hudWindow?.setResourceOptions(options, for: group)
                 updatePackagePowerMenu()
                 reconcileMonitoring()
+            }
+            view.onCoresChange = { [weak self] options in
+                guard let self else { return }
+                if group == .gpu {
+                    HUDPreferences.gpuCoreOptions = options
+                    hudWindow?.setGPUCoreOptions(options)
+                } else {
+                    HUDPreferences.cpuCoreOptions = options
+                    hudWindow?.setCPUCoreOptions(options)
+                }
+                enabledMetrics = HUDPreferences.visibleMetrics
+                reconcileMonitoring()
+                if options.enabled && (group == .gpu || options.mode.resolved(for: HUDPreferences.alignment).showsValue)
+                    && !powerMonitor.helper.availability.allowsPowerToggle {
+                    self.statusItem?.menu?.cancelTracking()
+                    Task { @MainActor [weak self] in
+                        self?.powerMonitor.helper.requestPowerAccess(restoringHUDSelections: false)
+                    }
+                }
             }
             view.onPowerSetup = { [weak self] in
                 self?.statusItem?.menu?.cancelTracking()
@@ -817,11 +854,6 @@ final class AppDelegate:
             reconcileMonitoring()
         }
         categories.append(miscView)
-        let chipView = HUDDeviceInfoMenuView(options: HUDPreferences.deviceInfoOptions,
-                                             enabled: HUDPreferences.alignment.allows(.deviceInfo))
-        chipView.onChange = { [weak self] options in self?.setDeviceInfoOptions(options) }
-        deviceInfoMenuView = chipView
-        categories.append(chipView)
         categoryViews = categories
         for category in categories {
             category.shouldAllowMenuBarSelection = { [weak self] readings in
@@ -841,7 +873,7 @@ final class AppDelegate:
             .separator()
         )
 
-        let loggingItem = NSMenuItem(title: "Start logging", action: #selector(toggleLogging), keyEquivalent: "")
+        let loggingItem = NSMenuItem(title: "Start logging", action: #selector(toggleLoggingFromMenu), keyEquivalent: "")
         loggingItem.target = self
         loggingMenuItem = loggingItem
         menu.addItem(loggingItem)
@@ -1245,8 +1277,10 @@ final class AppDelegate:
             guard let self else { return }
             switch action {
             case .visibility: toggleHUD(nil)
-            case .logging: toggleLogging()
-            case .appearance: setHUDBackground(hudBackground.next)
+            case .logging: toggleLogging(showFeedback: true)
+            case .appearance:
+                setHUDBackground(hudBackground.next)
+                showShortcutFeedback(.appearance(hudBackground))
             }
         }
         hotkeys.onChange = { [weak self] in self?.updateHotkeyHints() }
@@ -1263,6 +1297,12 @@ final class AppDelegate:
         }
         hudVisibilityMenuItem?.toolTip = hotkeys.errors[.visibility]
         backgroundMenuView?.setShortcut(hotkeys.isActive(.appearance) ? hotkeys.settings[.appearance] : nil)
+    }
+
+    private func showShortcutFeedback(_ feedback: HUDShortcutFeedback) {
+        let controller = shortcutFeedback ?? HUDShortcutFeedbackController()
+        shortcutFeedback = controller
+        controller.show(feedback, on: hudWindow?.presentationScreen, appearance: hudBackground)
     }
 
     private func setHUDBackground(_ background: HUDBackground) {
@@ -1284,6 +1324,7 @@ final class AppDelegate:
         _ sender: NSMenuItem?
     ) {
 
+        shortcutFeedback?.dismiss()
         hudEnabled.toggle()
         if !hudEnabled { stopLogging() }
         updateLoggingMenu()
@@ -1488,6 +1529,9 @@ final class AppDelegate:
         hudWindow?.setBatteryOptions(HUDPreferences.batteryOptions)
         hudWindow?.setFanOptions(HUDPreferences.fanOptions)
         hudWindow?.setMiscOptions(HUDPreferences.miscOptions)
+        hudWindow?.setProcessOptions(HUDPreferences.processOptions)
+        hudWindow?.setCPUCoreOptions(HUDPreferences.cpuCoreOptions)
+        hudWindow?.setGPUCoreOptions(HUDPreferences.gpuCoreOptions)
         hudWindow?.setPackagePowerOptions(HUDPreferences.packagePowerOptions)
         if resetDesign {
             hudWindow?.setAutoHideAnimated(HUDPreferences.autoHideAnimated)
@@ -1495,7 +1539,6 @@ final class AppDelegate:
             hudWindow?.setAlignment(HUDPreferences.alignment)
         }
         hudWindow?.setFPSOptions(HUDPreferences.fpsOptions)
-        hudWindow?.setDeviceInfoOptions(HUDPreferences.deviceInfoOptions)
         if resetDesign {
             hudWindow?.setHUDScale(hudScale)
             hudWindow?.setBackground(hudBackground)
@@ -1517,10 +1560,9 @@ final class AppDelegate:
         hudWindow?.setAlignment(alignment)
         fpsMenuView?.update(options: HUDPreferences.fpsOptions, alignment: alignment)
         miscMenuView?.update(alignment: alignment)
-        resourceMenuViews[.ram]?.update(alignment: alignment)
+        processMenuView?.update(alignment: alignment)
+        for view in resourceMenuViews.values { view.update(alignment: alignment) }
         updatePackagePowerMenu()
-        deviceInfoMenuView?.update(options: HUDPreferences.deviceInfoOptions,
-                                   enabled: alignment.allows(.deviceInfo))
         reconcileMonitoring()
     }
 
@@ -1541,16 +1583,6 @@ final class AppDelegate:
             .setHUDScale(
                 newScale
             )
-    }
-
-    // MARK: - Mac information
-
-    private func setDeviceInfoOptions(_ options: HUDDeviceInfoOptions) {
-        guard HUDPreferences.alignment.allows(.deviceInfo) else { return }
-        HUDPreferences.deviceInfoOptions = options
-        enabledMetrics = HUDPreferences.visibleMetrics
-        hudWindow?.setDeviceInfoOptions(options)
-        reconcileMonitoring()
     }
 
     // MARK: - Close
@@ -1622,6 +1654,8 @@ final class AppDelegate:
         // Avoid restarting all selected-app
         // monitors for the same PID.
         miscMonitor.setTarget(app)
+        hudWindow?.setProcessName(app.localizedName)
+        logSnapshot.setText(.process, app.localizedName)
         guard
             pid != currentPID
         else {
@@ -1666,6 +1700,7 @@ final class AppDelegate:
     private func reconcileMonitoring() {
         let demand = monitoringDemand
         miscMonitor.configure(demand.misc)
+        cpuCoreMonitor.configure(enabled: demand.cpuCores)
         fanMonitor.configure(readings: demand.fans)
         powerMonitor.configure(enabled: demand.power)
         if !demand.power {
@@ -1725,15 +1760,23 @@ final class AppDelegate:
         loggingMenuItem?.isEnabled = csvLogger.isLogging || hudEnabled
     }
 
-    @objc private func toggleLogging() {
+    @objc private func toggleLoggingFromMenu() {
+        // Keyboard equivalents can also arrive through an open status menu.
+        toggleLogging(showFeedback: NSApp.currentEvent?.type == .keyDown)
+    }
+
+    private func toggleLogging(showFeedback: Bool) {
         guard !loggingActionPending else { return }
         loggingActionPending = true
         statusItem?.menu?.cancelTracking()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             defer { loggingActionPending = false }
-            if csvLogger.isLogging { stopLogging(); return }
-            guard hudEnabled else { return }
+            if csvLogger.isLogging { stopLogging(showFeedback: showFeedback); return }
+            guard hudEnabled else {
+                if showFeedback { showShortcutFeedback(.loggingRequiresHUD) }
+                return
+            }
             var dismissExplanation = HUDPreferences.loggingExplanationDismissed
             if !dismissExplanation {
                 let alert = NSAlert()
@@ -1763,6 +1806,7 @@ final class AppDelegate:
                     snapshot.set(.cpuCores, device.cpuCores.map(Double.init))
                     snapshot.set(.cpuEfficiencyCores, device.efficiencyCores.map(Double.init))
                     snapshot.set(.cpuPerformanceCores, device.performanceCores.map(Double.init))
+                    snapshot.set(.cpuSuperCores, device.superCores.map(Double.init))
                     snapshot.set(.gpuCores, device.gpuCores.map(Double.init))
                     // Match the Energy icon; macOS does not expose High Power here.
                     snapshot.set(.lowPowerMode, snapshot.values[.batteryCharge] == nil ? nil
@@ -1773,13 +1817,14 @@ final class AppDelegate:
                 loggingMenuItem?.toolTip = nil
                 updateLoggingMenu()
                 reconcileMonitoring()
+                if showFeedback { showShortcutFeedback(.loggingStarted) }
             } catch {
                 presentLoggingError(error, recovery: csvLogger.recoveryURL, title: "Could not start logging")
             }
         }
     }
 
-    private func stopLogging() {
+    private func stopLogging(showFeedback: Bool = false) {
         guard csvLogger.isLogging else { return }
         // Resolving this location does not create or request unrelated folders.
         let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask)[0]
@@ -1787,6 +1832,7 @@ final class AppDelegate:
             if let saved = try csvLogger.stop(savingTo: desktop) {
                 loggingMenuItem?.toolTip = "Last log saved to \(saved.path)"
             }
+            if showFeedback { showShortcutFeedback(.loggingStopped) }
         } catch {
             presentLoggingError(error, recovery: csvLogger.recoveryURL, title: "Could not save the log")
         }
@@ -1795,6 +1841,7 @@ final class AppDelegate:
     }
 
     private func presentLoggingError(_ error: Error, recovery: URL?, title: String = "Logging stopped") {
+        shortcutFeedback?.dismiss()
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = title
@@ -1826,8 +1873,10 @@ final class AppDelegate:
         miscMonitor.stop()
         fanMonitor.stop()
         powerMonitor.stop()
+        cpuCoreMonitor.stop()
         hudWindow?.shutdown()
         hotkeys.stop()
+        shortcutFeedback?.dismiss()
         if let glassObservation { NotificationCenter.default.removeObserver(glassObservation) }
         glassObservation = nil
         if let presetObservation { NotificationCenter.default.removeObserver(presetObservation) }

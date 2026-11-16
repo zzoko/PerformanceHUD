@@ -10,138 +10,157 @@ import AppKit
         let suite = "PerformanceHUD-device-info-\(UUID().uuidString)"
         let store = UserDefaults(suiteName: suite)!
         defer { store.removePersistentDomain(forName: suite) }
-        precondition(HUDPreferences.deviceInfoOptions(in: store) == .init(enabled: false, chipMode: .full, os: true),
-                     "Fresh settings select Full and OS with the category off")
-        store.set(true, forKey: "hud.metric.deviceInfo")
-        precondition(HUDPreferences.deviceInfoOptions(in: store) == .init(enabled: true), "Existing category switches are preserved")
-        for enabled in [false, true] {
-            for mode in HUDChipDisplayMode.allCases {
-                for os in [false, true] {
-                    let options = HUDDeviceInfoOptions(enabled: enabled, chipMode: mode, os: os)
-                    HUDPreferences.setDeviceInfoOptions(options, in: store)
-                    precondition(HUDPreferences.deviceInfoOptions(in: store) == options, "All independent selections persist")
-                    let captured = HUDPresetConfiguration.capture(in: store)
-                    let decoded = try JSONDecoder().decode(HUDPresetConfiguration.self, from: JSONEncoder().encode(captured))
-                    precondition(decoded.deviceInfo == options, "Saved presets round-trip the complete category")
-                    HUDPreferences.resetOptions(in: store)
-                    decoded.apply(in: store)
-                    precondition(HUDPreferences.deviceInfoOptions(in: store) == options, "Preset apply restores the complete category")
+        precondition(HUDPreferences.miscOptions(in: store) == .init(), "Fresh Misc is off with Full and OS selected")
+
+        // Migrate both former master switches without unexpectedly revealing
+        // readings from the category that was off, including Chip Off/OS-only.
+        for miscEnabled in [false, true] {
+            for macEnabled in [false, true] {
+                for mode in HUDChipDisplayMode.allCases {
+                    for os in [false, true] {
+                        store.removePersistentDomain(forName: suite)
+                        store.set(miscEnabled, forKey: "hud.metric.misc")
+                        store.set(["resolution"], forKey: "hud.misc.readings")
+                        store.set(macEnabled, forKey: "hud.metric.deviceInfo")
+                        store.set(mode.rawValue, forKey: "hud.deviceInfo.chipMode")
+                        store.set(os, forKey: "hud.deviceInfo.os")
+                        let migrated = HUDPreferences.miscOptions(in: store)
+                        var expected: Set<HUDMiscReading> = miscEnabled ? [.resolution] : []
+                        if macEnabled && mode != .off { expected.insert(.chip) }
+                        if macEnabled && os { expected.insert(.os) }
+                        precondition(Set(migrated.visibleReadings) == expected, "Migration preserves visible readings")
+                        precondition(migrated.enabled == (miscEnabled || macEnabled))
+                        precondition(migrated.chipMode == (mode == .tier ? .tier : .full))
+                        HUDPreferences.setMiscOptions(migrated, in: store)
+                        store.set(!macEnabled, forKey: "hud.metric.deviceInfo")
+                        precondition(HUDPreferences.miscOptions(in: store) == migrated, "Old settings cannot override a saved v3.2 choice")
+                        let captured = HUDPresetConfiguration.capture(in: store)
+                        let data = try JSONEncoder().encode(captured)
+                        let encoded = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+                        precondition(encoded["deviceInfo"] == nil, "New presets contain only the merged category")
+                        let decoded = try JSONDecoder().decode(HUDPresetConfiguration.self, from: data)
+                        HUDPreferences.resetOptions(in: store)
+                        decoded.apply(in: store)
+                        precondition(HUDPreferences.miscOptions(in: store) == migrated, "Preset apply restores all merged choices")
+                    }
                 }
             }
         }
         HUDPreferences.resetOptions(in: store)
-        precondition(HUDPreferences.deviceInfoOptions(in: store) == .init(enabled: false, chipMode: .full, os: true),
-                     "Reset restores Full and OS without enabling the category")
+        precondition(HUDPreferences.miscOptions(in: store) == .init(), "Reset clears legacy switches and restores new defaults")
+        precondition(HUDPresetConfiguration.builtIn(.full).misc == .init(enabled: true), "Detailed enables all Misc readings")
+
+        // A v3.1 object preset retains the same Chip/OS selections after loading.
+        var legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(HUDPresetConfiguration.builtIn(.balanced))) as! [String: Any]
+        legacy["misc"] = ["enabled": false, "readings": ["process", "thermal"]]
+        legacy["deviceInfo"] = ["enabled": true, "chipMode": "full", "os": false] as [String: Any]
+        let migratedPreset = try JSONDecoder().decode(HUDPresetConfiguration.self, from: JSONSerialization.data(withJSONObject: legacy))
+        precondition(migratedPreset.misc == .init(enabled: true, readings: [.chip]), "Old Full preset moves into Misc without revealing other readings")
 
         let info = HUDDeviceInfo(chipName: "M5", macOSVersion: "macOS 27.2.1",
-            efficiencyCores: 6, performanceCores: 4, cpuCores: 10, gpuCores: 10)
-        precondition(info.cpuConfiguration == "(6 E-Cores + 4 P-Cores)" && info.gpuConfiguration == "(10 GPU-Cores)")
+            efficiencyCores: 6, cpuCores: 10, gpuCores: 10, superCores: 4)
+        precondition(info.cpuConfiguration == "4 Super + 6 Efficiency" && info.gpuConfiguration == "10")
         let unknown = HUDDeviceInfo(chipName: "Mac", macOSVersion: "macOS 27", cpuCores: 8)
-        precondition(unknown.cpuConfiguration == "(8 CPU-Cores)" && unknown.gpuConfiguration == "GPU cores unavailable",
-                     "Unknown topology must not invent a split or GPU count")
+        precondition(unknown.cpuConfiguration == "8" && unknown.gpuConfiguration == "Not available")
         let detected = HUDDeviceInfo.current
-        if let e = detected.efficiencyCores, let p = detected.performanceCores {
-            precondition(e + p == detected.cpuCores, "Detected CPU split matches the installed physical core count")
+        if !detected.coreTypes.isEmpty {
+            precondition(detected.coreTypes.reduce(0) { $0 + $1.count } == detected.cpuCores, "CPU split matches installed physical cores")
         }
-        print("LIVE: \(detected.chipName) \(detected.cpuConfiguration) \(detected.gpuConfiguration)")
 
-        let menu = HUDDeviceInfoMenuView(options: .init(enabled: true), enabled: true)
+        let menu = HUDMiscMenuView(options: .init(enabled: true))
+        let chip: NSButton = member(menu, "chip")
+        let os: NSButton = member(menu, "os")
+        let modes: [NSButton] = member(menu, "chipModes")
         menu.layoutSubtreeIfNeeded()
-        let master: NSButton = member(menu, "master")
-        let selector: NSSegmentedControl = member(menu, "chipMode")
-        let osControl: HUDReadingCheckbox = member(menu, "os")
-        precondition(selector.selectedSegment == 1 && osControl.state == .on, "Menu defaults to Full and OS")
-        precondition((0..<selector.segmentCount).map { selector.label(forSegment: $0)! } == ["Tier", "Full", "Off"])
-        precondition(selector.frame.minX == HUDCategoryLayout.modeLeading && selector.frame.width == HUDCategoryLayout.modeWidth,
-                     "Chip uses the same selector column as Charge and other modes")
-        var selected = HUDDeviceInfoOptions(enabled: true)
+        let choices: [NSButton] = member(menu, "choices")
+        precondition(type(of: chip) == type(of: choices[0]) && type(of: os) == type(of: choices[0]),
+                     "OS and Chip reuse the existing Misc pill style")
+        precondition(os.frame.height == choices[0].frame.height && chip.frame.height == choices[0].frame.height)
+        let chipGroup = chip.superview!
+        precondition(os.superview === chipGroup.superview && modes.allSatisfy { $0.superview === chipGroup },
+                     "Chip and both modes share one capsule after OS")
+        precondition(os.frame.maxX < chipGroup.frame.minX && chip.frame.maxX < modes[0].frame.minX)
+        precondition(modes[0].frame.maxX == modes[1].frame.minX && modes.allSatisfy { chipGroup.bounds.contains($0.frame) })
+        precondition(chipGroup.frame.height == os.frame.height && modes.allSatisfy { abs($0.frame.midY - chip.frame.midY) < 0.1 })
+        var selected = HUDMiscOptions(enabled: true)
         menu.onChange = { selected = $0 }
-        selector.selectedSegment = 1
-        selector.sendAction(selector.action, to: selector.target)
-        precondition(selected.chipMode == .full && selected.os)
-        osControl.performClick(nil)
-        precondition(!selected.os && selected.chipMode == .full, "OS changes independently")
-        master.performClick(nil)
-        precondition(!selected.enabled && selected.chipMode == .full && !selected.os && !selector.isEnabled,
-                     "Master-off remembers both choices")
-        master.performClick(nil)
-        precondition(selected.enabled && selector.selectedSegment == 1 && osControl.state == .off)
-        menu.update(options: selected, enabled: false)
-        precondition(!master.isEnabled && !selector.isEnabled && !osControl.isEnabled)
-        menu.update(options: selected, enabled: true)
-        precondition(master.state == .on && selector.selectedSegment == 1 && osControl.state == .off)
+        precondition(modes.map(\.title) == ["Tier", "Full"])
+        chip.performClick(nil)
+        precondition(!selected.readings.contains(.chip) && modes.allSatisfy { !$0.isEnabled } && selected.readings.contains(.os))
+        chip.performClick(nil)
+        modes[0].performClick(nil)
+        precondition(selected.chipMode == .tier && modes[0].state == .on && modes[1].state == .off)
+        modes[0].performClick(nil)
+        precondition(selected.chipMode == .tier && modes[0].state == .on, "Clicking the selected mode keeps one selected")
+        os.performClick(nil)
+        precondition(!selected.readings.contains(.os) && selected.readings.contains(.chip))
+        menu.update(alignment: .horizontal)
+        precondition(!chip.isEnabled && !os.isEnabled && modes.allSatisfy { !$0.isEnabled })
+        menu.update(alignment: .vertical)
+        precondition(chip.isEnabled && chip.state == .on && os.state == .off && modes[0].state == .on && modes[1].state == .off)
 
-        let previous = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
-        UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "off", "hud.alignment": "vertical"],
+        UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "off",
+            "hud.alignment": "vertical", "hud.metric.misc": false, "hud.misc.chipMode": "full"],
             forName: UserDefaults.argumentDomain)
-        defer { UserDefaults.standard.setVolatileDomain(previous, forName: UserDefaults.argumentDomain) }
         let hud = HUDWindowController()
         defer { hud.shutdown() }
-        let panel: HUDPanel = member(hud, "panel")
-        panel.alphaValue = 0
-        hud.setHUDEnabled(true)
-        hud.setAutoHideAnimated(false)
-        hud.setAutoHideMode(.off)
+        hud.setHUDEnabled(false)
         hud.setPackagePowerOptions(.init(enabled: false))
         for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
-        let view: HUDDeviceInfoView = member(hud, "deviceInfoView")
-        let chip: NSTextField = member(view, "chipLabel")
-        let version: NSTextField = member(view, "versionLabel")
-        let cpu: NSTextField = member(view, "cpuLabel")
-        let gpu: NSTextField = member(view, "gpuLabel")
-        func top(_ label: NSTextField) -> CGFloat { view.bounds.maxY - label.frame.maxY }
+        let panel: HUDPanel = member(hud, "panel")
+        let view: HUDMiscView = member(hud, "miscView")
+        let fields: [HUDMiscReading: (NSTextField, NSTextField)] = member(view, "fields")
+        let cores: [(NSTextField, NSTextField)] = member(view, "coreFields")
         for appearance in [HUDBackground.light, .dark] {
             hud.setBackground(appearance)
             for factor in [0.5, 0.75, 1, 1.25, 1.5, 2] {
                 let scale = HUDScale(rawValue: factor)
                 hud.setHUDScale(scale)
-                hud.setDeviceInfoOptions(.init(enabled: true, chipMode: .tier))
+                hud.setMiscOptions(.init(enabled: true, readings: [.chip, .os], chipMode: .tier))
                 panel.contentView?.layoutSubtreeIfNeeded()
-                let originalSize = panel.frame.size
-                let chipTop = top(chip), versionTop = top(version)
-                let chipLeft = chip.frame.minX, versionRight = version.frame.maxX
-                hud.setDeviceInfoOptions(.init(enabled: true, chipMode: .full))
+                let tierSize = panel.frame.size
+                let chipTop = fields[.chip]!.0.frame.minY
+                let osTop = fields[.os]!.0.frame.minY
+                hud.setMiscOptions(.init(enabled: true, readings: [.chip, .os]))
                 panel.contentView?.layoutSubtreeIfNeeded()
-                precondition(panel.frame.width == originalSize.width && abs(panel.frame.height - originalSize.height - 36 * factor) < 0.6,
-                             "Full adds two rows while preserving HUD width")
-                precondition(abs(top(chip) - chipTop) < 0.01 && abs(top(version) - versionTop) < 0.01
-                    && chip.frame.minX == chipLeft && version.frame.maxX == versionRight,
-                    "Full preserves the original chip/OS positions")
-                for label in [chip, version, cpu, gpu] {
-                    precondition(!label.isHidden && view.bounds.insetBy(dx: -2, dy: -1).contains(label.frame),
-                                 "Every Full reading fits inside the footer at \(factor)×")
-                    precondition(label.frame.width + 0.5 >= label.intrinsicContentSize.width, "No clipped core text")
-                    precondition(label.font == HUDStyle.smallLabelFont(scale: scale)
-                        && label.textColor == HUDStyle.TextStyle.label.color(background: appearance),
-                        "All device information uses the shared Label style")
+                precondition(panel.frame.width == tierSize.width && abs(panel.frame.height - tierSize.height - 36 * factor) < 0.6,
+                             "Full adds two rows without changing HUD width")
+                precondition(fields[.chip]!.0.frame.minY == chipTop)
+                let rows = [fields[.os]!, fields[.chip]!] + cores
+                for (title, value) in rows {
+                    precondition(!title.isHidden && !value.isHidden)
+                    precondition((title.alignment == .left || title.alignment == .natural) && value.alignment == .right, "All rows follow Misc layout")
+                    precondition(title.font == HUDStyle.smallLabelFont(scale: scale)
+                        && title.textColor == HUDStyle.TextStyle.label.color(background: appearance))
+                    precondition(value.font == HUDStyle.readingFont(scale: scale, highlighted: false)
+                        && value.textColor == HUDStyle.TextStyle.reading.color(background: appearance))
+                    precondition(value.alignmentRect(forFrame: value.frame).minX > title.alignmentRect(forFrame: title.frame).maxX, "Label and reading have a gap")
+                    precondition(value.frame.width + 0.5 >= value.intrinsicContentSize.width, "Core values fit at \(factor)×")
+                    precondition(view.bounds.insetBy(dx: -2, dy: -1).contains(value.frame))
+                    precondition(abs(value.frame.maxX - rows[0].1.frame.maxX) < 0.1, "Values share a trailing column")
                 }
-                precondition(cpu.alignment == .left && gpu.alignment == .left
-                    && cpu.frame.minX == chip.frame.minX && gpu.frame.minX == chip.frame.minX,
-                    "Both core configurations align beneath the chip name")
-                precondition(top(cpu) > top(version) && top(gpu) > top(cpu), "CPU and GPU details are added below the existing row")
-                hud.setDeviceInfoOptions(.init(enabled: true, chipMode: .full, os: false))
-                precondition(version.isHidden && !cpu.isHidden && !gpu.isHidden)
-                hud.setDeviceInfoOptions(.init(enabled: true, chipMode: .off, os: true))
+                precondition(rows.map { $0.0.frame.minY } == rows.map { $0.0.frame.minY }.sorted(), "OS, Chip, CPU, GPU order")
+                hud.setMiscOptions(.init(enabled: true, readings: [.os]))
                 panel.contentView?.layoutSubtreeIfNeeded()
-                precondition(chip.isHidden && cpu.isHidden && gpu.isHidden && !version.isHidden,
-                             "Chip Off leaves OS visible at its original position")
-                precondition(abs(top(version) - versionTop) < 0.01 && version.frame.maxX == versionRight)
-                hud.setDeviceInfoOptions(.init(enabled: true, chipMode: .off, os: false))
-                let enabled: Set<HUDMetric> = member(hud, "enabledMetrics")
-                precondition(!enabled.contains(.deviceInfo) && view.isHidden, "No empty footer or divider when both readings are off")
+                precondition(fields[.chip]!.0.isHidden && cores.allSatisfy { $0.0.isHidden } && !fields[.os]!.0.isHidden)
+                precondition(fields[.os]!.0.frame.minY == osTop, "OS-only has no empty rows before it")
+                hud.setMiscOptions(.init(enabled: true, readings: []))
+                precondition(view.isHidden, "Empty Misc has no content or trailing divider")
             }
         }
         var selection = HUDLogSelection(fps: false, resources: [:], package: .init(enabled: false),
             fans: .init(enabled: false), battery: .init(enabled: false, temperature: false, charge: false),
-            deviceInfo: .init(enabled: true, chipMode: .full), alignment: .vertical)
-        precondition(selection.columns(fanSample: .noFans) == [.chip, .cpuCores, .cpuEfficiencyCores, .cpuPerformanceCores, .gpuCores, .os])
-        selection.deviceInfo.chipMode = .off
+            alignment: .vertical, misc: .init(enabled: true, readings: [.chip, .os]))
+        precondition(selection.columns(fanSample: .noFans) == [.os, .chip, .cpuCores, .cpuEfficiencyCores, .cpuPerformanceCores, .cpuSuperCores, .gpuCores])
+        selection.misc.chipMode = .tier
+        precondition(selection.columns(fanSample: .noFans) == [.os, .chip])
+        selection.misc.readings.remove(.chip)
         precondition(selection.columns(fanSample: .noFans) == [.os])
-        selection.deviceInfo.os = false
+        selection.misc.enabled = false
         precondition(selection.columns(fanSample: .noFans).isEmpty)
-        selection.deviceInfo = .init(enabled: true, chipMode: .full)
+        selection.misc.enabled = true
         selection.alignment = .horizontal
-        precondition(selection.columns(fanSample: .noFans).isEmpty, "Horizontal retains the existing category restriction")
-        print("PASS: hardware counts/fallbacks, preferences/reset, preset round-trip, menu controls, Full layout, independent OS and CSV selections")
+        precondition(selection.columns(fanSample: .noFans).isEmpty)
+        print("PASS: Mac-to-Misc settings/preset migration, reset, independent Chip/OS controls, core layout, typography, and CSV selections")
     }
 }

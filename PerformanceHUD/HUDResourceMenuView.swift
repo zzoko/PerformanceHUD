@@ -2,6 +2,9 @@ import AppKit
 
 @MainActor
 final class HUDResourceMenuView: HUDCategoryMenuView {
+    var onCoresChange: ((HUDCoreOptions) -> Void)?
+    private var coreOptions = HUDPreferences.cpuCoreOptions
+    private var coreModeControl: NSSegmentedControl?
     var onChange: ((HUDResourceOptions) -> Void)?
     var onPowerSetup: (() -> Void)?
     private var powerAvailability: PowerHelperAvailability = .ready
@@ -9,7 +12,6 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     private let group: HUDResourceGroup?
     private var options: HUDResourceOptions
     private var controls: [Int: NSButton] = [:]
-    private var usageModeControl: NSSegmentedControl?
     private var heatWarningControl: HUDHeatWarningMenuView?
     private var pressureModeControl: NSSegmentedControl?
     private var pressureStyleControl: NSSegmentedControl?
@@ -38,7 +40,8 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
 
     init(group: HUDResourceGroup?, options: HUDResourceOptions, alignment: HUDAlignment = .vertical) {
         self.group = group
-        self.options = options
+        coreOptions = group == .gpu ? HUDPreferences.gpuCoreOptions : HUDPreferences.cpuCoreOptions
+        self.options = options.systemOnly
         self.alignment = alignment
         super.init()
         let title = group?.title ?? "Battery"
@@ -115,15 +118,6 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                 pressureModeControl = control
                 row.mode = control
             }
-            if tag == 7 {
-                let control = NSSegmentedControl(labels: ["Total", "App", "Both"], trackingMode: .selectOne,
-                    target: self, action: #selector(usageModeChanged(_:)))
-                control.font = .menuFont(ofSize: 0)
-                control.segmentStyle = .rounded
-                control.setAccessibilityLabel("\(title) usage mode")
-                usageModeControl = control
-                row.mode = control
-            }
             rows.append(row)
             if group == .ram && tag == 8 {
                 let styles = NSSegmentedControl(labels: ["A1", "A2", "B1", "B2"],
@@ -131,6 +125,25 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                 styles.setAccessibilityLabel("Pressure style: A1 Meter, A2 Colored meter, B1 Graph, B2 Colored graph")
                 pressureStyleControl = styles
                 rows.append(.init(reading: NSView(), mode: styles))
+            }
+        }
+        if group == .cpu || group == .gpu {
+            let check = HUDReadingCheckbox(title: "Cores", supportsEmphasis: true)
+            check.tag = 9; check.target = self; check.action = #selector(changed(_:))
+            check.setControlAccessibilityLabel("\(title) Cores")
+            check.onHighlight = { [weak self] in
+                guard let self else { return }
+                coreOptions.highlighted.toggle(); refresh(); onCoresChange?(coreOptions)
+            }
+            controls[9] = check
+            if group == .cpu {
+                let modes = NSSegmentedControl(labels: HUDCoreDisplayMode.allCases.map(\.title), trackingMode: .selectOne,
+                                               target: self, action: #selector(coreModeChanged(_:)))
+                modes.setAccessibilityLabel("\(title) core display mode")
+                coreModeControl = modes
+                rows.append(.init(reading: check, mode: modes))
+            } else {
+                rows.append(.init(reading: check))
             }
         }
         readingRows = rows
@@ -199,6 +212,10 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
 
     @objc private func changed(_ sender: NSButton) {
         guard sender.isEnabled else { return }
+        if sender.tag == 9 {
+            coreOptions.enabled = sender.state == .on
+            refresh(); onCoresChange?(coreOptions); return
+        }
         if group == .ane && sender.tag == 0 {
             guard powerAvailability.allowsPowerToggle else {
                 // Remember the requested category while helper setup controls
@@ -277,11 +294,11 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             heatWarning: options.heatWarning))
     }
 
-    @objc private func usageModeChanged(_ sender: NSSegmentedControl) {
-        guard sender.isEnabled, HUDUsageMode.allCases.indices.contains(sender.selectedSegment) else { return }
-        options.selectUsageMode(HUDUsageMode.allCases[sender.selectedSegment])
-        refresh()
-        onChange?(options)
+    @objc private func coreModeChanged(_ sender: NSSegmentedControl) {
+        guard alignment == .vertical, sender.isEnabled,
+              HUDCoreDisplayMode.allCases.indices.contains(sender.selectedSegment) else { refresh(); return }
+        coreOptions.mode = HUDCoreDisplayMode.allCases[sender.selectedSegment]
+        refresh(); onCoresChange?(coreOptions)
     }
 
     private func readingKind(for tag: Int) -> HUDReadingKind? {
@@ -319,6 +336,18 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     private func refresh() {
+        let coreMode = coreOptions.mode.resolved(for: alignment)
+        controls[9]?.state = coreOptions.enabled ? .on : .off
+        controls[9]?.isEnabled = options.enabled
+        (controls[9] as? HUDReadingCheckbox)?.emphasized = coreOptions.highlighted
+        (controls[9] as? HUDReadingCheckbox)?.highlightAvailable = group == .gpu || coreMode.showsValue
+        coreModeControl?.selectedSegment = HUDCoreDisplayMode.allCases.firstIndex(of: coreMode) ?? 2
+        coreModeControl?.isEnabled = options.enabled && coreOptions.enabled
+        for (index, mode) in HUDCoreDisplayMode.allCases.enumerated() {
+            coreModeControl?.setEnabled(options.enabled && coreOptions.enabled
+                && (alignment == .vertical || mode == .value), forSegment: index)
+        }
+        coreModeControl?.toolTip = alignment == .horizontal ? "Horizontal shows GHz only. Your Vertical mode is retained." : nil
         if group == nil {
             let available = batteryAvailability != .unavailable
             master.isEnabled = available
@@ -363,10 +392,8 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                 }
             }
         }
-        controls[8]?.isEnabled = options.enabled && options.selectedUsageMode != .app
+        controls[8]?.isEnabled = options.enabled
         (controls[8] as? HUDReadingCheckbox)?.highlightAvailable = options.pressureMode == .text
-        usageModeControl?.selectedSegment = HUDUsageMode.allCases.firstIndex(of: options.selectedUsageMode) ?? 0
-        usageModeControl?.isEnabled = options.enabled || isPinned(7) || isPinned(5)
         if let usage = controls[7] as? HUDReadingCheckbox {
             usage.emphasized = options.usageHighlighted
             usage.setAccessibilityValue(!options.usageVisible ? "Off" : usage.emphasized ? "Highlighted" : "Faint")

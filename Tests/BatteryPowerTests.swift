@@ -234,6 +234,8 @@ import IOKit.ps
             view.setOptions(.init(enabled: true, temperature: true, charge: true, flowMode: .always))
             view.update(percentage: 80, source: .powerAdapter, temperature: 33, power: 0, now: 107)
             check(view.powerText == "0.0 W", "Always includes idle zeros")
+            view.update(percentage: 80, source: .powerAdapter, temperature: 33, power: nil, now: 108)
+            check(view.powerText == "—", "Always shows a dash for unavailable watts in both layouts")
         }
 
         // Exercise actual window resizing with only Battery enabled. No CPU/FPS
@@ -335,7 +337,9 @@ import IOKit.ps
                                     let minimumGap = (horizontal ? 7.9 : 0.5) * factor
                                     check(rect.minX >= labelRight + minimumGap, "Power does not collide with its label: horizontal=\(horizontal), scale=\(factor), mask=\(mask), watts=\(String(describing: reading)), width=\(width), labelRight=\(labelRight), powerLeft=\(rect.minX)")
                                 }
-                            } else { check(view.powerText.isEmpty, "Hidden/unavailable power does not draw") }
+                            } else if options.power {
+                                check(view.powerText == "—", "Enabled unavailable power shows a dash")
+                            } else { check(view.powerText.isEmpty, "Disabled power does not draw") }
                             if options.temperature {
                                 let temperatureRect = view.temperatureTextRect
                                 check(view.bounds.insetBy(dx: -0.1, dy: -0.1).contains(temperatureRect), "Temperature fits its row")

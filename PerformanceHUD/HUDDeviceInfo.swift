@@ -3,10 +3,13 @@ import Darwin
 import IOKit
 
 enum HUDChipDisplayMode: String, CaseIterable, Codable {
+    // Off is retained only for decoding pre-v3.2 Mac selections.
     case tier, full, off
+    static let selectable: [Self] = [.tier, .full]
     var title: String { rawValue.capitalized }
 }
 
+/// Legacy Mac category options, retained only for preferences/preset migration.
 struct HUDDeviceInfoOptions: Codable, Equatable {
     var enabled = false
     var chipMode: HUDChipDisplayMode = .full
@@ -25,26 +28,28 @@ nonisolated struct HUDDeviceInfo {
     var performanceCores: Int?
     var cpuCores: Int?
     var gpuCores: Int?
+    var superCores: Int? = nil
+    var coreTypes: [HUDCPUCoreType] = []
 
     static let current: HUDDeviceInfo = {
-        let cores = readCPUCoreCounts()
+        let cores = readCPUCoreTypes()
         return HUDDeviceInfo(chipName: chipName(from: readString("machdep.cpu.brand_string")),
             macOSVersion: versionText(ProcessInfo.processInfo.operatingSystemVersion),
-            efficiencyCores: cores.efficiency, performanceCores: cores.performance,
-            cpuCores: readCount("hw.physicalcpu_max"), gpuCores: readGPUCoreCount())
+            efficiencyCores: cores.isEmpty ? nil : cores.first { $0.name == "Efficiency" }?.count ?? 0,
+            performanceCores: cores.isEmpty ? nil : cores.first { $0.name == "Performance" }?.count ?? 0,
+            cpuCores: readCount("hw.physicalcpu_max"), gpuCores: readGPUCoreCount(),
+            superCores: cores.isEmpty ? nil : cores.first { $0.name == "Super" }?.count ?? 0, coreTypes: cores)
     }()
 
     var cpuConfiguration: String {
-        if let efficiencyCores, let performanceCores {
-            return "(\(efficiencyCores) E-Cores + \(performanceCores) P-Cores)"
-        }
-        if let cpuCores { return "(\(cpuCores) CPU-Cores)" }
-        return "CPU cores unavailable"
+        if !coreTypes.isEmpty { return coreTypes.map { "\($0.count) \($0.name)" }.joined(separator: " + ") }
+        let parts = [("Super", superCores), ("Performance", performanceCores), ("Efficiency", efficiencyCores)]
+            .compactMap { name, count in count.flatMap { $0 > 0 ? "\($0) \(name)" : nil } }
+        if !parts.isEmpty { return parts.joined(separator: " + ") }
+        return cpuCores.map(String.init) ?? "Not available"
     }
 
-    var gpuConfiguration: String {
-        gpuCores.map { "(\($0) GPU-Cores)" } ?? "GPU cores unavailable"
-    }
+    var gpuConfiguration: String { gpuCores.map(String.init) ?? "Not available" }
 
     static func chipName(from brand: String?) -> String {
         guard let brand = brand?.trimmingCharacters(in: .whitespacesAndNewlines), !brand.isEmpty else {
@@ -77,21 +82,17 @@ nonisolated struct HUDDeviceInfo {
         return Int(value)
     }
 
-    private static func readCPUCoreCounts() -> (efficiency: Int?, performance: Int?) {
-        guard let levels = readCount("hw.nperflevels"), levels <= 16 else { return (nil, nil) }
-        var efficiency = 0, performance = 0
-        for index in 0..<levels {
+    private static func readCPUCoreTypes() -> [HUDCPUCoreType] {
+        guard let levels = readCount("hw.nperflevels"), levels <= 16 else { return [] }
+        let types: [HUDCPUCoreType] = (0..<levels).compactMap { index in
             let prefix = "hw.perflevel\(index)"
-            guard let name = readString("\(prefix).name")?.lowercased(),
-                  let count = readCount("\(prefix).physicalcpu_max") else { return (nil, nil) }
-            switch name {
-            case "efficiency": efficiency += count
-            // macOS reports M5 performance cores as Super.
-            case "performance", "super": performance += count
-            default: return (nil, nil)
-            }
+            guard let name = readString("\(prefix).name"), !name.isEmpty,
+                  let count = readCount("\(prefix).physicalcpu_max") else { return nil }
+            return HUDCPUCoreType(name: name, count: count)
         }
-        return efficiency > 0 && performance > 0 ? (efficiency, performance) : (nil, nil)
+        guard types.count == levels, Set(types.map(\.name)).count == levels,
+              types.reduce(0, { $0 + $1.count }) == readCount("hw.physicalcpu_max") else { return [] }
+        return types
     }
 
     private static func readGPUCoreCount() -> Int? {
@@ -103,4 +104,10 @@ nonisolated struct HUDDeviceInfo {
               number.intValue > 0 else { return nil }
         return number.intValue
     }
+}
+
+/// Preserve every name reported by macOS, including machines without E-cores.
+nonisolated struct HUDCPUCoreType: Equatable, Sendable {
+    let name: String
+    let count: Int
 }

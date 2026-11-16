@@ -1,7 +1,11 @@
 import Foundation
 
 enum HUDMiscReading: String, CaseIterable, Codable {
-    case process, resolution, refreshRate, gameMode, thermal
+    case process, resolution, refreshRate, gameMode, thermal, os, chip
+
+    // Process is retained for decoding older settings only.
+    static let allCases: [Self] = [.resolution, .refreshRate, .gameMode, .thermal, .os, .chip]
+    static let liveReadings: [Self] = [ .resolution, .refreshRate, .gameMode, .thermal]
 
     var title: String {
         switch self {
@@ -10,6 +14,8 @@ enum HUDMiscReading: String, CaseIterable, Codable {
         case .refreshRate: return "Refresh rate"
         case .gameMode: return "Game Mode"
         case .thermal: return "Thermal"
+        case .os: return "OS"
+        case .chip: return "Chip"
         }
     }
 }
@@ -17,8 +23,42 @@ enum HUDMiscReading: String, CaseIterable, Codable {
 struct HUDMiscOptions: Codable, Equatable {
     var enabled = false
     var readings = Set(HUDMiscReading.allCases)
+    var chipMode: HUDChipDisplayMode = .full
     var visibleReadings: [HUDMiscReading] {
         enabled ? HUDMiscReading.allCases.filter { readings.contains($0) } : []
+    }
+
+    var showsCoreCounts: Bool { visibleReadings.contains(.chip) && chipMode == .full }
+    var rowCount: Int { visibleReadings.count + (showsCoreCounts ? 2 : 0) }
+
+    // Merge the former independent categories without revealing readings that
+    // were hidden. If both were off, retain their individual selections.
+    func mergingLegacyMac(_ mac: HUDDeviceInfoOptions) -> Self {
+        var merged = self
+        merged.enabled = enabled || mac.enabled
+        if mac.enabled && !enabled { merged.readings.removeAll() }
+        if mac.enabled || !merged.enabled {
+            if mac.chipMode != .off { merged.readings.insert(.chip) }
+            if mac.os { merged.readings.insert(.os) }
+        }
+        merged.chipMode = mac.chipMode == .tier ? .tier : .full
+        return merged
+    }
+
+    private enum CodingKeys: String, CodingKey { case enabled, readings, chipMode }
+
+    init(enabled: Bool = false, readings: Set<HUDMiscReading> = Set(HUDMiscReading.allCases),
+         chipMode: HUDChipDisplayMode = .full) {
+        self.enabled = enabled
+        self.readings = readings
+        self.chipMode = chipMode == .tier ? .tier : .full
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try values.decode(Bool.self, forKey: .enabled)
+        readings = try values.decode(Set<HUDMiscReading>.self, forKey: .readings)
+        chipMode = try values.decodeIfPresent(HUDChipDisplayMode.self, forKey: .chipMode) == .tier ? .tier : .full
     }
 }
 
@@ -71,13 +111,15 @@ struct HUDMiscSample: Equatable {
     var gameMode: Bool?
     var thermal: String?
 
-    func text(for reading: HUDMiscReading) -> String {
+    func text(for reading: HUDMiscReading, info: HUDDeviceInfo = .current) -> String {
         switch reading {
         case .process: return process ?? ""
         case .resolution: return resolution?.text ?? "-"
         case .refreshRate: return refreshRate?.text ?? ""
         case .gameMode: return gameMode.map { $0 ? "on" : "off" } ?? ""
         case .thermal: return thermal ?? ""
+        case .chip: return info.chipName
+        case .os: return info.macOSVersion
         }
     }
 }

@@ -14,7 +14,7 @@ import AppKit
   hud.setFPSOptions(.init(enabled: true, mode: .both))
   hud.setPackagePowerOptions(.init(enabled: true))
   hud.setBatteryOptions(.init(enabled: true, temperature: true, charge: true))
-  hud.setMetricEnabled(.deviceInfo, enabled: true)
+  hud.setMiscOptions(.init(enabled: true, readings: [.chip, .os]))
   hud.setFanOptions(.init(enabled: true, average: false))
   hud.updateFans(.init(status: .ready, fans: [.init(id: 0, rpm: 3000, maximumRPM: 6000), .init(id: 1, rpm: 3500, maximumRPM: 6000)]))
   let container: NSView = member(hud, "container")
@@ -27,6 +27,7 @@ import AppKit
   for index in 0..<60 { graph.append(144 + sin(Double(index) / 4) * 10) }
   var issues = Set<String>()
   var verticalWidths: [HUDScale: CGFloat] = [:]
+  let scales: [HUDScale] = CommandLine.arguments.contains("--normal-size") ? [.normal] : HUDScale.allCases
   func check(_ value: Bool, _ message: String) { if !value { issues.insert(message) } }
   for alignment in HUDAlignment.allCases {
    hud.setAlignment(alignment)
@@ -35,14 +36,14 @@ import AppKit
      for group in HUDResourceGroup.allCases {
       hud.setResourceOptions(.init(enabled: true, temperature: group.supportsTemperature, totalUse: group.supportsTotalUse, focusedApp: mode == .both && group.appMetric != nil, power: group.supportsPower, details: true, highlighted: highlighted ? Set(HUDReadingKind.allCases) : [], usageMode: mode), for: group)
      }
-     for scale in HUDScale.allCases {
+     for scale in scales {
       hud.setHUDScale(scale)
       hud.updateFPS(144)
       hud.updatePower(.init(cpu: 99.9, gpu: 88.8, package: 196.7, ane: 8))
       hud.updateTemperatures(.init(cpu: 99, gpu: 89))
       hud.updateMetric(.cpuTotal, value: "100%")
       hud.updateMetric(.gpuTotal, value: "100%")
-      hud.updateMetric(.cpu, value: "1200%")
+      hud.updateMetric(.cpu, value: "100%")
       hud.updateMetric(.gpu, value: "100%")
       for metric in [HUDMetric.ramTotal, .ram] {
        hud.updateRAM(metric, usage: .init(percentage: 100, usedBytes: 128 * 1_073_741_824, swapUsedBytes: 32 * 1_073_741_824))
@@ -81,15 +82,19 @@ import AppKit
        }
       } else {
        let labels: [String: NSTextField] = member(horizontal, "labels")
-       let visible = labels.values.filter { !$0.isHidden }.sorted { $0.frame.minX < $1.frame.minX }
+       // Detail values reserve space while their short captions follow the
+       // actual digits/dash. Sort by occupied text too: the value's empty frame
+       // can begin before its own caption without the text overlapping.
+       let visible = labels.values.filter { !$0.isHidden }.map { label -> (NSTextField, NSRect) in
+        var rect = label.alignmentRect(forFrame: label.frame)
+        let width = label.intrinsicContentSize.width
+        if label.alignment == .right { rect.origin.x = rect.maxX - width }
+        else if label.alignment == .center { rect.origin.x = rect.midX - width / 2 }
+        rect.size.width = width
+        return (label, rect)
+       }.sorted { $0.1.minX < $1.1.minX }
        for (left, right) in zip(visible, visible.dropFirst()) {
-        // Right-aligned memory values reserve extra width so readings stay stable.
-        // Compare occupied text, not the deliberately overlapping empty frame space.
-        let rightTextStart = right.alignment == .right
-            ? right.frame.maxX - right.intrinsicContentSize.width : right.frame.minX
-        let leftTextEnd = left.alignment == .left
-            ? left.frame.minX + left.intrinsicContentSize.width : left.frame.maxX
-        check(leftTextEnd <= rightTextStart + 1, "Overlapping horizontal labels at \(scale.rawValue): \(left.stringValue) / \(right.stringValue)")
+        check(left.1.maxX <= right.1.minX + 1, "Overlapping horizontal labels at \(scale.rawValue): \(left.0.stringValue) / \(right.0.stringValue)")
        }
       }
       if CommandLine.arguments.contains("--preview"), mode == .total && !highlighted && [0.5, 1, 1.5, 2].contains(scale.rawValue) {
@@ -103,7 +108,7 @@ import AppKit
    }
   }
   for issue in issues.sorted().prefix(40) { print(issue) }
-  print("RESULT: \(issues.count) issues across 151 scales, both layouts, Total/Both, faint/bold, pressure transitions")
+  print("RESULT: \(issues.count) issues across \(scales.count) scales, both layouts, Total/Both, faint/bold, pressure transitions")
   hud.shutdown()
   if !issues.isEmpty { exit(1) }
  }

@@ -6,6 +6,8 @@ struct HUDMonitoringDemand {
     var fps = false
     var gpuUsage = false
     var gpuAppUsage = false
+    var cpuCores = false
+    var gpuCores = false
     var cpuUsage = false
     var cpuAppUsage = false
     var totalMemory = false
@@ -30,6 +32,14 @@ struct HUDMonitoringDemand {
         // All auto hide needs the FPS detector even while the overlay is hidden.
         demand.fps = pins.contains(.fps) || (hudEnabled && autoHideMode == .all)
             || (overlay && selection.fps)
+        let process = overlay && selection.alignment == .vertical && selection.process.enabled
+        demand.gpuAppUsage = process && selection.process.readings.contains(.gpu)
+        demand.cpuAppUsage = process && selection.process.readings.contains(.cpu)
+        demand.appMemory = process && selection.process.readings.contains(.memory)
+        let cpuCoresShown = overlay && selection.resources[.cpu]?.enabled == true && selection.cpuCores.enabled
+        let cpuCoreMode = selection.cpuCores.mode.resolved(for: selection.alignment)
+        demand.cpuCores = cpuCoresShown && cpuCoreMode.showsBars
+        demand.gpuCores = overlay && selection.resources[.gpu]?.enabled == true && selection.gpuCores.enabled
         for group in HUDResourceGroup.allCases {
             guard let options = selection.resources[group] else { continue }
             let shown = overlay && options.enabled
@@ -37,28 +47,24 @@ struct HUDMonitoringDemand {
             case .gpu, .cpu:
                 let gpu = group == .gpu
                 let usagePinned = pins.contains(gpu ? .gpuUsage : .cpuUsage)
-                let total = (shown && options.totalUse) || (usagePinned && options.selectedUsageMode != .app)
-                let app = (shown && options.focusedApp) || (usagePinned && options.selectedUsageMode != .total)
+                let total = (shown && options.totalUse) || usagePinned
                 let temperature = (shown && options.temperature) || pins.contains(gpu ? .gpuTemperature : .cpuTemperature)
                 demand.power = demand.power || (shown && options.power) || pins.contains(gpu ? .gpuPower : .cpuPower)
                 if gpu {
-                    demand.gpuUsage = total; demand.gpuAppUsage = app; demand.gpuTemperature = temperature
+                    demand.gpuUsage = total; demand.gpuTemperature = temperature
                 } else {
-                    demand.cpuUsage = total; demand.cpuAppUsage = app; demand.cpuTemperature = temperature
+                    demand.cpuUsage = total; demand.cpuTemperature = temperature
                 }
             case .ane:
                 demand.power = demand.power || (shown && options.power) || pins.contains(.anePower)
             case .ram:
                 let memoryPinned = !pins.isDisjoint(with: [.memoryUsage, .memoryDetails])
-                demand.totalMemory = (shown && options.selectedUsageMode != .app && (options.totalUse || options.showsDetails))
-                    || (memoryPinned && options.selectedUsageMode != .app)
-                demand.appMemory = (shown && options.selectedUsageMode != .total && (options.focusedApp || options.showsDetails))
-                    || (memoryPinned && options.selectedUsageMode != .total)
+                demand.totalMemory = (shown && (options.totalUse || options.showsDetails)) || memoryPinned
                 demand.pressure = (shown && options.showsPressure) || pins.contains(.memoryPressure)
                 demand.pressureHistory = shown && options.showsPressure && selection.alignment == .vertical && options.pressureMode.isHistory
             }
         }
-        demand.power = demand.power || (overlay && selection.package.enabled) || pins.contains(.socPower)
+        demand.power = demand.power || demand.gpuCores || (cpuCoresShown && cpuCoreMode.showsValue) || (overlay && selection.package.enabled) || pins.contains(.socPower)
         demand.fans = (overlay && selection.fans.enabled && selection.fans.usage) || pins.contains(.fanUsage)
         let batteryShown = overlay && selection.battery.enabled
         // Auto keeps sampling to detect returning flow; Off has no menu-bar

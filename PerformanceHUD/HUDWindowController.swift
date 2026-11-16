@@ -38,20 +38,19 @@ final class HUDWindowController {
 
     private let metricGroups: [[HUDMetric]] = [
         [.fps, .fpsGraph],
-        [.gpu, .gpuTotal, .cpu, .cpuTotal, .aneTotal, .ram, .ramTotal],
+        [.gpu, .gpuTotal, .gpuCores, .cpu, .cpuTotal, .cpuCores, .aneTotal, .ram, .ramTotal],
         [.fans],
-        [.battery],
-        [.deviceInfo]
+        [.battery]
     ]
 
     private let verticalMetricGroups: [[HUDMetric]] = [
         [.fps, .fpsGraph],
-        [.gpu, .gpuTotal, .cpu, .cpuTotal, .aneTotal],
+        [.process],
+        [.gpu, .gpuTotal, .gpuCores, .cpu, .cpuTotal, .cpuCores, .aneTotal],
         [.ram, .ramTotal],
         [.fans],
         [.battery],
-        [.misc],
-        [.deviceInfo]
+        [.misc]
     ]
 
 
@@ -83,11 +82,20 @@ final class HUDWindowController {
     private var ramPressureHistoryBottomConstraint: NSLayoutConstraint?
     private var memoryPressureMode = HUDPreferences.resourceOptions(for: .ram).pressureMode
     private let batteryIndicator = HUDBatteryIndicatorView(frame: .zero)
+    private let processView = HUDProcessView(frame: .zero)
+    private let cpuCoreView = HUDCoreDetailView(frame: .zero)
+    private var processOptions = HUDPreferences.processOptions
+    private var cpuCoreOptions = HUDPreferences.cpuCoreOptions
+    private var cpuResourceOptions = HUDPreferences.resourceOptions(for: .cpu)
+    private var cpuCoreSample = CPUCoreSample.unavailable
+    private var cpuFrequencies = CPUFrequencySample.unavailable
+    private let gpuCoreView = HUDCoreDetailView(frame: .zero, gpu: true)
+    private var gpuCoreOptions = HUDPreferences.gpuCoreOptions
+    private var gpuResourceOptions = HUDPreferences.resourceOptions(for: .gpu)
+    private var gpuFrequency: Double?
     private let miscView = HUDMiscView(frame: .zero)
     private var miscOptions = HUDPreferences.miscOptions
 
-    private var deviceInfoOptions = HUDPreferences.deviceInfoOptions
-    private let deviceInfoView = HUDDeviceInfoView()
     private var primaryLabelHeightConstraints: [HUDMetric: NSLayoutConstraint] = [:]
 
     // MARK: - Dynamic Constraints
@@ -158,6 +166,7 @@ final class HUDWindowController {
     var onAutoHideVisibilityChange: (() -> Void)?
     var onFPSAvailabilityChange: (() -> Void)?
     var hasRecentFPSReading: Bool { fpsAvailability.expanded }
+    var presentationScreen: NSScreen? { panel.screen }
     var isAutomaticallyHidden: Bool { modeTransition == nil && autoHidePresentation.isHidden }
     private var autoHideMode = HUDPreferences.autoHideMode
     private var autoHideAnimated = HUDPreferences.autoHideAnimated
@@ -452,7 +461,7 @@ final class HUDWindowController {
                 metricRows[metric] = row
                 stackView.addArrangedSubview(row)
                 if metric == .aneTotal { createPackageRow() }
-                if metric == .fpsGraph || metric == .battery || metric == .fans || metric == .misc {
+                if metric == .fpsGraph || metric == .battery || metric == .fans || metric == .misc || metric == .process || metric == .cpuCores || metric == .gpuCores {
                     NSLayoutConstraint.activate([
                         row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor),
                         row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor)
@@ -522,12 +531,27 @@ final class HUDWindowController {
             if groupIsVisible { lastVisibleGroup = index }
         }
 
+        // Only the last category needs its graph's own bottom edge. Earlier
+        // graphs meet a section divider, so avoid stacking two faint lines.
+        fpsGraphView.showsBaseline = lastVisibleGroup == 0
+        ramPressureHistory.showsBaseline = lastVisibleGroup.map {
+            verticalMetricGroups[$0].contains(.ramTotal)
+        } ?? false
+
         return (visibleDividerCount, totalDividerHeight)
     }
 
     private func createRow(
         for metric: HUDMetric
     ) -> NSView {
+        if metric == .process || metric == .cpuCores || metric == .gpuCores {
+            let view: NSView = metric == .process ? processView : (metric == .cpuCores ? cpuCoreView : gpuCoreView)
+            view.translatesAutoresizingMaskIntoConstraints = false
+            let height = view.heightAnchor.constraint(equalToConstant: metricRowHeight(metric, scale: hudScale))
+            rowHeightConstraints[metric] = height
+            height.isActive = true
+            return view
+        }
         if metric == .fpsGraph {
             fpsGraphView.translatesAutoresizingMaskIntoConstraints = false
             fpsGraphView.applyStyle(scale: hudScale, background: textBackground)
@@ -545,7 +569,6 @@ final class HUDWindowController {
             height.isActive = true
             return fanView
         }
-        if metric == .deviceInfo { return createDeviceInfoRow() }
         if metric == .misc {
             miscView.translatesAutoresizingMaskIntoConstraints = false
             miscView.configure(options: miscOptions, scale: hudScale, background: textBackground)
@@ -722,7 +745,7 @@ final class HUDWindowController {
         }
 
         if [.gpuTotal, .cpuTotal, .aneTotal].contains(metric) {
-            let power = NSTextField(labelWithString: "")
+            let power = NSTextField(labelWithString: "—")
             power.font = powerFont(for: metric)
             power.textColor = HUDStyle.readingColor(background: textBackground)
             power.alignment = .right
@@ -837,7 +860,7 @@ final class HUDWindowController {
         row.translatesAutoresizingMaskIntoConstraints = false
         row.isHidden = true
         let title = NSTextField(labelWithString: "SOC")
-        let value = NSTextField(labelWithString: "")
+        let value = NSTextField(labelWithString: "—")
         value.alignment = .right
         for label in [title, value] {
             label.font = HUDStyle.ramDetailFont(scale: hudScale)
@@ -865,19 +888,6 @@ final class HUDWindowController {
         packageValueLabel = value
         packageHeightConstraint = height
         packageTrailingConstraint = trailing
-    }
-
-    private func createDeviceInfoRow() -> NSView {
-        deviceInfoView.configure(options: deviceInfoOptions, scale: hudScale, background: textBackground)
-        let height = deviceInfoView.heightAnchor.constraint(equalToConstant: deviceInfoView.height(scale: hudScale))
-        rowHeightConstraints[.deviceInfo] = height
-        height.isActive = true
-        return deviceInfoView
-    }
-
-    func setDeviceInfoOptions(_ options: HUDDeviceInfoOptions) {
-        deviceInfoOptions = options
-        setMetricEnabled(.deviceInfo, enabled: options.enabled)
     }
 
     // MARK: - HUD Visibility
@@ -1041,6 +1051,9 @@ final class HUDWindowController {
     }
 
     func setResourceOptions(_ options: HUDResourceOptions, for group: HUDResourceGroup) {
+        let options = options.systemOnly
+        if group == .cpu { cpuResourceOptions = options }
+        if group == .gpu { gpuResourceOptions = options }
         if group.supportsTemperature { temperatureWarnings[group.totalMetric] = options.heatWarning }
         highlightedReadings[group.totalMetric] = options.highlighted
         if let appMetric = group.appMetric {
@@ -1060,12 +1073,29 @@ final class HUDWindowController {
         if let appMetric = group.appMetric { enabledMetrics.remove(appMetric) }
         enabledMetrics.remove(group.totalMetric)
         enabledMetrics.formUnion(options.visibleMetrics(for: group))
+        if group == .cpu {
+            let visible = options.enabled && cpuCoreOptions.enabled
+            if visible { enabledMetrics.formUnion([.cpuTotal, .cpuCores]) }
+            else { enabledMetrics.remove(.cpuCores) }
+            cpuCoreView.isHidden = !visible
+        }
+        if group == .gpu {
+            let visible = options.enabled && gpuCoreOptions.enabled
+            if visible { enabledMetrics.formUnion([.gpuTotal, .gpuCores]) }
+            else { enabledMetrics.remove(.gpuCores) }
+            gpuCoreView.isHidden = !visible
+        }
         for metric in [group.appMetric, group.totalMetric].compactMap({ $0 }) {
             metricRows[metric]?.isHidden = !enabledMetrics.contains(metric)
         }
         if group.supportsPower {
             let showPower = options.enabled && options.power
-            if showPower { powerMetrics.insert(group.totalMetric) }
+            if showPower {
+                powerMetrics.insert(group.totalMetric)
+                if powerLabels[group.totalMetric]?.stringValue.isEmpty == true {
+                    powerLabels[group.totalMetric]?.stringValue = "—"
+                }
+            }
             else { powerMetrics.remove(group.totalMetric); powerLabels[group.totalMetric]?.stringValue = "" }
             powerLabels[group.totalMetric]?.isHidden = !showPower
             let showTemperature = group.supportsTemperature && options.enabled && options.temperature
@@ -1101,9 +1131,12 @@ final class HUDWindowController {
     }
 
     func updatePower(_ sample: PowerSample) {
+        updateCPUFrequencies(sample.cpuFrequencies)
+        gpuFrequency = sample.gpuFrequency
+        gpuCoreView.updateGPU(frequency: gpuFrequency)
         defer { refreshHorizontalReadings() }
         func text(_ value: Double?) -> String {
-            guard let value, value.isFinite, value >= 0 else { return "" }
+            guard let value, value.isFinite, value >= 0 else { return "—" }
             return String(format: "%.1f W", locale: Locale(identifier: "en_US_POSIX"), value)
         }
         for (metric, value) in [(HUDMetric.cpuTotal, sample.cpu), (.gpuTotal, sample.gpu), (.aneTotal, sample.ane)] {
@@ -1136,12 +1169,6 @@ final class HUDWindowController {
         _ metric: HUDMetric,
         enabled: Bool
     ) {
-
-        var enabled = enabled
-        if metric == .deviceInfo {
-            deviceInfoOptions.enabled = enabled
-            enabled = deviceInfoOptions.isVisible && alignment.allows(.deviceInfo)
-        }
 
         if enabled {
 
@@ -1347,7 +1374,14 @@ final class HUDWindowController {
     }
 
     private func updateReadingAppearance() {
-        deviceInfoView.configure(options: deviceInfoOptions, scale: hudScale, background: textBackground)
+        processView.configure(options: processOptions, scale: hudScale, background: textBackground)
+        cpuCoreView.configure(options: cpuCoreOptions, scale: hudScale, background: textBackground, readingWidth: fullCPUReadingWidth)
+        rowHeightConstraints[.cpuCores]?.constant = cpuCoreView.height(scale: hudScale)
+        let matchCPUFrequency = alignment == .vertical && cpuResourceOptions.enabled
+            && cpuCoreOptions.enabled && cpuCoreOptions.mode.showsValue
+        gpuCoreView.configure(options: gpuCoreOptions, scale: hudScale, background: textBackground,
+            matchingFrequencyColumn: matchCPUFrequency ? cpuCoreView.frequencyColumn : nil)
+        rowHeightConstraints[.gpuCores]?.constant = gpuCoreView.height(scale: hudScale)
         miscView.configure(options: miscOptions, scale: hudScale, background: textBackground)
         ramPressureMeter.configure(mode: memoryPressureMode, scale: hudScale, background: textBackground)
         ramPressureHistory.configure(mode: memoryPressureMode, scale: hudScale, background: textBackground,
@@ -1382,7 +1416,7 @@ final class HUDWindowController {
     }
 
     private func updateMetricColors() {
-        collapsedFPSIndicator.contentTintColor = HUDStyle.titleColor(for: .deviceInfo, background: textBackground)
+        collapsedFPSIndicator.contentTintColor = HUDStyle.TextStyle.label.color(background: textBackground)
         fanView.update(sample: fanSample, options: fanOptions, scale: hudScale, background: textBackground)
         defer { updateReadingAppearance(); refreshHorizontalReadings() }
         fpsGraphView.applyStyle(scale: hudScale, background: textBackground)
@@ -1426,24 +1460,16 @@ final class HUDWindowController {
         return originalPlotHeight * 0.5
     }
 
+    private var fullCPUReadingWidth: CGFloat {
+        HUDStyle.verticalReadingClusterWidth(scale: hudScale, power: powerFont(for: .cpuTotal),
+            temperature: temperatureFont(for: .cpuTotal), usage: readingFont(for: .cpuTotal, kind: .totalUse))
+    }
+
     private var pressureHistoryWidth: CGFloat {
-        // Match the left edge of 0.0 W in the complete CPU/SOC reading columns,
-        // even when individual readings are hidden or contain wider live values.
-        let references: [(String, NSFont)] = [
-            ("0.0 W", powerFont(for: .cpuTotal)),
-            ("149°C", temperatureFont(for: .cpuTotal)),
-            ("100%", readingFont(for: .cpuTotal, kind: .totalUse))
-        ]
-        let readingsWidth = references.reduce(CGFloat.zero) { width, reference in
-            let label = NSTextField(labelWithString: reference.0)
-            label.font = reference.1
-            return width + label.intrinsicContentSize.width
-        }
         // Keep the watt-aligned left guide while extending the right guide to
         // the divider edge, with the halo safely inside the HUD's outer padding.
         let readingInset = valueLabels[.ramTotal]?.alignmentRectInsets.right ?? 0
-        return readingsWidth + 2 * HUDStyle.metricColumnSpacing(scale: hudScale)
-            + readingInset + 4 * CGFloat(hudScale.rawValue)
+        return fullCPUReadingWidth + readingInset + 4 * CGFloat(hudScale.rawValue)
     }
 
     private func updateReadingPositions() {
@@ -1487,6 +1513,10 @@ final class HUDWindowController {
         for metrics in metricGroups {
             var readings: [HUDHorizontalView.Reading] = []
             for metric in metrics {
+                if (metric == .cpuCores || metric == .gpuCores), enabledMetrics.contains(metric) {
+                    readings.append(contentsOf: (metric == .cpuCores ? cpuCoreView : gpuCoreView).horizontalReadings())
+                    continue
+                }
                 if metric == .fans, enabledMetrics.contains(.fans) {
                     readings.append(contentsOf: horizontalFanReadings())
                     continue
@@ -1516,10 +1546,7 @@ final class HUDWindowController {
                 if powerMetrics.contains(metric) { append(powerLabels[metric], role: "power", reference: HUDStyle.horizontalPowerReference) }
                 if temperatureMetrics.contains(metric) { append(temperatureLabels[metric], role: "temperature", reference: HUDStyle.horizontalTemperatureReference) }
                 if metric != .ramTotal && !hiddenUtilizationMetrics.contains(metric) {
-                    // App CPU can use multiple cores (>100%). Reserve its hardware
-                    // limit so adding a digit cannot resize the HUD.
-                    let reference = metric == .fps ? "9999" : metric == .cpu
-                        ? "\(ProcessInfo.processInfo.activeProcessorCount * 100)%" : HUDStyle.horizontalPercentageReference
+                    let reference = metric == .fps ? "9999" : HUDStyle.horizontalPercentageReference
                     append(valueLabels[metric], role: "value", reference: reference)
                 }
                 if showsRAMDetails && (metric == .ram || metric == .ramTotal) {
@@ -1616,7 +1643,8 @@ final class HUDWindowController {
     }
 
     private func metricRowHeight(_ metric: HUDMetric, scale: HUDScale) -> CGFloat {
-        if metric == .deviceInfo { return deviceInfoView.height(scale: scale) }
+        if metric == .cpuCores { return cpuCoreView.height(scale: scale) }
+        if metric == .gpuCores { return gpuCoreView.height(scale: scale) }
         if metric == .misc { return miscView.height(scale: scale) }
         if metric == .fans { return fanView.height(scale: scale) }
         if metric == .ram || metric == .ramTotal {
@@ -1661,9 +1689,13 @@ final class HUDWindowController {
         for metric in [HUDMetric.fps, .fpsGraph] { metricRows[metric]?.alphaValue = 1 }
         updateReadingAppearance()
         updateRAMDetailsVisibility()
-        rowHeightConstraints[.deviceInfo]?.constant = deviceInfoView.height(scale: hudScale)
         fanView.update(sample: fanSample, options: fanOptions, scale: hudScale, background: textBackground)
         rowHeightConstraints[.fans]?.constant = fanView.height(scale: hudScale)
+        if !showsPackagePower {
+            packageValueLabel?.stringValue = ""
+        } else if packageValueLabel?.stringValue.isEmpty == true {
+            packageValueLabel?.stringValue = "—"
+        }
         stackView.isHidden = alignment == .horizontal
         horizontalView.isHidden = alignment != .horizontal
         if alignment == .horizontal {
@@ -1674,7 +1706,6 @@ final class HUDWindowController {
         packageRow?.isHidden = !showsPackagePower
         packageTitleLabel?.isHidden = !showsPackagePower
         packageValueLabel?.isHidden = !showsPackagePower
-        if !showsPackagePower { packageValueLabel?.stringValue = "" }
         let packageHeight = showsPackagePower
             ? (enabledMetrics.isEmpty ? 0 : HUDStyle.rowSpacing(scale: hudScale)) + packageRowHeight : 0
         packageHeightConstraint?.constant = packageRowHeight
@@ -1807,7 +1838,7 @@ final class HUDWindowController {
                 // Keep the existing section divider beneath the rolled-up indicator.
                 let firstGroup = verticalMetricGroups.indices.dropFirst().first { index in
                     verticalMetricGroups[index].contains { remaining.contains($0) }
-                        || (index == 1 && showsPackagePower)
+                        || (verticalMetricGroups[index].contains(.aneTotal) && showsPackagePower)
                 }
                 let divider = firstGroup.flatMap { groupDividers[$0] }
                 let firstBody = stackView.arrangedSubviews.first { view in
@@ -1886,7 +1917,7 @@ final class HUDWindowController {
         collapsedFPSIndicator.isHidden = !usesFPSPresentation || progress >= 0.4
         let headerFade = min(1, max(0, 1 - progress / 0.4))
         collapsedFPSIndicator.alphaValue = headerFade * headerFade * (3 - 2 * headerFade)
-        collapsedFPSIndicator.contentTintColor = HUDStyle.titleColor(for: .deviceInfo, background: textBackground)
+        collapsedFPSIndicator.contentTintColor = HUDStyle.TextStyle.label.color(background: textBackground)
         let indicatorSize = 12 * CGFloat(hudScale.rawValue)
         collapsedFPSIndicator.frame = NSRect(
             x: horizontal ? HUDStyle.horizontalPadding(scale: hudScale) + (collapsedFPSHeaderHeight - indicatorSize) / 2
@@ -2089,6 +2120,8 @@ final class HUDWindowController {
         value: String
     ) {
         defer { refreshHorizontalReadings() }
+        if metric == .gpu { processView.setValue(value, for: .gpu) }
+        if metric == .cpu { processView.setValue(value, for: .cpu) }
 
         if metric == .battery {
             if value.isEmpty { updateBattery(nil) }
@@ -2118,10 +2151,41 @@ final class HUDWindowController {
 
     func updateRAM(_ metric: HUDMetric, usage: RAMUsageSample?) {
         guard metric == .ram || metric == .ramTotal else { return }
+        if metric == .ram { processView.setValue(usage?.gigabytesText, for: .memory) }
         defer { refreshHorizontalReadings() }
         valueLabels[metric]?.stringValue = usage.map { "\(Int($0.percentage.rounded()))%" } ?? ""
         ramDetailLabels[metric]?.stringValue = usage?.gigabytesText ?? ""
         if metric == .ramTotal { ramSwapValueLabel?.stringValue = usage?.swapGigabytesText ?? "" }
+    }
+
+    // MARK: - Process and core detail rows
+
+    func setProcessOptions(_ options: HUDProcessOptions) {
+        processOptions = options
+        processView.configure(options: options, scale: hudScale, background: textBackground)
+        setMetricEnabled(.process, enabled: options.enabled && alignment == .vertical)
+    }
+
+    func setProcessName(_ name: String?) { processView.setName(name) }
+
+    func setCPUCoreOptions(_ options: HUDCoreOptions) {
+        cpuCoreOptions = options
+        setResourceOptions(cpuResourceOptions, for: .cpu)
+    }
+
+    func setGPUCoreOptions(_ options: HUDCoreOptions) {
+        gpuCoreOptions = options.gpuFrequencyOnly
+        setResourceOptions(gpuResourceOptions, for: .gpu)
+    }
+
+    func updateCPUCores(_ sample: CPUCoreSample) {
+        cpuCoreSample = sample
+        cpuCoreView.update(sample: sample, frequencies: cpuFrequencies)
+    }
+
+    func updateCPUFrequencies(_ frequencies: CPUFrequencySample) {
+        cpuFrequencies = frequencies
+        cpuCoreView.update(sample: cpuCoreSample, frequencies: frequencies)
     }
 
     // MARK: - Misc

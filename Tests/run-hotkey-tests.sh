@@ -11,5 +11,6 @@ xcrun swiftc -swift-version 5 -parse-as-library \
     "$ROOT/PerformanceHUD/HUDPositionMenuView.swift" \
     "$ROOT/PerformanceHUD/HUDMenuLayout.swift" \
     "$ROOT/PerformanceHUD/HUDBackground.swift" \
+    "$ROOT/PerformanceHUD/HUDShortcutFeedback.swift" \
     "$ROOT/Tests/HotkeyTests.swift" -o "$OUT/tests"
 "$OUT/tests" "$@"

@@ -109,7 +109,7 @@ final class HUDHorizontalView: NSView {
                     } else {
                         // Fan badge/bar/RPM use the same compact gap on both sides of the bar.
                         let followsLabel = section[index - 1].startsMetric && reading.metric != .fps && reading.metric != .fans
-                        let labelGap = followsLabel && reading.resourceGroup == .ram && reading.text == "PHY"
+                        let labelGap = followsLabel && reading.leftAligned
                             ? 2 : HUDStyle.horizontalLabelGapMultiplier
                         x += reading.tightLeading ? HUDStyle.memoryLabelValueSpacing * factor : gap * (followsLabel ? labelGap : 1)
                     }

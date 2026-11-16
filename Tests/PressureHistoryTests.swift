@@ -127,7 +127,7 @@ import AppKit
             cpuPower.stringValue = "0.0 W"
             panel.contentView?.layoutSubtreeIfNeeded()
             precondition(container.bounds.contains(frame), "The fade fits within the existing HUD")
-            let divider = dividers[4]!
+            let divider = dividers[5]!
             let line = divider.convert(NSRect(x: 0, y: 4, width: 1, height: 0.5), to: container)
             let plot = graph.convert(graph.plotBounds, to: container)
             let dividerFrame = divider.convert(divider.bounds, to: container)
@@ -188,6 +188,32 @@ import AppKit
             graph.cacheDisplay(in: graph.bounds, to: bitmap)
             precondition(pixel(x: endpoint.x, y: endpoint.y).alphaComponent < 0.35,
                          "An unavailable current reading cannot leave a stale endpoint dot")
+
+            // A single current point leaves the baseline free of fill, so the
+            // rendered opacity can be compared with the actual divider style.
+            graph.clear()
+            graph.append(.init(time: 31, level: .low, numericValue: 40))
+            func baselineInk() -> CGFloat {
+                panel.contentView?.layoutSubtreeIfNeeded()
+                let bitmap = graph.bitmapImageRepForCachingDisplay(in: graph.bounds)!
+                graph.cacheDisplay(in: graph.bounds, to: bitmap)
+                let ratio = CGFloat(bitmap.pixelsHigh) / graph.bounds.height
+                return (0..<bitmap.pixelsHigh).reduce(CGFloat.zero) { sum, row in
+                    let y = (CGFloat(bitmap.pixelsHigh - row) - 0.5) / ratio
+                    guard abs(y - graph.plotBounds.minY) < 1 else { return sum }
+                    return sum + bitmap.colorAt(x: bitmap.pixelsWide / 2, y: row)!.alphaComponent
+                } / ratio
+            }
+            precondition(baselineInk() == 0, "The category divider supplies the bottom edge without a duplicate stroke")
+            let graphSize = graph.bounds.size
+            hud.setMetricEnabled(.battery, enabled: false)
+            let expectedInk = HUDStyle.separatorColor(background: .light).alphaComponent * 0.5
+            precondition(abs(baselineInk() - expectedInk) < 0.015,
+                         "Last-category memory history retains a divider-weight baseline in both styles")
+            precondition(graph.bounds.size == graphSize && divider.isHidden,
+                         "A graph baseline neither resizes the plot nor restores a trailing category divider")
+            hud.setMetricEnabled(.battery, enabled: true)
+            precondition(baselineInk() == 0, "Restoring the following category hands the baseline back to its divider")
         }
         options.selectPressureMode(.text)
         hud.setResourceOptions(options, for: .ram)

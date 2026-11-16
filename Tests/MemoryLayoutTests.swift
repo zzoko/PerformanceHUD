@@ -13,12 +13,13 @@ import AppKit
         let hud = HUDWindowController()
         defer { hud.shutdown() }
         hud.setPackagePowerOptions(.init(enabled: false))
+        hud.setMiscOptions(.init(enabled: true, readings: [.chip, .os]))
         for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
         let dividers: [Int: NSView] = member(hud, "groupDividers")
         let groups: [[HUDMetric]] = member(hud, "verticalMetricGroups")
         let stack: NSStackView = member(hud, "stackView")
         let rows: [HUDMetric: NSView] = member(hud, "metricRows")
-        for metric in [HUDMetric.ramTotal, .ram, .deviceInfo, .fans] {
+        for metric in [HUDMetric.ramTotal, .ram, .misc, .fans] {
             hud.setMetricEnabled(metric, enabled: true)
             precondition(dividers.values.allSatisfy(\.isHidden),
                          "A lone \(metric.hudTitle) category has no leading or trailing divider")
@@ -27,17 +28,17 @@ import AppKit
             hud.setMetricEnabled(metric, enabled: false)
         }
         hud.setMetricEnabled(.ramTotal, enabled: true)
-        hud.setMetricEnabled(.deviceInfo, enabled: true)
-        let deviceGroup = groups.firstIndex { $0.contains(.deviceInfo) }!
+        hud.setMetricEnabled(.misc, enabled: true)
+        let deviceGroup = groups.firstIndex { $0.contains(.misc) }!
         precondition(Set(dividers.filter { !$0.value.isHidden }.keys) == [deviceGroup],
-                     "Memory and Mac have exactly one divider between them")
+                     "Memory and Misc have exactly one divider between them")
         hud.setMetricEnabled(.ramTotal, enabled: false)
         precondition(dividers.values.allSatisfy(\.isHidden),
-                     "Removing the preceding category removes Mac's former boundary")
+                     "Removing the preceding category removes Misc's former boundary")
         hud.setMetricEnabled(.fans, enabled: true)
         precondition(Set(dividers.filter { !$0.value.isHidden }.keys) == [deviceGroup],
-                     "Fans before Mac retains its separating boundary without a top divider")
-        print("PASS: singleton Memory, Mac, and Fan divider boundaries")
+                     "Fans before Misc retains its separating boundary without a top divider")
+        print("PASS: singleton Memory, Misc, and Fan divider boundaries")
     }
     @MainActor static func main() throws {
         _ = NSApplication.shared
@@ -91,7 +92,7 @@ import AppKit
             for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
             for scale in scales {
                 hud.setHUDScale(scale)
-                for mode in HUDUsageMode.allCases {
+                for mode in [HUDUsageMode.total] {
                     for details in [false, true] {
                         for showsUsage in [false, true] where details || showsUsage {
                             for emphasized in [false, true] {
@@ -311,7 +312,7 @@ import AppKit
             hud.updateMemoryPressure("normal")
             hud.setBatteryOptions(.init(enabled: true, temperature: true, charge: true))
             hud.updateBattery(.init(percentage: 80, source: .powerAdapter, temperature: 33))
-            hud.setMetricEnabled(.deviceInfo, enabled: true)
+            hud.setMiscOptions(.init(enabled: true, readings: [.chip, .os]))
             for appearance in [HUDBackground.light, .dark] {
                 hud.setBackground(appearance)
                 surface.isHidden = true

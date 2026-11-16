@@ -15,7 +15,7 @@ import Darwin
         let store = UserDefaults(suiteName: suite)!
         defer { store.removePersistentDomain(forName: suite) }
         check(!HUDPreferences.miscOptions(in: store).enabled, "Misc must default off")
-        check(HUDPreferences.miscOptions(in: store).readings.count == 5, "All five choices start selected")
+        check(HUDPreferences.miscOptions(in: store).readings.count == 6, "All six choices start selected")
         HUDPreferences.setMiscOptions(.init(enabled: true, readings: [.thermal]), in: store)
         check(HUDPreferences.miscOptions(in: store).visibleReadings == [.thermal], "Remember individual choice")
         HUDPreferences.setMiscOptions(.init(enabled: false, readings: []), in: store)
@@ -23,7 +23,7 @@ import Darwin
         HUDPreferences.resetOptions(in: store)
         check(HUDPreferences.miscOptions(in: store) == HUDMiscOptions(), "Reset restores disabled default")
         check(!HUDAlignment.horizontal.allows(.misc), "Misc is vertical-only")
-        for reading in HUDMiscReading.allCases {
+        for reading in HUDMiscReading.liveReadings {
             check(HUDMiscSample().text(for: reading) == (reading == .resolution ? "-" : ""),
                   "Unavailable resolution shows a dash; other unavailable values stay blank")
         }
@@ -62,7 +62,7 @@ import Darwin
         monitor.setTarget(NSRunningApplication.current)
         monitor.updateResolution(resolution)
         monitor.configure(.init(enabled: true))
-        check(live.process != nil && live.resolution == resolution && live.thermal != nil, "Read native process/thermal metadata")
+        check(live.process == nil && live.resolution == resolution && live.thermal != nil, "Misc reads native resolution/thermal metadata; Process has its own category")
         print("LIVE: thermal=\(live.thermal ?? "unavailable"), refresh=\(live.refreshRate?.text ?? "unavailable"), gameMode=\(live.gameMode.map { $0 ? "On" : "Off" } ?? "unavailable")")
         monitor.updateResolution(nil)
         check(live.resolution == nil, "Clear unavailable resolution")
@@ -76,9 +76,9 @@ import Darwin
         let disabled = HUDResourceOptions(enabled: false, temperature: false, totalUse: false, focusedApp: false)
         var selection = HUDLogSelection(fps: false, resources: [.gpu: disabled], package: .init(enabled: false),
             fans: .init(enabled: false), battery: .init(enabled: false, temperature: false, charge: false),
-            deviceInfo: .init(enabled: true, chipMode: .tier), alignment: .vertical, misc: .init(enabled: true))
-        check(selection.columns(fanSample: .noFans) == [.process, .resolutionWidth, .resolutionHeight,
-            .refreshMinimum, .refreshMaximum, .gameMode, .thermal, .chip, .os], "CSV follows Misc/menu order")
+            alignment: .vertical, misc: .init(enabled: true, chipMode: .tier))
+        check(selection.columns(fanSample: .noFans) == [.resolutionWidth, .resolutionHeight,
+            .refreshMinimum, .refreshMaximum, .gameMode, .thermal, .os, .chip], "CSV follows Misc/menu order")
         selection.alignment = .horizontal
         check(selection.columns(fanSample: .noFans).isEmpty, "Horizontal logs exclude Misc")
         selection.alignment = .vertical
@@ -89,7 +89,7 @@ import Darwin
         snapshot.updateMisc(HUDMiscSample())
         check(snapshot.values.isEmpty, "Unavailable metadata logs as blank, not dash or zero")
         selection.misc.enabled = false
-        check(selection.columns(fanSample: .noFans) == [.chip, .os], "No hidden Misc columns")
+        check(selection.columns(fanSample: .noFans) .isEmpty, "No hidden Misc columns")
 
         let menu = HUDMiscMenuView(options: .init())
         let choices: [NSButton] = member(menu, "choices")
@@ -98,15 +98,15 @@ import Darwin
         var changed = HUDMiscOptions()
         menu.onChange = { changed = $0 }
         master.performClick(nil)
-        choices[1].performClick(nil)
-        check(changed.enabled && changed.readings == [.process, .refreshRate, .gameMode, .thermal], "Pills toggle independently")
+        choices[0].performClick(nil)
+        check(changed.enabled && changed.readings == [.refreshRate, .gameMode, .thermal, .chip, .os], "Pills toggle independently")
         master.performClick(nil); master.performClick(nil)
-        check(choices[1].state == .off, "Master remembers individual readings")
+        check(choices[0].state == .off, "Master remembers individual readings")
         menu.update(alignment: .horizontal)
         check(!master.isEnabled && master.state == .off && choices.allSatisfy { !$0.isEnabled }, "Horizontal forces Misc off")
         menu.update(alignment: .vertical)
         check(master.isEnabled && master.state == .on && choices.allSatisfy { $0.isEnabled }, "Vertical restores Misc")
-        check(choices[1].state == .off && choices[3].state == .on, "Layout switch remembers each choice")
+        check(choices[0].state == .off && choices[3].state == .on, "Layout switch remembers each choice")
         menu.layoutSubtreeIfNeeded()
         for button in choices {
             check(menu.bounds.contains(button.convert(button.bounds, to: menu)), "All five pills fit the menu")
@@ -138,7 +138,7 @@ import Darwin
             UserDefaults.standard.setVolatileDomain([
                 "hud.enabled": false, "hud.autoHide.mode": "off", "hud.background": "dark",
                 "hud.alignment": alignment.rawValue, "hud.metric.misc": true,
-                "hud.misc.readings": HUDMiscReading.allCases.map(\.rawValue)
+                "hud.misc.readings": HUDMiscReading.allCases.map(\.rawValue), "hud.misc.chipMode": "full"
             ], forName: UserDefaults.argumentDomain)
             hud.setAlignment(alignment)
             check(HUDPreferences.visibleMetrics.contains(.misc) == (alignment == .vertical), "Effective preferences filter Misc by alignment")
@@ -146,7 +146,7 @@ import Darwin
             for factor in [0.5, 1.0, 2.0] {
                 hud.setHUDScale(HUDScale(rawValue: factor))
                 let horizontalSize = panel.frame.size
-                for mask in 0..<32 {
+                for mask in 0..<64 {
                     let selected = Set(HUDMiscReading.allCases.enumerated().compactMap {
                         (mask & (1 << $0.offset)) != 0 ? $0.element : nil
                     })
@@ -185,7 +185,7 @@ import Darwin
         restoredPreferences["hud.alignment"] = HUDAlignment.vertical.rawValue
         UserDefaults.standard.setVolatileDomain(restoredPreferences, forName: UserDefaults.argumentDomain)
         hud.setAlignment(.vertical)
-        check(!misc.isHidden && HUDPreferences.miscOptions.readings.count == 5, "Returning to Vertical restores saved Misc selection")
+        check(!misc.isHidden && HUDPreferences.miscOptions.readings.count == 6, "Returning to Vertical restores saved Misc selection")
         hud.shutdown()
         if CommandLine.arguments.contains("--preview") {
             let window = NSWindow(contentRect: menu.bounds, styleMask: .borderless, backing: .buffered, defer: false)
@@ -200,7 +200,7 @@ import Darwin
             try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-misc-menu.png"))
             window.orderOut(nil)
         }
-        print("PASS: Misc styles, blank values, preferences/reset, parser, display mapping, lifecycle, logging, vertical-only buttons, and 32 selections at 0.5/1/2× in both layouts")
+        print("PASS: Misc styles, blank values, preferences/reset, parser, display mapping, lifecycle, logging, vertical-only buttons, and 64 selections at 0.5/1/2× in both layouts")
     }
 
     // Exercise the real Darwin event API using a private test name. Never post

@@ -67,6 +67,7 @@ enum HUDStyle {
     static let horizontalPowerReference = "999.9 W"
     static let horizontalTemperatureReference = "149°C"
     static let horizontalPercentageReference = "100%"
+    static let horizontalFrequencyReference = "0.0 GHz"
 
     @MainActor
     static func horizontalColumnWidth(text: String, reference: String, font: NSFont,
@@ -76,6 +77,19 @@ enum HUDStyle {
         let sizing = NSTextField(labelWithString: reference)
         sizing.font = sizingFont ?? font
         return ceil(max(sizing.intrinsicContentSize.width, value.intrinsicContentSize.width))
+    }
+
+    // Stable full CPU reading area, also shared by history and core details.
+    // Live digits and hidden slots do not move the left edge of this reference.
+    @MainActor
+    static func verticalReadingClusterWidth(scale: HUDScale, power: NSFont,
+                                            temperature: NSFont, usage: NSFont) -> CGFloat {
+        let references: [(String, NSFont)] = [("0.0 W", power), ("149°C", temperature), ("100%", usage)]
+        return references.reduce(CGFloat.zero) { width, reference in
+            let field = NSTextField(labelWithString: reference.0)
+            field.font = reference.1
+            return width + field.intrinsicContentSize.width
+        } + 2 * metricColumnSpacing(scale: scale)
     }
 
     // Anchor the HUD inside a centered 16:9 viewport, including letterboxing.
@@ -124,7 +138,6 @@ enum HUDStyle {
         if metric == .fpsGraph {
             return (24 + fpsHistoryFadeExtension) * CGFloat(scale.rawValue) + rowSpacing(scale: scale)
         }
-        if metric == .deviceInfo { return ramDetailHeight(scale: scale) }
         let detailLines = metric == .ramTotal ? 3 : metric == .ram ? 1 : 0
         let detailGroupSpacing = detailLines > 0 ? rowSpacing(scale: scale) : 0
         return rowHeight(scale: scale) + detailGroupSpacing + CGFloat(detailLines) * ramDetailHeight(scale: scale)

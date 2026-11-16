@@ -4,7 +4,46 @@ import AppKit
     static func check(_ condition: @autoclosure () -> Bool, _ message: String) {
         precondition(condition(), message)
     }
-    static func main() {
+    @MainActor static func testGraphBaseline() {
+        _ = NSApplication.shared
+        let defaults = UserDefaults.standard
+        let original = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        defer { defaults.setVolatileDomain(original, forName: UserDefaults.argumentDomain) }
+        defaults.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "off", "hud.scale": 1.0,
+            "hud.background": "dark", "hud.alignment": "vertical"], forName: UserDefaults.argumentDomain)
+        let hud = HUDWindowController()
+        defer { hud.shutdown() }
+        hud.setPackagePowerOptions(.init(enabled: false))
+        for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
+        hud.setFPSOptions(.init(enabled: true, mode: .history))
+        let members = Mirror(reflecting: hud).children
+        let graph = members.first { $0.label == "fpsGraphView" }!.value as! HUDFPSGraphView
+        let panel = members.first { $0.label == "panel" }!.value as! HUDPanel
+        let dividers = members.first { $0.label == "groupDividers" }!.value as! [Int: NSView]
+        graph.append(60) // One endpoint, leaving the center column free of any curve/fill.
+        func centerColumnInk() -> CGFloat {
+            panel.contentView?.layoutSubtreeIfNeeded()
+            let bitmap = graph.bitmapImageRepForCachingDisplay(in: graph.bounds)!
+            graph.cacheDisplay(in: graph.bounds, to: bitmap)
+            return (0..<bitmap.pixelsHigh).reduce(CGFloat.zero) {
+                $0 + bitmap.colorAt(x: bitmap.pixelsWide / 2, y: $1)!.alphaComponent
+            } / (CGFloat(bitmap.pixelsWide) / graph.bounds.width)
+        }
+        let expectedInk = HUDStyle.separatorColor(background: .dark).alphaComponent * 0.5
+        check(abs(centerColumnInk() - expectedInk) < 0.015,
+              "Standalone FPS history draws a divider-weight bottom line")
+        check(dividers.values.allSatisfy(\.isHidden), "The baseline does not create a category divider")
+        let graphSize = graph.bounds.size
+        hud.setMetricEnabled(.cpuTotal, enabled: true)
+        check(centerColumnInk() == 0, "A following category supplies the baseline without a second graph stroke")
+        check(graph.bounds.size == graphSize, "Adding a baseline cannot resize the graph")
+        hud.setMetricEnabled(.cpuTotal, enabled: false)
+        check(abs(centerColumnInk() - expectedInk) < 0.015, "Removing the following category restores the baseline")
+        graph.reset()
+        check(centerColumnInk() == 0, "Empty history does not leave a stray baseline")
+    }
+
+    @MainActor static func main() {
         var history = FPSHistory()
         var time = 100.0
         history.append(60, at: time)
@@ -60,6 +99,8 @@ import AppKit
         check(history.samples.count == 1, "Invalid FPS is ignored")
         for index in 0..<1000 { history.append(60, at: 100 + Double(index) / 100) }
         check(history.samples.count <= 256, "Storage remains bounded for bursts")
+        testGraphBaseline()
         print("PASS: jittered 20-minute history, stable left edge, boundary interpolation, visible range, genuine gaps, expiry, clock reset, bounded storage")
+        print("PASS: FPS graph baseline rendering, divider handoff, unchanged geometry, and empty history")
     }
 }

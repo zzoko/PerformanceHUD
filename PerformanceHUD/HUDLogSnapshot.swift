@@ -2,17 +2,19 @@ import Foundation
 
 /// Stable column identities, independent of fonts, formatting, and changing values.
 enum HUDLogColumn: Hashable {
-    case fps, gpuPower, gpuTemperature, gpuUsage, gpuAppUsage
+    case fps, gpuPower, gpuTemperature, gpuUsage, gpuAppUsage, gpuFrequency
     case cpuPower, cpuTemperature, cpuUsage, cpuAppUsage, anePower, socPower
     case memoryUsage, memoryPhysical, memorySwap, memoryPressure, memoryAppUsage, memoryAppPhysical
     case fanUsage(Int), fanRPM(Int), fanAverageUsage, fanAverageRPM
     case powerSource, batteryPower, batteryTemperature, batteryCharge, lowPowerMode, chip, os
-    case cpuCores, cpuEfficiencyCores, cpuPerformanceCores, gpuCores
+    case cpuCores, cpuEfficiencyCores, cpuPerformanceCores, cpuSuperCores, gpuCores
+    case cpuCoreUsage(Int), cpuTypeFrequency(String)
     case process, resolutionWidth, resolutionHeight, refreshMinimum, refreshMaximum, gameMode, thermal
 
     var title: String {
         switch self {
         case .fps: return "FPS"
+        case .gpuFrequency: return "GPU Frequency (GHz)"
         case .gpuPower: return "GPU Power (W)"
         case .gpuTemperature: return "GPU Temperature (°C)"
         case .gpuUsage: return "GPU Usage (%)"
@@ -39,6 +41,9 @@ enum HUDLogColumn: Hashable {
         case .batteryCharge: return "Battery Charge (%)"
         case .lowPowerMode: return "Low Power Mode (0/1)"
         case .chip: return "Chip"
+        case .cpuCoreUsage(let id): return "CPU Core \(id) Usage (%)"
+        case .cpuTypeFrequency(let name): return "CPU \(name) Frequency (GHz)"
+        case .cpuSuperCores: return "CPU Super Cores"
         case .cpuCores: return "CPU Cores"
         case .cpuEfficiencyCores: return "CPU Efficiency Cores"
         case .cpuPerformanceCores: return "CPU Performance Cores"
@@ -61,14 +66,14 @@ enum HUDLogColumn: Hashable {
         let places: Int
         switch self {
         case .fps, .gpuPower, .cpuPower, .anePower, .socPower, .batteryPower,
-             .memoryPhysical, .memorySwap, .memoryAppPhysical, .refreshMinimum, .refreshMaximum:
+             .memoryPhysical, .memorySwap, .memoryAppPhysical, .refreshMinimum, .refreshMaximum, .cpuTypeFrequency, .gpuFrequency:
             places = 2
         case .gpuTemperature, .cpuTemperature, .batteryTemperature,
              .gpuUsage, .gpuAppUsage, .cpuUsage, .cpuAppUsage,
-             .memoryUsage, .memoryAppUsage, .fanUsage, .fanAverageUsage, .batteryCharge:
+             .memoryUsage, .memoryAppUsage, .fanUsage, .fanAverageUsage, .batteryCharge, .cpuCoreUsage:
             places = 1
         case .fanRPM, .fanAverageRPM, .lowPowerMode, .resolutionWidth, .resolutionHeight, .gameMode,
-             .cpuCores, .cpuEfficiencyCores, .cpuPerformanceCores, .gpuCores:
+             .cpuCores, .cpuEfficiencyCores, .cpuPerformanceCores, .cpuSuperCores, .gpuCores:
             places = 0
         case .memoryPressure, .powerSource, .chip, .os, .process, .thermal:
             return nil
@@ -93,9 +98,11 @@ struct HUDLogSelection {
     var package: HUDPackagePowerOptions
     var fans: HUDFanOptions
     var battery: HUDBatteryOptions
-    var deviceInfo: HUDDeviceInfoOptions
     var alignment: HUDAlignment
     var misc = HUDMiscOptions()
+    var process = HUDProcessOptions()
+    var cpuCores = HUDCoreOptions()
+    var gpuCores = HUDCoreOptions(mode: .value)
 
     static var current: Self {
         Self(fps: HUDPreferences.fpsOptions.enabled,
@@ -103,12 +110,18 @@ struct HUDLogSelection {
                  ($0, HUDPreferences.resourceOptions(for: $0))
              }), package: HUDPreferences.packagePowerOptions, fans: HUDPreferences.fanOptions,
              battery: HUDPreferences.batteryOptions,
-             deviceInfo: HUDPreferences.deviceInfoOptions,
-             alignment: HUDPreferences.alignment, misc: HUDPreferences.miscOptions)
+             alignment: HUDPreferences.alignment, misc: HUDPreferences.miscOptions,
+             process: HUDPreferences.processOptions, cpuCores: HUDPreferences.cpuCoreOptions, gpuCores: HUDPreferences.gpuCoreOptions)
     }
 
     func columns(fanSample: FanSample) -> [HUDLogColumn] {
         var result: [HUDLogColumn] = fps ? [.fps] : []
+        if alignment == .vertical && process.enabled {
+            result.append(.process)
+            if process.readings.contains(.gpu) { result.append(.gpuAppUsage) }
+            if process.readings.contains(.cpu) { result.append(.cpuAppUsage) }
+            if process.readings.contains(.memory) { result.append(.memoryAppPhysical) }
+        }
         for group in [HUDResourceGroup.gpu, .cpu, .ane] {
             guard let options = resources[group], options.enabled else { continue }
             if group == .ane {
@@ -119,18 +132,25 @@ struct HUDLogSelection {
             if options.power { result.append(gpu ? .gpuPower : .cpuPower) }
             if options.temperature { result.append(gpu ? .gpuTemperature : .cpuTemperature) }
             if options.totalUse { result.append(gpu ? .gpuUsage : .cpuUsage) }
-            if options.focusedApp { result.append(gpu ? .gpuAppUsage : .cpuAppUsage) }
+            if gpu && gpuCores.enabled {
+                result.append(.gpuFrequency)
+            }
+            if group == .cpu && cpuCores.enabled {
+                let mode = cpuCores.mode.resolved(for: alignment)
+                for type in HUDDeviceInfo.current.coreTypes {
+                    if mode.showsValue { result.append(.cpuTypeFrequency(type.name)) }
+                    if mode.showsBars {
+                        result += (CPUCoreTopology.current.groups.first { $0.name == type.name }?.ids ?? []).map(HUDLogColumn.cpuCoreUsage)
+                    }
+                }
+            }
         }
         if package.enabled { result.append(.socPower) }
         if let memory = resources[.ram], memory.enabled {
             // Match the independent Pressure, Details, and Use menu rows.
             if memory.showsPressure { result.append(.memoryPressure) }
-            if memory.showsDetails {
-                if memory.selectedUsageMode != .app { result += [.memoryPhysical, .memorySwap] }
-                if memory.selectedUsageMode != .total { result.append(.memoryAppPhysical) }
-            }
+            if memory.showsDetails { result += [.memoryPhysical, .memorySwap] }
             if memory.totalUse { result.append(.memoryUsage) }
-            if memory.focusedApp { result.append(.memoryAppUsage) }
         }
         if fans.enabled && fans.usage {
             if fans.averages(in: alignment) && fanSample.canAverage {
@@ -151,21 +171,18 @@ struct HUDLogSelection {
         }
         for reading in misc.visibleReadings where alignment == .vertical {
             switch reading {
-            case .process: result.append(.process)
+            case .process: break // Migrated into the Process category.
             case .resolution: result += [.resolutionWidth, .resolutionHeight]
             case .refreshRate: result += [.refreshMinimum, .refreshMaximum]
             case .gameMode: result.append(.gameMode)
             case .thermal: result.append(.thermal)
-            }
-        }
-        if alignment == .vertical {
-            if deviceInfo.showsChip {
+            case .chip:
                 result.append(.chip)
-                if deviceInfo.chipMode == .full {
-                    result += [.cpuCores, .cpuEfficiencyCores, .cpuPerformanceCores, .gpuCores]
+                if misc.chipMode == .full {
+                    result += [.cpuCores, .cpuEfficiencyCores, .cpuPerformanceCores, .cpuSuperCores, .gpuCores]
                 }
+            case .os: result.append(.os)
             }
-            if deviceInfo.showsOS { result.append(.os) }
         }
         return result
     }
@@ -193,7 +210,17 @@ struct HUDLogSnapshot {
         for column in columns { values[column] = nil; numbers[column] = nil }
     }
 
+    mutating func updateCPUCores(_ sample: CPUCoreSample) {
+        for group in CPUCoreTopology.current.groups {
+            for id in group.ids { set(.cpuCoreUsage(id), sample.usage[id]) }
+        }
+    }
+
     mutating func updatePower(_ sample: PowerSample) {
+        for group in CPUCoreTopology.current.groups {
+            set(.cpuTypeFrequency(group.name), sample.cpuFrequencies.average(for: group.ids))
+        }
+        set(.gpuFrequency, sample.gpuFrequency)
         set(.cpuPower, sample.cpu); set(.gpuPower, sample.gpu)
         set(.anePower, sample.ane); set(.socPower, sample.package)
     }
@@ -226,7 +253,6 @@ struct HUDLogSnapshot {
     }
 
     mutating func updateMisc(_ sample: HUDMiscSample) {
-        setText(.process, sample.process)
         set(.resolutionWidth, sample.resolution.map { Double($0.width) })
         set(.resolutionHeight, sample.resolution.map { Double($0.height) })
         set(.refreshMinimum, sample.refreshRate?.minimum)

@@ -27,11 +27,13 @@ struct HUDPresetConfiguration: Codable, Equatable {
     var fans: HUDFanOptions
     var battery: HUDBatteryOptions
     var misc: HUDMiscOptions
-    var deviceInfo: HUDDeviceInfoOptions
+    var process = HUDProcessOptions()
+    var cpuCores = HUDCoreOptions.cpuDefault
+    var gpuCores = HUDCoreOptions.gpuDefault
     var menuBarReadings: Set<HUDMenuBarReading> = []
 
     private enum CodingKeys: String, CodingKey {
-        case fps, resources, packagePower, fans, battery, misc, deviceInfo, menuBarReadings
+        case fps, resources, packagePower, fans, battery, misc, deviceInfo, menuBarReadings, process, cpuCores, gpuCores
     }
 
     static func capture(in store: UserDefaults = .standard) -> Self {
@@ -43,7 +45,7 @@ struct HUDPresetConfiguration: Codable, Equatable {
              fans: HUDPreferences.fanOptions(in: store),
              battery: HUDPreferences.batteryOptions(in: store),
              misc: HUDPreferences.miscOptions(in: store),
-             deviceInfo: HUDPreferences.deviceInfoOptions(in: store),
+             process: HUDPreferences.processOptions(in: store), cpuCores: HUDPreferences.cpuCoreOptions(in: store), gpuCores: HUDPreferences.gpuCoreOptions(in: store),
              menuBarReadings: HUDMenuBarOptions.load(in: store).readings)
             .canonicalized()
     }
@@ -61,7 +63,9 @@ struct HUDPresetConfiguration: Codable, Equatable {
         HUDPreferences.setFanOptions(configuration.fans, in: store)
         HUDPreferences.setBatteryOptions(configuration.battery, in: store)
         HUDPreferences.setMiscOptions(configuration.misc, in: store)
-        HUDPreferences.setDeviceInfoOptions(configuration.deviceInfo, in: store)
+        HUDPreferences.setProcessOptions(configuration.process, in: store)
+        HUDPreferences.setCPUCoreOptions(configuration.cpuCores, in: store)
+        HUDPreferences.setGPUCoreOptions(configuration.gpuCores, in: store)
         var menuBar = HUDMenuBarOptions.load(in: store)
         menuBar.readings = configuration.menuBarReadings
         menuBar.save(in: store)
@@ -79,7 +83,7 @@ struct HUDPresetConfiguration: Codable, Equatable {
             }),
             packagePower: .init(), fans: .init(),
             battery: .init(enabled: true, temperature: true, charge: true),
-            misc: .init(), deviceInfo: .init())
+            misc: .init())
         switch preset {
         case .balanced: break
         case .fpsOnly:
@@ -89,13 +93,12 @@ struct HUDPresetConfiguration: Codable, Equatable {
             configuration.fans.enabled = false
             configuration.battery.enabled = false
             configuration.misc.enabled = false
-            configuration.deviceInfo.enabled = false
         case .full:
-            for group in [HUDResourceGroup.gpu, .cpu, .ram] {
-                configuration.resources[group]?.selectUsageMode(.both)
-            }
+            configuration.process.enabled = true
+            configuration.cpuCores.enabled = true
+            configuration.cpuCores.mode = .both
+            configuration.gpuCores.enabled = true
             configuration.misc.enabled = true
-            configuration.deviceInfo.enabled = true
         }
         return configuration.canonicalized()
     }
@@ -134,8 +137,10 @@ struct HUDPresetConfiguration: Codable, Equatable {
 
     private func canonicalized() -> Self {
         var result = self
+        result.gpuCores = result.gpuCores.gpuFrequencyOnly
         for group in HUDResourceGroup.allCases {
             guard var options = result.resources[group] else { continue }
+            options = options.systemOnly
             options.setUsagePresentation(visible: options.usageVisible, highlighted: options.usageHighlighted)
             options.temperature = group.supportsTemperature && options.temperature
             options.power = group.supportsPower && options.power
@@ -151,11 +156,26 @@ struct HUDPresetConfiguration: Codable, Equatable {
             }
             result.resources[group] = options
         }
+        result.misc.readings.remove(.process)
         return result
     }
 }
 
 extension HUDPresetConfiguration {
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(process, forKey: .process)
+        try values.encode(cpuCores, forKey: .cpuCores)
+        try values.encode(gpuCores, forKey: .gpuCores)
+        try values.encode(fps, forKey: .fps)
+        try values.encode(resources, forKey: .resources)
+        try values.encode(packagePower, forKey: .packagePower)
+        try values.encode(fans, forKey: .fans)
+        try values.encode(battery, forKey: .battery)
+        try values.encode(misc, forKey: .misc)
+        try values.encode(menuBarReadings, forKey: .menuBarReadings)
+    }
+
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         fps = try values.decode(HUDFPSOptions.self, forKey: .fps)
@@ -164,13 +184,18 @@ extension HUDPresetConfiguration {
         fans = try values.decode(HUDFanOptions.self, forKey: .fans)
         battery = try values.decode(HUDBatteryOptions.self, forKey: .battery)
         misc = try values.decode(HUDMiscOptions.self, forKey: .misc)
-        // Older saved presets only stored the category switch; retain their
-        // original name/version display rather than the new Full default.
+        // Merge pre-v3.2 Mac choices, including the original boolean-only format.
         if let enabled = try? values.decode(Bool.self, forKey: .deviceInfo) {
-            deviceInfo = .init(enabled: enabled, chipMode: .tier)
-        } else {
-            deviceInfo = try values.decode(HUDDeviceInfoOptions.self, forKey: .deviceInfo)
+            misc = misc.mergingLegacyMac(.init(enabled: enabled, chipMode: .tier))
+        } else if let legacy = try values.decodeIfPresent(HUDDeviceInfoOptions.self, forKey: .deviceInfo) {
+            misc = misc.mergingLegacyMac(legacy)
         }
+        process = try values.decodeIfPresent(HUDProcessOptions.self, forKey: .process)
+            ?? HUDProcessOptions.migrating(resources: resources, misc: misc)
+        cpuCores = try values.decodeIfPresent(HUDCoreOptions.self, forKey: .cpuCores) ?? .init()
+        gpuCores = (try values.decodeIfPresent(HUDCoreOptions.self, forKey: .gpuCores) ?? .gpuDefault).gpuFrequencyOnly
+        resources = resources.mapValues(\.systemOnly)
+        misc.readings.remove(.process)
         // Presets saved before menu-bar readings existed retain an all-off selection.
         menuBarReadings = try values.decodeIfPresent(Set<HUDMenuBarReading>.self, forKey: .menuBarReadings) ?? []
     }

@@ -70,6 +70,11 @@ final class HUDMemoryPressureHistoryView: NSView {
     private var width: CGFloat = 72.6
     private var background: HUDBackground = .dark
 
+    // A following category supplies this line when its divider is visible.
+    var showsBaseline = true {
+        didSet { if showsBaseline != oldValue { needsDisplay = true } }
+    }
+
     override var intrinsicContentSize: NSSize {
         NSSize(width: width, height: NSView.noIntrinsicMetric)
     }
@@ -199,6 +204,12 @@ final class HUDMemoryPressureHistoryView: NSView {
             circle(radius: 3 * scale).fill()
             tint.setFill()
             circle(radius: 1.6 * scale).fill()
+        }
+        if showsBaseline {
+            let plot = plotBounds
+            HUDStyle.separatorColor(background: background).setFill()
+            NSRect(x: plot.minX, y: plot.minY - 0.25 * scale,
+                   width: plot.width, height: 0.5 * scale).fill()
         }
     }
 

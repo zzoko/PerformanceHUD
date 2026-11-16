@@ -11,7 +11,7 @@ final class PowerHelperClient {
     private var receivedLiveReading = false
     private var recovery = PowerHelperRecovery()
     private var health = PowerHelperHealth()
-    private var displayedReadings = PowerReadingContinuity()
+    private var displayedReadings = PowerReadingContinuity(cpuCoreGroups: CPUCoreTopology.current.groups.map(\.ids))
     private let service = SMAppService.daemon(plistName: PowerHelperIdentity.plist)
     private var connection: NSXPCConnection?
     private var generation = UUID()
@@ -122,7 +122,7 @@ final class PowerHelperClient {
         UserDefaults.standard.set(true, forKey: promptKey)
         let alert = NSAlert()
         alert.messageText = needsUpdate ? "Update power readings helper?" : "Enable power readings?"
-        alert.informativeText = "CPU, GPU, ANE, and SOC watts use a small background helper to read macOS hardware measurements. macOS may ask for administrator approval. It samples only for selected power readings in the HUD, the menu bar, or active logging. You can remove it from the Power Helper menu."
+        alert.informativeText = "CPU, GPU, ANE, and SOC watts, plus CPU and GPU GHz, use a small background helper to read macOS hardware measurements. macOS may ask for administrator approval. It samples only for selected power or frequency readings in the HUD, the menu bar, or active logging. You can remove it from the Power Helper menu."
         alert.addButton(withTitle: needsUpdate ? "Update Helper" : "Enable Power Readings")
         alert.addButton(withTitle: "Not Now")
         NSApp.activate(ignoringOtherApps: true)
