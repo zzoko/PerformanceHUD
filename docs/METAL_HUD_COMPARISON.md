@@ -2,27 +2,27 @@
 
 [← Back to README](../README.md)
 
-If you already use MetalHUD to keep an eye on FPS, PerformanceHUD brings more of your Mac’s activity into the same view: CPU and GPU usage, temperatures, power draw, memory pressure, fan speeds, and battery information.
+If you already use MetalHUD to watch your FPS, PerformanceHUD puts the rest of your Mac's activity beside it: CPU and GPU load, temperatures, power draw, memory pressure, fan speeds, and battery.
 
-It’s built around the experience of using an overlay while playing. Keep a few readings visible throughout a session, or open up a fuller view when you want to see how your Mac is handling a game.
+It's made to stay on screen while you play. Keep a few readings up for the whole session, or open a fuller view when you want to see how hard a game is pushing your Mac.
 
 ## What PerformanceHUD adds
 
-- **A wider view of your Mac.** See system usage alongside supported focused-app readings, plus CPU, GPU, and Neural Engine watts, temperatures, swap, memory pressure, fans, battery state, and net charging/discharging watts. A dedicated Vertical Process row combines app readings. CPU/GPU details add frequency, with individual activity bars for CPU cores; Misc adds Metal output resolution, display refresh rate, experimental Game Mode status, and thermal state in Vertical. These give you more context when adjusting settings or comparing how demanding different games are.
-- **A layout that fits your setup.** Choose a horizontal strip or vertical layout, show individual readings, and highlight the values that matter most. Adjust the size, position, and appearance, including Apple’s native Liquid Glass effect and automatic Light/Dark switching.
-- **Convenient controls while you play.** Turn the overlay on or off from the menu bar or with an editable keyboard shortcut, even after launching a game. Hotkeys also start/stop logging and cycle appearance. Your choices stay saved as you move between apps, and supported focused-app readings follow the active app.
-- **Small details for everyday use.** A 60-second FPS history, optional automatic hiding of the FPS area or the whole overlay when FPS becomes unavailable, individual or averaged fan readings, and a battery icon that reflects your Mac’s power state.
-- **CSV logging for later comparison.** Record selected readings once per second from the menu bar, then use the saved CSV in a spreadsheet or graph. Unavailable readings stay blank, and logging continues while the HUD is automatically hidden.
-- **Low performance overhead.** Native Liquid Glass rendering has shown **under 1% performance overhead in current testing**. Results vary by game, Mac, and enabled readings.
+- **The whole system, not just frames.** CPU, GPU and Neural Engine usage, temperatures and watts, down to per-core activity and clock speeds, plus memory pressure, swap, fans, battery charge rate, and readings for the app in focus. Useful context when tuning settings or comparing how demanding games are.
+- **A layout that fits your setup.** A horizontal strip or a vertical panel, with the readings you pick and emphasis on the ones that matter. Size, position and appearance are adjustable, including Apple's native Liquid Glass with automatic Light/Dark switching.
+- **Controls that work mid-game.** Show or hide the overlay with an editable hotkey, even after a game has launched. Other hotkeys start or stop logging and switch appearance, and focused-app readings follow whichever app is active.
+- **Small details for everyday play.** A 60-second FPS history, automatic hiding when FPS goes away, presets for switching between setups, and a battery icon that reflects your Mac's power state.
+- **CSV logging.** Record selected readings once per second, ready for a spreadsheet or graph.
+- **Low overhead.** Native Liquid Glass rendering has shown under 1% performance overhead in current testing. Results vary by game, Mac and enabled readings.
 
 ## Where MetalHUD goes further
 
-MetalHUD provides detailed frame timing, GPU rendering information, shader compilation statistics, and performance logging. Those tools are useful for investigating stutter and rendering bottlenecks. PerformanceHUD’s FPS history and CSV logs record sampled readings over time; they do not replace per-frame timing or Metal rendering diagnostics. See [Apple’s MetalHUD overview](https://developer.apple.com/documentation/xcode/monitoring-your-metal-apps-graphics-performance).
+MetalHUD is built for diagnosing rendering: detailed frame timing, GPU rendering information, shader compilation statistics, and its own performance logging. For tracking down stutter or rendering bottlenecks, it's the right tool. PerformanceHUD's FPS history and CSV logs record sampled readings over time and don't replace per-frame Metal diagnostics. See [Apple's MetalHUD overview](https://developer.apple.com/documentation/xcode/monitoring-your-metal-apps-graphics-performance).
 
-MetalHUD also supports changing its displayed metrics, size, opacity, and position. PerformanceHUD’s appeal is its combination of system readings, layouts, and everyday controls. See [Apple’s customization guide](https://developer.apple.com/documentation/xcode/customizing-metal-performance-hud).
+MetalHUD's metrics, size, opacity and position can be customized too ([Apple's customization guide](https://developer.apple.com/documentation/xcode/customizing-metal-performance-hud)). What sets PerformanceHUD apart is having system readings, flexible layouts and in-game controls together.
 
 ## Things to know
 
-- **Readings and compatibility:** FPS and focused-app GPU readings depend on what macOS exposes for each app. Unsupported readings stay blank; matching MetalHUD compatibility is not guaranteed. Per-app readings cover the tracked process and may exclude helper processes, so values can differ from Activity Monitor. See [Display compatibility](../README.md#display-compatibility) for fullscreen behavior.
-- **Update frequency:** Most metrics, including battery readings, update about once per second; CPU/GPU temperature sensors have their own schedule. macOS renders the native glass independently. FPS is sampled rather than updated for every frame, and the display refresh reading describes its configured rate or supported variable range, not instantaneous refresh.
-- **Setup:** PerformanceHUD is a separate app. CPU, GPU, ANE, and SoC watts and CPU/GPU GHz need the approved power helper; battery Charge watts do not. Native Liquid Glass needs no screen recording permission. See [installation](INSTALL.md#downloaded-app) and [Privacy & access](PRIVACY_AND_ACCESS.md).
+- **Compatibility:** FPS and focused-app GPU readings depend on what macOS exposes for each app, so they may not appear everywhere MetalHUD does. Per-app readings cover the app's main process and can differ from Activity Monitor. See [Display compatibility](../README.md#display-compatibility) for fullscreen behavior.
+- **Update rate:** Most readings update about once per second. FPS is sampled, not measured for every frame.
+- **Setup:** PerformanceHUD is a separate app. Watt and clock-speed readings need the power helper; see [installation](INSTALL.md#downloaded-app) and [Privacy & access](PRIVACY_AND_ACCESS.md).

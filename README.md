@@ -8,16 +8,16 @@
 
 ## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-3.3.svg" alt="App version 3.3 — view changelog" width="56" height="30" align="top"></a>
 
-Download the ready-built app for **$3.99**, or build it yourself for free. Both offer the same features, with no subscription or feature unlocks.
+Get the ready-built app for **$3.99**, or build it yourself for free. Both have exactly the same features: no subscription, nothing to unlock.
 
 <p>
   <a href="https://ko-fi.com/s/01a23ddc51"><img src="docs/images/download-kofi.svg" alt="Download app on Ko-fi — $3.99 one-time" width="250" height="64"></a>&nbsp;
   <a href="docs/INSTALL.md#build-from-source"><img src="docs/images/build-from-source.svg" alt="Build it yourself — free, requires Xcode" width="250" height="64"></a>
 </p>
 
-Purchases encourage maintenance of PerformanceHUD. The paid app can be used personally or commercially, including in monetized videos and streams. Free source builds and modifications are for **personal, non-commercial use**. Resale and external redistribution are not permitted. See the [license](LICENSE) for details.
+Buying the app helps keep PerformanceHUD maintained, and lets you use it personally or commercially, including in monetized videos and streams. Free source builds and modifications are for **personal, non-commercial use**. Resale and external redistribution are not permitted. See the [license](LICENSE) for details.
 
-You can also support PerformanceHUD's ongoing development and maintenance through **[GitHub Sponsors](https://github.com/sponsors/zzoko)**, whether you build the app yourself or use the ready-built version.
+Whichever version you use, you can also support ongoing development through **[GitHub Sponsors](https://github.com/sponsors/zzoko)**.
 
 <p>
   <a href="https://github.com/sponsors/zzoko"><img src="docs/images/github-sponsors.svg" alt="Support through GitHub Sponsors" width="250" height="64"></a>
@@ -34,15 +34,15 @@ You can also support PerformanceHUD's ongoing development and maintenance throug
 <details>
 <summary><strong>Features, screenshots &amp; controls</strong></summary>
 
-PerformanceHUD is a small app under 10 MB that displays a customizable performance overlay over games and apps. It's a highly versatile tool,  you can use it while gaming, show performance and system information for benchmark videos, or record readings to CSV for later analysis. It can display FPS, CPU, GPU and memory statistics, fan speeds, battery information, and details about the focused app.
+**PerformanceHUD shows what your Mac is doing while you play.** A small overlay sits on top of your game with the live frame rate and what's behind it: CPU and GPU load, temperatures and power draw, memory pressure, fans and battery. It's a native Apple silicon app under 10 MB.
 
-The default layout offers a balanced selection of useful metrics, but the overlay is designed to be highly configurable. You can choose which readings to show, emphasize key values, switch layouts, and select different display styles where supported. Show all the stats available at all times, or use it as a small unobtrusive FPS-only overlay that can automatically hide itself when out of the game. My priority has been to make useful information easy to read without distracting from what’s behind it.
+**Read it at a glance.** Start from a preset: **FPS** for just the number, **Balanced** for the everyday essentials, or **Detailed** for everything down to per-core activity, clock speeds and the resolution a game is actually outputting. From there, each reading can be turned on or off, emphasized, or shown as a number, a bar or a graph. A 60-second FPS history makes dips easy to spot, temperatures turn red past thresholds you choose, and memory pressure has its own history graph. Lay it out as a vertical panel or a horizontal strip, from 0.5× to 2× size.
 
-All settings are available directly in the menu bar. You can show or hide the HUD at any time, including while a game is running. Editable hotkeys let you toggle the HUD, start or stop logging, and change appearance without leaving your current app. The built-in Controls guide explains each option and how it works. In-app updates, optional weekly or monthly update checks, and optional startup at login are also available from the menu.
+**It stays out of your way.** The HUD never takes focus from your game, and clicks pass straight through it; hold Option to drag it somewhere else. Toggle it with **Option-H**, even mid-game, or let it hide itself when no frame rate is detected and come back when a game starts rendering. Readings you've turned off aren't measured at all, so the overlay only costs what you choose to show.
 
-You can also show a few selected readings directly in the macOS menu bar, using the horizontal HUD's proportions at a smaller size. These remain available with the HUD disabled and can be collapsed together with one click. Menu-bar selections start off and are saved with presets.
+**Keep a record, or keep an eye out.** Press **Option-L** to log your selected readings to CSV once per second and compare settings or games in a spreadsheet afterwards. Or pin a few readings to the menu bar to watch your Mac outside games, even with the HUD switched off.
 
-I’ve put a lot of thought into keeping the overlay readable and the controls organized as more features have been added. The goal is to make a useful, thoughtfully designed tool that i would actually want to use myself.
+I built PerformanceHUD as the tool I wanted on my own Mac, and as it has grown I've kept one rule: more features shouldn't make it harder to read.
 
 <table>
   <tr>
@@ -89,7 +89,7 @@ I’ve put a lot of thought into keeping the overlay readable and the controls o
   </tr>
 </table>
 
-*Liquid Glass follows macOS by default; its strength can also be adjusted in the app.*
+*Liquid Glass follows your macOS setting by default, and its strength can be adjusted in the app.*
 
 </details>
 
@@ -104,11 +104,11 @@ I’ve put a lot of thought into keeping the overlay readable and the controls o
 <details>
 <summary>View display modes and fullscreen compatibility</summary>
 
-- **Windowed and borderless:** Recommended display mode for games and apps for universal compatibility and "just works". The HUD stays visible over apps and games, with correct scaling and Retina rendering independent of the game’s rendering resolution.
-- **Fullscreen — native macOS games:** Generally works in fullscreen mode. Some games change macOS UI scaling in fullscreen exclusive, making the HUD and other system UI appear smaller or larger. The HUD follows macOS scaling; so if for example a game is set to 4K macOS scale may become a lot smaller including the HUD, in such cases adjusting the **Size** in the PerformanceHUD menu between **0.5× to 2×** can make it fit better. Confirmed working in fullscreen exclusive in Stray and Minecraft using Vulkan rendering.
-- **Fullscreen — Windows games through compatibility layers:** Games running through CrossOver or similar tools only show the HUD reliably when the fullscreen resolution matches your desktop’s current “looks like” resolution or its 2× Retina equivalent. Confirmed working with matching resolutions in Red Dead Redemption 2 and Resident Evil Requiem through CrossOver. If the HUD disappears, try one of these resolutions or switch to windowed/borderless.
+- **Windowed and borderless (recommended):** The most compatible option; it just works. The HUD stays visible over any game or app, correctly scaled and Retina-sharp regardless of the game's rendering resolution.
+- **Fullscreen — native macOS games:** Generally works. Some games change macOS display scaling in exclusive fullscreen, and since the HUD follows macOS scaling, it can end up smaller or larger along with the rest of the system UI. Setting a game to 4K, for example, can shrink it noticeably. If that happens, adjust **Size** in the PerformanceHUD menu (**0.5×** to **2×**) until it fits. Confirmed working in exclusive fullscreen in Stray, and in Minecraft with Vulkan rendering.
+- **Fullscreen — Windows games through compatibility layers:** With CrossOver or similar tools, the HUD only appears reliably when the game's fullscreen resolution matches your desktop's current "looks like" resolution, or its 2× Retina equivalent. Confirmed working at matching resolutions in Red Dead Redemption 2 and Resident Evil Requiem through CrossOver. If the HUD disappears, switch to one of those resolutions or to windowed/borderless.
 
-To find your desktop resolution, open **System Settings → Displays** and hover over the selected scaling thumbnail, or choose **Show List**. For the 2× Retina equivalent, double both dimensions. For example, a 13-inch MacBook Air uses **1470×956** or **2940×1912** with its default scaling setting. So for the HUD to be visible in RDR2 running through CrossOver while the game is set to fullscreen the in-game resolution would need to be set to either **1470x956** or **2940x1912**. Windowed and borderless mode avoids needing matching resolutions as mentioned.
+To find your desktop resolution, open **System Settings → Displays** and hover over the selected scaling thumbnail, or choose **Show List**. Double both numbers for the 2× Retina equivalent. A 13-inch MacBook Air at its default scaling, for example, uses **1470×956**, so RDR2 in fullscreen through CrossOver would need an in-game resolution of **1470×956** or **2940×1912**. Windowed and borderless modes don't need a matching resolution at all.
 
 </details>
 
