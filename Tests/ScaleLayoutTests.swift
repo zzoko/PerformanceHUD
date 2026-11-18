@@ -93,8 +93,13 @@ import AppKit
         rect.size.width = width
         return (label, rect)
        }.sorted { $0.1.minX < $1.1.minX }
-       for (left, right) in zip(visible, visible.dropFirst()) {
-        check(left.1.maxX <= right.1.minX + 1, "Overlapping horizontal labels at \(scale.rawValue): \(left.0.stringValue) / \(right.0.stringValue)")
+       // Separate core-type rows deliberately share the same horizontal columns.
+       for (index, left) in visible.enumerated() {
+        for right in visible.dropFirst(index + 1) {
+         if right.1.minX >= left.1.maxX - 1 { break }
+         let overlap = left.1.intersection(right.1)
+         check(overlap.width <= 1 || overlap.height <= 1, "Overlapping horizontal labels at \(scale.rawValue): \(left.0.stringValue) / \(right.0.stringValue)")
+        }
        }
       }
       if CommandLine.arguments.contains("--preview"), mode == .total && !highlighted && [0.5, 1, 1.5, 2].contains(scale.rawValue) {

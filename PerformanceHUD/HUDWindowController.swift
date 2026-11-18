@@ -38,7 +38,7 @@ final class HUDWindowController {
 
     private let metricGroups: [[HUDMetric]] = [
         [.fps, .fpsGraph],
-        [.gpu, .gpuTotal, .gpuCores, .cpu, .cpuTotal, .cpuCores, .aneTotal, .ram, .ramTotal],
+        [.gpuTotal, .gpuCores, .cpuTotal, .cpuCores, .aneTotal, .ramTotal],
         [.fans],
         [.battery]
     ]
@@ -46,8 +46,8 @@ final class HUDWindowController {
     private let verticalMetricGroups: [[HUDMetric]] = [
         [.fps, .fpsGraph],
         [.process],
-        [.gpu, .gpuTotal, .gpuCores, .cpu, .cpuTotal, .cpuCores, .aneTotal],
-        [.ram, .ramTotal],
+        [.gpuTotal, .gpuCores, .cpuTotal, .cpuCores, .aneTotal],
+        [.ramTotal],
         [.fans],
         [.battery],
         [.misc]
@@ -68,6 +68,10 @@ final class HUDWindowController {
     private let horizontalView = HUDHorizontalView(frame: .zero)
     private let fanView = HUDFanView(frame: .zero)
     private var fanOptions = HUDPreferences.fanOptions
+    private var fpsMeasure = HUDPreferences.fpsOptions.measure
+    private var fpsHitchMarks = HUDPreferences.fpsOptions.hitchMarks
+    private var latestFPS: Double?
+    private var latestFrameTiming: MetalFrameTiming?
     private var fpsValueHighlighted = HUDPreferences.fpsOptions.valueHighlighted
     private var fpsValueSize = HUDPreferences.fpsOptions.valueSize
     private var fpsValueHeightConstraint: NSLayoutConstraint?
@@ -558,6 +562,7 @@ final class HUDWindowController {
             return view
         }
         if metric == .fpsGraph {
+            fpsGraphView.configure(measure: fpsMeasure, hitchMarks: fpsHitchMarks)
             fpsGraphView.translatesAutoresizingMaskIntoConstraints = false
             fpsGraphView.applyStyle(scale: hudScale, background: textBackground)
             let height = fpsGraphView.heightAnchor.constraint(
@@ -605,7 +610,7 @@ final class HUDWindowController {
         let titleLabel =
             NSTextField(
                 labelWithString:
-                    metric.hudTitle
+                    metric == .fps ? fpsMeasure.caption : metric.hudTitle
             )
 
         titleLabel.font =
@@ -781,7 +786,7 @@ final class HUDWindowController {
 
         }
 
-        if metric == .ram || metric == .ramTotal {
+        if metric == .ramTotal {
             let detailLabel = NSTextField(labelWithString: "")
             detailLabel.font = HUDStyle.ramDetailFont(scale: hudScale)
             detailLabel.textColor = HUDStyle.readingColor(background: textBackground)
@@ -810,53 +815,51 @@ final class HUDWindowController {
             ramDetailLabels[metric] = detailLabel
             ramDetailTitleLabels[metric] = physicalLabel
 
-            if metric == .ramTotal {
-                let swapTitle = NSTextField(labelWithString: "Swap")
-                swapTitle.setAccessibilityLabel("Swap memory")
-                let swapValue = NSTextField(labelWithString: "")
-                let pressureValue = NSTextField(labelWithString: "")
-                pressureValue.setAccessibilityLabel("Memory pressure")
-                let pressureTitle = NSTextField(labelWithString: "Pressure")
-                swapValue.alignment = .right
-                pressureValue.alignment = .right
-                for label in [swapTitle, swapValue, pressureValue, pressureTitle] {
-                    label.font = detailLabel.font
-                    label.textColor = detailLabel.textColor
-                    label.translatesAutoresizingMaskIntoConstraints = false
-                    row.addSubview(label)
-                }
-                for caption in [swapTitle, pressureTitle] {
-                    caption.font = HUDStyle.smallLabelFont(scale: hudScale)
-                    caption.textColor = HUDStyle.TextStyle.label.color(background: textBackground)
-                }
-                let pressureAfterDetails = pressureValue.topAnchor.constraint(equalTo: swapValue.bottomAnchor)
-                ramPressureAfterDetailsConstraint = pressureAfterDetails
-                ramPressureWithoutDetailsConstraint = pressureValue.topAnchor.constraint(equalTo: valueLabel.bottomAnchor,
-                    constant: HUDStyle.rowSpacing(scale: hudScale))
-                NSLayoutConstraint.activate([
-                    swapTitle.leadingAnchor.constraint(equalTo: physicalLabel.leadingAnchor),
-                    swapTitle.firstBaselineAnchor.constraint(equalTo: swapValue.firstBaselineAnchor),
-                    swapValue.topAnchor.constraint(equalTo: detailLabel.bottomAnchor),
-                    swapValue.heightAnchor.constraint(equalTo: detailLabel.heightAnchor),
-                    swapValue.leadingAnchor.constraint(greaterThanOrEqualTo: swapTitle.trailingAnchor),
-                    swapValue.trailingAnchor.constraint(equalTo: valueLabel.trailingAnchor),
-                    pressureAfterDetails,
-                    pressureValue.heightAnchor.constraint(equalTo: detailLabel.heightAnchor),
-                    pressureTitle.leadingAnchor.constraint(equalTo: physicalLabel.leadingAnchor),
-                    pressureTitle.firstBaselineAnchor.constraint(equalTo: pressureValue.firstBaselineAnchor),
-                    pressureValue.leadingAnchor.constraint(greaterThanOrEqualTo: pressureTitle.trailingAnchor),
-                    pressureValue.trailingAnchor.constraint(equalTo: valueLabel.trailingAnchor)
-                ])
-                ramSwapTitleLabel = swapTitle
-                ramSwapValueLabel = swapValue
-                ramPressureValueLabel = pressureValue
-                ramPressureTitleLabel = pressureTitle
-                row.addSubview(ramPressureMeter)
-                NSLayoutConstraint.activate([
-                    ramPressureMeter.trailingAnchor.constraint(equalTo: pressureValue.trailingAnchor),
-                    ramPressureMeter.centerYAnchor.constraint(equalTo: pressureTitle.centerYAnchor)
-                ])
+            let swapTitle = NSTextField(labelWithString: "Swap")
+            swapTitle.setAccessibilityLabel("Swap memory")
+            let swapValue = NSTextField(labelWithString: "")
+            let pressureValue = NSTextField(labelWithString: "")
+            pressureValue.setAccessibilityLabel("Memory pressure")
+            let pressureTitle = NSTextField(labelWithString: "Pressure")
+            swapValue.alignment = .right
+            pressureValue.alignment = .right
+            for label in [swapTitle, swapValue, pressureValue, pressureTitle] {
+                label.font = detailLabel.font
+                label.textColor = detailLabel.textColor
+                label.translatesAutoresizingMaskIntoConstraints = false
+                row.addSubview(label)
             }
+            for caption in [swapTitle, pressureTitle] {
+                caption.font = HUDStyle.smallLabelFont(scale: hudScale)
+                caption.textColor = HUDStyle.TextStyle.label.color(background: textBackground)
+            }
+            let pressureAfterDetails = pressureValue.topAnchor.constraint(equalTo: swapValue.bottomAnchor)
+            ramPressureAfterDetailsConstraint = pressureAfterDetails
+            ramPressureWithoutDetailsConstraint = pressureValue.topAnchor.constraint(equalTo: valueLabel.bottomAnchor,
+                constant: HUDStyle.rowSpacing(scale: hudScale))
+            NSLayoutConstraint.activate([
+                swapTitle.leadingAnchor.constraint(equalTo: physicalLabel.leadingAnchor),
+                swapTitle.firstBaselineAnchor.constraint(equalTo: swapValue.firstBaselineAnchor),
+                swapValue.topAnchor.constraint(equalTo: detailLabel.bottomAnchor),
+                swapValue.heightAnchor.constraint(equalTo: detailLabel.heightAnchor),
+                swapValue.leadingAnchor.constraint(greaterThanOrEqualTo: swapTitle.trailingAnchor),
+                swapValue.trailingAnchor.constraint(equalTo: valueLabel.trailingAnchor),
+                pressureAfterDetails,
+                pressureValue.heightAnchor.constraint(equalTo: detailLabel.heightAnchor),
+                pressureTitle.leadingAnchor.constraint(equalTo: physicalLabel.leadingAnchor),
+                pressureTitle.firstBaselineAnchor.constraint(equalTo: pressureValue.firstBaselineAnchor),
+                pressureValue.leadingAnchor.constraint(greaterThanOrEqualTo: pressureTitle.trailingAnchor),
+                pressureValue.trailingAnchor.constraint(equalTo: valueLabel.trailingAnchor)
+            ])
+            ramSwapTitleLabel = swapTitle
+            ramSwapValueLabel = swapValue
+            ramPressureValueLabel = pressureValue
+            ramPressureTitleLabel = pressureTitle
+            row.addSubview(ramPressureMeter)
+            NSLayoutConstraint.activate([
+                ramPressureMeter.trailingAnchor.constraint(equalTo: pressureValue.trailingAnchor),
+                ramPressureMeter.centerYAnchor.constraint(equalTo: pressureTitle.centerYAnchor)
+            ])
         }
 
         // MARK: Save References
@@ -1072,21 +1075,15 @@ final class HUDWindowController {
         if group == .gpu { gpuResourceOptions = options }
         if group.supportsTemperature { temperatureWarnings[group.totalMetric] = options.heatWarning }
         highlightedReadings[group.totalMetric] = options.highlighted
-        if let appMetric = group.appMetric {
-            highlightedReadings[appMetric] = options.highlighted.contains(.focusedApp) ? [.totalUse] : []
-        }
         if group == .ram {
             showsRAMDetails = options.showsDetails
             showsRAMPressure = options.showsPressure
             memoryPressureMode = options.pressureMode
             if !showsRAMPressure || !memoryPressureMode.isHistory { ramPressureHistory.clear() }
-            for metric in [HUDMetric.ram, .ramTotal] {
-                if options.usageVisible { hiddenUtilizationMetrics.remove(metric) }
-                else { hiddenUtilizationMetrics.insert(metric) }
-                valueLabels[metric]?.isHidden = !options.usageVisible
-            }
+            if options.usageVisible { hiddenUtilizationMetrics.remove(.ramTotal) }
+            else { hiddenUtilizationMetrics.insert(.ramTotal) }
+            valueLabels[.ramTotal]?.isHidden = !options.usageVisible
         }
-        if let appMetric = group.appMetric { enabledMetrics.remove(appMetric) }
         enabledMetrics.remove(group.totalMetric)
         enabledMetrics.formUnion(options.visibleMetrics(for: group))
         if group == .cpu {
@@ -1101,9 +1098,7 @@ final class HUDWindowController {
             else { enabledMetrics.remove(.gpuCores) }
             gpuCoreView.isHidden = !visible
         }
-        for metric in [group.appMetric, group.totalMetric].compactMap({ $0 }) {
-            metricRows[metric]?.isHidden = !enabledMetrics.contains(metric)
-        }
+        metricRows[group.totalMetric]?.isHidden = !enabledMetrics.contains(group.totalMetric)
         if group.supportsPower {
             let showPower = options.enabled && options.power
             if showPower {
@@ -1166,6 +1161,11 @@ final class HUDWindowController {
         let sizeChanged = fpsValueSize != options.valueSize
         fpsValueHighlighted = options.valueHighlighted
         fpsValueSize = options.valueSize
+        fpsMeasure = options.measure
+        fpsHitchMarks = options.hitchMarks
+        titleLabels[.fps]?.stringValue = fpsMeasure.caption
+        valueLabels[.fps]?.stringValue = fpsReading
+        fpsGraphView.configure(measure: fpsMeasure, hitchMarks: fpsHitchMarks)
         if enabledMetrics.intersection([.fps, .fpsGraph]) == visible && !sizeChanged {
             // A text-only change preserves FPS history, animation and window geometry.
             updateReadingAppearance()
@@ -1183,27 +1183,11 @@ final class HUDWindowController {
         updateVisibility()
     }
 
-    func setMetricEnabled(
-        _ metric: HUDMetric,
-        enabled: Bool
-    ) {
-
-        if enabled {
-
-            enabledMetrics.insert(
-                metric
-            )
-
-        } else {
-
-            enabledMetrics.remove(
-                metric
-            )
-        }
-
-        metricRows[metric]?
-            .isHidden =
-                !enabled
+    func setMetricEnabled(_ metric: HUDMetric, enabled: Bool) {
+        guard let row = metricRows[metric] else { return }
+        if enabled { enabledMetrics.insert(metric) }
+        else { enabledMetrics.remove(metric) }
+        row.isHidden = !enabled
 
         if metric == .fpsGraph && !enabled { fpsGraphView.reset() }
 
@@ -1551,38 +1535,35 @@ final class HUDWindowController {
                 }
                 guard enabledMetrics.contains(metric), alignment.allows(metric), metric != .battery,
                       let title = titleLabels[metric] else { continue }
-                let resourceGroup = HUDResourceGroup.allCases.first { $0.totalMetric == metric || $0.appMetric == metric }
                 func append(_ field: NSTextField?, role: String, reference: String, title: Bool = false) {
                     guard let field, let font = field.font, let color = field.textColor else { return }
                     readings.append(.init(id: "\(metric.rawValue).\(role)", text: field.stringValue,
                         reference: reference, font: font, color: color, help: field.toolTip, startsMetric: title,
-                        resourceGroup: resourceGroup, metric: metric,
+                        metric: metric,
                         sizingFont: metric == .fps && !title
                             ? HUDStyle.fpsValueFont(scale: hudScale, highlighted: true, size: fpsValueSize) : nil))
                 }
-                append(title, role: "title", reference: metric.hudTitle, title: true)
+                append(title, role: "title", reference: title.stringValue, title: true)
                 if powerMetrics.contains(metric) { append(powerLabels[metric], role: "power", reference: HUDStyle.horizontalPowerReference) }
                 if temperatureMetrics.contains(metric) { append(temperatureLabels[metric], role: "temperature", reference: HUDStyle.horizontalTemperatureReference) }
-                if metric != .ramTotal && !hiddenUtilizationMetrics.contains(metric) {
-                    let reference = metric == .fps ? "9999" : HUDStyle.horizontalPercentageReference
+                if !hiddenUtilizationMetrics.contains(metric) {
+                    let reference = metric == .fps ? HUDStyle.frameValueReference : HUDStyle.horizontalPercentageReference
                     append(valueLabels[metric], role: "value", reference: reference)
                 }
-                if showsRAMDetails && (metric == .ram || metric == .ramTotal) {
+                if showsRAMDetails && metric == .ramTotal {
                     func appendDetail(_ abbreviation: String, value: String, reference: String, help: String) {
                         for (role, text, sizing) in [("title", abbreviation, abbreviation), ("value", value, reference)] {
                             readings.append(.init(id: "\(metric.rawValue).\(abbreviation).\(role)", text: text, reference: sizing,
                                 font: role == "value" ? ramDetailsFont : HUDStyle.smallLabelFont(scale: hudScale),
                                 color: (role == "value" ? HUDStyle.TextStyle.reading : .label).color(background: textBackground),
-                                help: help, startsMetric: false, resourceGroup: .ram, metric: metric,
+                                help: help, startsMetric: false, metric: metric,
                                 tightLeading: role == "value", leftAligned: true))
                         }
                     }
                     appendDetail("PHY", value: ramDetailLabels[metric]?.stringValue ?? "", reference: "999.99 GB",
-                                 help: metric == .ram ? "Physical memory used by the focused app’s tracked process." : "System physical memory used.")
-                    if metric == .ramTotal {
-                        let swapValue = ramSwapValueLabel?.stringValue ?? ""
-                        appendDetail("SWP", value: swapValue, reference: "999.99 GB", help: "System swap used.")
-                    }
+                                 help: "System physical memory used.")
+                    appendDetail("SWP", value: ramSwapValueLabel?.stringValue ?? "", reference: "999.99 GB",
+                                 help: "System swap used.")
                 }
                 if metric == .ramTotal && showsRAMPressure {
                     let pressure = ramPressureValueLabel?.stringValue ?? ""
@@ -1591,12 +1572,9 @@ final class HUDWindowController {
                     readings.append(.init(id: "ram.pressure", text: pressure, reference: "warning",
                         font: ramPressureFont,
                         color: HUDStyle.readingColor(background: textBackground),
-                        help: "Memory pressure: \(pressure).", startsMetric: false, resourceGroup: .ram, metric: metric,
+                        help: "Memory pressure: \(pressure).", startsMetric: false, metric: metric,
                         sizingFont: HUDStyle.readingFont(scale: hudScale, highlighted: true),
                         pressureMode: memoryPressureMode.resolved(for: .horizontal)))
-                }
-                if metric == .ramTotal && !hiddenUtilizationMetrics.contains(metric) {
-                    append(valueLabels[metric], role: "value", reference: "100%")
                 }
             }
             if !readings.isEmpty { sections.append(readings) }
@@ -1605,18 +1583,19 @@ final class HUDWindowController {
                                             scale: hudScale, background: textBackground, fpsValueSize: fpsValueSize)
         let horizontalPadding = HUDStyle.horizontalPadding(scale: hudScale)
         let verticalPadding = HUDStyle.verticalPadding(scale: hudScale)
-        horizontalView.frame = NSRect(x: horizontalPadding, y: verticalPadding, width: size.width, height: size.height)
         let total = pixelAlignedSize(NSSize(width: size.width + 2 * horizontalPadding,
                                             height: size.height + 2 * verticalPadding))
-        // Readings usually fit their reserved width. Avoid touching the window or
-        // window geometry on each sample unless the actual size changes.
+        // Core stacks may draw into the strip's vertical padding. Keep all
+        // reading coordinates relative to the usual centered content row.
+        horizontalView.frame = NSRect(x: horizontalPadding, y: 0, width: size.width, height: total.height)
+        horizontalView.bounds = NSRect(x: 0, y: -verticalPadding, width: size.width, height: total.height)
         if forceLayout || expandedHUDSize != total {
             resizeHUD(width: total.width, height: total.height)
         } else {
             // Sampling must not undo the presentation offset or resize the window.
             applyHUDPresentation()
         }
-        horizontalView.alignFPSVertically(heightRounding: total.height - size.height - 2 * verticalPadding)
+        horizontalView.alignReadingFrames(fpsHeightRounding: total.height - size.height - 2 * verticalPadding)
     }
 
     private func horizontalFanReadings() -> [HUDHorizontalView.Reading] {
@@ -1661,18 +1640,21 @@ final class HUDWindowController {
     }
 
     private func metricRowHeight(_ metric: HUDMetric, scale: HUDScale) -> CGFloat {
+        if metric == .fpsGraph && !enabledMetrics.contains(.fps) {
+            return HUDStyle.rowHeight(for: .fpsGraph, scale: scale) + HUDStyle.rowHeight(scale: scale)
+        }
         if metric == .fps { return HUDStyle.fpsRowHeight(scale: scale, size: fpsValueSize) }
         if metric == .cpuCores { return cpuCoreView.height(scale: scale) }
         if metric == .gpuCores { return gpuCoreView.height(scale: scale) }
         if metric == .misc { return miscView.height(scale: scale) }
         if metric == .fans { return fanView.height(scale: scale) }
-        if metric == .ram || metric == .ramTotal {
-            let detailLines = showsRAMDetails ? (metric == .ramTotal ? 2 : 1) : 0
-            let pressureLines = metric == .ramTotal && showsRAMPressure ? 1 : 0
+        if metric == .ramTotal {
+            let detailLines = showsRAMDetails ? 2 : 0
+            let pressureLines = showsRAMPressure ? 1 : 0
             return HUDStyle.rowHeight(scale: scale)
                 + (detailLines + pressureLines > 0 ? HUDStyle.rowSpacing(scale: scale) : 0)
                 + CGFloat(detailLines + pressureLines) * HUDStyle.ramDetailHeight(scale: scale)
-                + (metric == .ramTotal ? pressureHistoryExtraHeight(scale: scale) : 0)
+                + pressureHistoryExtraHeight(scale: scale)
         }
         return HUDStyle.rowHeight(for: metric, scale: scale)
     }
@@ -1690,9 +1672,7 @@ final class HUDWindowController {
         ramPressureValueLabel?.isHidden = !showsRAMPressure || memoryPressureMode != .text
         ramPressureMeter.isHidden = !showsRAMPressure || alignment != .vertical || memoryPressureMode == .text || memoryPressureMode.isHistory
         ramPressureHistory.isHidden = !showsRAMPressure || alignment != .vertical || !memoryPressureMode.isHistory
-        for metric in [HUDMetric.ram, .ramTotal] {
-            rowHeightConstraints[metric]?.constant = metricRowHeight(metric, scale: hudScale)
-        }
+        rowHeightConstraints[.ramTotal]?.constant = metricRowHeight(.ramTotal, scale: hudScale)
     }
 
     private func updateLayout(keepingModeTransition: Bool = false) {
@@ -1706,6 +1686,8 @@ final class HUDWindowController {
         // Measure the unchanged expanded stack before applying its presentation crop.
         stackTopConstraint?.constant = HUDStyle.verticalPadding(scale: hudScale)
         for metric in [HUDMetric.fps, .fpsGraph] { metricRows[metric]?.alphaValue = 1 }
+        fpsGraphView.showsHeading = !enabledMetrics.contains(.fps)
+        rowHeightConstraints[.fpsGraph]?.constant = metricRowHeight(.fpsGraph, scale: hudScale)
         updateReadingAppearance()
         updateRAMDetailsVisibility()
         fanView.update(sample: fanSample, options: fanOptions, scale: hudScale, background: textBackground)
@@ -2138,14 +2120,19 @@ final class HUDWindowController {
         _ metric: HUDMetric,
         value: String
     ) {
-        defer { refreshHorizontalReadings() }
-        if metric == .gpu { processView.setValue(value, for: .gpu) }
-        if metric == .cpu { processView.setValue(value, for: .cpu) }
-
-        if metric == .battery {
+        switch metric {
+        case .gpu:
+            processView.setValue(value, for: .gpu)
+            return
+        case .cpu:
+            processView.setValue(value, for: .cpu)
+            return
+        case .battery:
             if value.isEmpty { updateBattery(nil) }
             return
+        default: break
         }
+        defer { refreshHorizontalReadings() }
         valueLabels[metric]?
             .stringValue =
                 value
@@ -2169,12 +2156,15 @@ final class HUDWindowController {
     func clearMemoryPressureHistory() { ramPressureHistory.clear() }
 
     func updateRAM(_ metric: HUDMetric, usage: RAMUsageSample?) {
-        guard metric == .ram || metric == .ramTotal else { return }
-        if metric == .ram { processView.setValue(usage?.gigabytesText, for: .memory) }
+        if metric == .ram {
+            processView.setValue(usage?.gigabytesText, for: .memory)
+            return
+        }
+        guard metric == .ramTotal else { return }
         defer { refreshHorizontalReadings() }
         valueLabels[metric]?.stringValue = usage.map { "\(Int($0.percentage.rounded()))%" } ?? ""
         ramDetailLabels[metric]?.stringValue = usage?.gigabytesText ?? ""
-        if metric == .ramTotal { ramSwapValueLabel?.stringValue = usage?.swapGigabytesText ?? "" }
+        ramSwapValueLabel?.stringValue = usage?.swapGigabytesText ?? ""
     }
 
     // MARK: - Process and core detail rows
@@ -2200,6 +2190,9 @@ final class HUDWindowController {
     func updateCPUCores(_ sample: CPUCoreSample) {
         cpuCoreSample = sample
         cpuCoreView.update(sample: sample, frequencies: cpuFrequencies)
+        if alignment == .horizontal && enabledMetrics.contains(.cpuCores) && cpuCoreOptions.mode.showsBars {
+            refreshHorizontalReadings()
+        }
     }
 
     func updateCPUFrequencies(_ frequencies: CPUFrequencySample) {
@@ -2222,35 +2215,27 @@ final class HUDWindowController {
 
     // MARK: - FPS
 
-    func updateFPS(
-        _ fps: Double
-    ) {
+    private var fpsReading: String {
+        fpsMeasure.reading(fps: latestFPS, averageMS: latestFrameTiming?.averageMS) ?? (latestFPS == nil ? "" : "—")
+    }
 
-        guard
-            fps.isFinite, fps >= 0, fps < Double(Int.max)
-        else {
-
+    func updateFPS(_ fps: Double, timing: MetalFrameTiming? = nil) {
+        guard fps.isFinite, fps >= 0, fps < Double(Int.max) else {
             markFPSUnavailable()
-
             return
         }
-
+        latestFPS = fps
+        latestFrameTiming = timing
         fpsBecameAvailable()
-        updateMetric(
-            .fps,
-            value:
-                String(
-                    Int(
-                        fps.rounded()
-                    )
-                )
-        )
+        updateMetric(.fps, value: fpsReading)
         if hudEnabled && enabledMetrics.contains(.fpsGraph) {
-            fpsGraphView.append(fps)
+            fpsGraphView.append(fps, timing: timing)
         }
     }
 
     func markFPSUnavailable() {
+        latestFPS = nil
+        latestFrameTiming = nil
         fpsBecameUnavailable()
         updateMetric(.fps, value: "")
         if hudEnabled && enabledMetrics.contains(.fpsGraph) {
@@ -2259,14 +2244,11 @@ final class HUDWindowController {
     }
 
     func resetFPS() {
+        latestFPS = nil
+        latestFrameTiming = nil
         fpsBecameUnavailable()
-
         fpsGraphView.reset()
-
-        updateMetric(
-            .fps,
-            value: ""
-        )
+        updateMetric(.fps, value: "")
     }
 }
 

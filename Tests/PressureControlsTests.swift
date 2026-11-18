@@ -38,7 +38,7 @@ import AppKit
         let styles: NSSegmentedControl = member(menu, "pressureStyleControl") as NSSegmentedControl?
             ?? { fatalError("Missing pressure styles") }()
         precondition((0..<4).map { styles.label(forSegment: $0)! } == ["A1", "A2", "B1", "B2"], "Pressure style labels match the meter/history families")
-        precondition(controls[8]!.frame.minY < controls[5]!.frame.minY, "Pressure precedes Details")
+        precondition(controls[8]!.frame.minY > controls[5]!.frame.maxY, "Pressure follows Details")
         precondition(abs(modes.frame.midY - controls[8]!.frame.midY) < 1, "Modes belong to Pressure")
         let bold = (controls[8] as! HUDReadingCheckbox).emphasisControl!
         precondition(modes.selectedSegment == 1 && styles.selectedSegment == 3 && !bold.isEnabled,
@@ -165,9 +165,10 @@ import AppKit
                                 precondition(pressure.font == HUDStyle.readingFont(scale: .normal, highlighted: false), "Details cannot bold Pressure")
                                 precondition(physical[.ramTotal]!.isHidden == !details && swap.isHidden == !details, "Details controls Physical and Swap")
                                 let visible = option.visibleMetrics(for: .ram)
-                                for metric in [HUDMetric.ram, .ramTotal] {
-                                    precondition(rows[metric]!.isHidden == !visible.contains(metric), "Only requested memory sources appear")
-                                }
+                                precondition(rows[.ramTotal]!.isHidden == !visible.contains(.ramTotal),
+                                             "System memory visibility follows its selected readings")
+                                precondition(!visible.contains(.ram) && rows[.ram] == nil,
+                                             "Legacy memory selections cannot create a separate app memory row")
                                 if alignment == .vertical {
                                     precondition(meter.isHidden == (!showsPressure || mode == .text || mode.isHistory), "Pressure meter is independent")
                                     precondition(history.isHidden == (!showsPressure || !mode.isHistory), "History follows its own style")
@@ -201,7 +202,7 @@ import AppKit
                                 precondition(columns.contains(.memoryPressure) == showsPressure, "CSV pressure follows Pressure")
                                 precondition(columns.contains(.memoryPhysical) == details, "CSV physical memory follows Details")
                                 precondition(columns.contains(.memorySwap) == details, "CSV swap follows Details")
-                                if showsPressure { precondition(columns.first == .memoryPressure, "CSV follows menu order") }
+                                if showsPressure { precondition(columns.first == .memoryPressure, "CSV keeps pressure first for existing log consumers") }
                             }
                         }
                     }

@@ -241,8 +241,12 @@ import AppKit
                                     let symbols: [String: NSImageView] = member(horizontal, "symbols")
                                     let icons = symbols.filter { $0.key.hasPrefix("fan.") && $0.key.hasSuffix(".title") && !$0.value.isHidden }
                                     check(icons.count == expectedRows, "Correct averaged/individual horizontal fan icons")
-                                    check(icons.values.allSatisfy { $0.image != nil && $0.frame.width == HUDFanIcon.side * scale.rawValue
-                                        && $0.frame.height == HUDFanIcon.side * scale.rawValue }, "Icons retain their compact square size")
+                                    let pixel = horizontal.convertFromBacking(NSSize(width: 1, height: 1)).width
+                                    for icon in icons.values {
+                                        check(icon.image != nil && abs(icon.frame.width - HUDFanIcon.side * scale.rawValue) <= pixel / 2 + 0.001
+                                              && abs(icon.frame.height - icon.frame.width) < 0.001,
+                                              "Icons retain their compact square size (\(icon.frame.size), pixel \(pixel))")
+                                    }
                                     if display == .both {
                                         let bars: [String: HUDFanBarView] = member(horizontal, "bars")
                                         for (id, bar) in bars where !bar.isHidden {
@@ -254,10 +258,10 @@ import AppKit
                                             let halfTextWidth = rpm.intrinsicContentSize.width / 2
                                             let leftGap = textRect.midX - halfTextWidth - icon.frame.maxX
                                             let rightGap = bar.frame.minX - textRect.midX - halfTextWidth
-                                            check(rpm.alignment == .center && leftGap > 0 && abs(leftGap - rightGap) < 0.5,
+                                            check(rpm.alignment == .center && leftGap > 0 && abs(leftGap - rightGap) <= pixel + 0.001,
                                                   "Both centres RPM with equal visible spacing to its icon and bar")
                                             let graph: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
-                                            check(abs(bar.frame.width - (graph.intrinsicContentSize.width - 4 * CGFloat(scale.rawValue))) < 0.01,
+                                            check(abs(bar.frame.width - (graph.intrinsicContentSize.width - 4 * CGFloat(scale.rawValue))) <= pixel / 2 + 0.001,
                                                   "Horizontal and vertical bars share the pressure graph width")
                                         }
                                     }
@@ -267,7 +271,10 @@ import AppKit
                                     }
                                     let dividers: [NSView] = member(horizontal, "dividers")
                                     let visible = dividers.filter { !$0.isHidden }
-                                    check(visible.count == max(0, expectedRows - 1) && visible.allSatisfy { abs($0.frame.width - 0.5 * scale.rawValue) < 0.001 }, "Only faint dividers within FAN")
+                                    let faintWidth = max(1, (0.5 * scale.rawValue / pixel).rounded()) * pixel
+                                    check(visible.count == max(0, expectedRows - 1) && visible.allSatisfy {
+                                        abs($0.frame.width - faintWidth) < 0.001 && ($0.layer?.backgroundColor?.alpha ?? 1) < 0.2
+                                    }, "Only faint, pixel-aligned dividers within FAN")
                                 }
                                 if count == 0 {
                                     for status in [FanSample.checking, .noFans, .unavailable] {

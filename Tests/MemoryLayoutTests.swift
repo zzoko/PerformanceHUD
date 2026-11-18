@@ -19,7 +19,8 @@ import AppKit
         let groups: [[HUDMetric]] = member(hud, "verticalMetricGroups")
         let stack: NSStackView = member(hud, "stackView")
         let rows: [HUDMetric: NSView] = member(hud, "metricRows")
-        for metric in [HUDMetric.ramTotal, .ram, .misc, .fans] {
+        precondition([HUDMetric.gpu, .cpu, .ram].allSatisfy { rows[$0] == nil }, "APP readings have no independent resource rows")
+        for metric in [HUDMetric.ramTotal, .misc, .fans] {
             hud.setMetricEnabled(metric, enabled: true)
             precondition(dividers.values.allSatisfy(\.isHidden),
                          "A lone \(metric.hudTitle) category has no leading or trailing divider")
@@ -40,9 +41,60 @@ import AppKit
                      "Fans before Misc retains its separating boundary without a top divider")
         print("PASS: singleton Memory, Misc, and Fan divider boundaries")
     }
+    @MainActor static func horizontalDividerSpacing() {
+        let strip = HUDHorizontalView(frame: .zero)
+        strip.battery.update(percentage: 50, source: .battery)
+        let pins: Set<HUDMenuBarReading> = [.socPower, .batteryEnergy]
+        let style = HUDMenuBarPresentation.Style.current
+        let withMemory = HUDMenuBarPresentation.sections(snapshot: .init(), fanSample: .noFans,
+            readings: pins.union([.memoryUsage]), style: style, background: .dark)
+        let withoutMemory = HUDMenuBarPresentation.sections(snapshot: .init(), fanSample: .noFans,
+            readings: pins, style: style, background: .dark)
+        let withFPSAndFans = HUDMenuBarPresentation.sections(snapshot: .init(), fanSample: .noFans,
+            readings: pins.union([.fps, .memoryUsage, .fanUsage]), style: style, background: .dark)
+        for scale in [HUDScale.small, .normal, .large] {
+            let factor = CGFloat(scale.rawValue)
+            _ = strip.configure(sections: withMemory, showsBattery: true, scale: scale, background: .dark)
+            let labels: [String: NSTextField] = member(strip, "labels")
+            let dividers: [NSView] = member(strip, "dividers")
+            let soc = labels["package.title"]!, watts = labels["package.power"]!
+            let memory = labels["\(HUDMetric.ramTotal.rawValue).title"]!
+            let usage = labels["\(HUDMetric.ramTotal.rawValue).value"]!
+            let memoryTextStart = memory.alignmentRect(forFrame: memory.frame).minX
+            let socDivider = dividers[0].frame
+            precondition(soc.frame.minX == 0)
+            precondition(watts.alignmentRect(forFrame: watts.frame).minX - soc.alignmentRect(forFrame: soc.frame).maxX == 8 * factor)
+            precondition(memory.frame.minX - watts.frame.maxX == 16 * factor)
+            precondition(socDivider.midX == (watts.frame.maxX + memory.frame.minX) / 2)
+            precondition(strip.battery.frame.minX - usage.frame.maxX == 16 * factor)
+            precondition(dividers[1].frame.midX == (usage.frame.maxX + strip.battery.frame.minX) / 2)
+
+            let size = strip.configure(sections: withoutMemory, showsBattery: true, scale: scale, background: .dark)
+            precondition(dividers.filter { !$0.isHidden }.count == 1 && dividers[0].frame == socDivider,
+                         "Hiding MEM must leave the divider after SOC in exactly the same position")
+            precondition(strip.battery.frame.minX + strip.battery.sourceTextRect.minX == memoryTextStart,
+                         "BAT must start where the MEM title was")
+            precondition(strip.battery.frame.maxX == size.width)
+
+            _ = strip.configure(sections: withFPSAndFans, showsBattery: true, scale: scale, background: .dark)
+            let fields: [String: NSTextField] = member(strip, "labels")
+            let fan = fields["fan.status"]!.frame
+            let boundaries = [(fields["fps.value"]!.frame.maxX, soc.frame.minX),
+                              (watts.frame.maxX, memory.frame.minX), (usage.frame.maxX, fan.minX),
+                              (fan.maxX, strip.battery.frame.minX)]
+            let lines: [NSView] = member(strip, "dividers")
+            let visible = lines.filter { !$0.isHidden }
+            precondition(visible.count == boundaries.count)
+            for (line, (left, right)) in zip(visible, boundaries) {
+                precondition(abs(right - left - 16 * factor) < 0.001)
+                precondition(abs(line.frame.midX - (left + right) / 2) < 0.001)
+            }
+        }
+    }
     @MainActor static func main() throws {
         _ = NSApplication.shared
         verticalDividerBoundaries()
+        horizontalDividerSpacing()
         if CommandLine.arguments.contains("--dividers-only") { return }
         let scales: [HUDScale] = CommandLine.arguments.contains("--normal-size") ? [.normal] : [.small, .normal, .large]
         let suite = "PerformanceHUD.PressureTests.\(UUID().uuidString)"
@@ -125,6 +177,11 @@ import AppKit
                                         inspect(host)
                                         if alignment == .horizontal && details {
                                             let labels: [String: NSTextField] = member(horizontal, "labels")
+                                            let prefix = String(HUDMetric.ramTotal.rawValue)
+                                            if let use = labels["\(prefix).value"], !use.isHidden,
+                                               let physical = labels["\(prefix).PHY.title"], !physical.isHidden {
+                                                check(use.frame.maxX <= physical.frame.minX, "Horizontal MEM shows usage before Physical")
+                                            }
                                             for metric in [HUDMetric.ramTotal, .ram] {
                                                 for caption in ["PHY", "SWP"] {
                                                     guard let title = labels["\(metric.rawValue).\(caption).title"],
@@ -274,15 +331,17 @@ import AppKit
             let regularFont = HUDStyle.readingFont(scale: scale, highlighted: false)
             var normal = HUDHorizontalView.Reading(id: "pressure", text: "normal", reference: "normal",
                 font: regularFont, color: .white, help: nil, startsMetric: false, pressureMode: .text)
-            let normalSize = spacingPreview.configure(sections: [[normal]], showsBattery: false,
-                                                      scale: scale, background: .dark)
+            _ = spacingPreview.configure(sections: [[normal]], showsBattery: false, scale: scale, background: .dark)
+            let labels: [String: NSTextField] = member(spacingPreview, "labels")
+            let normalLabel = labels["pressure"]!
+            let normalWidth = normalLabel.alignmentRect(forFrame: normalLabel.frame).width
             for mode in [HUDMemoryPressureMode.meter, .colorMeter] {
                 normal.pressureMode = mode
                 let size = spacingPreview.configure(sections: [[normal]], showsBattery: false,
                                                     scale: scale, background: .dark)
                 let meters: [String: HUDMemoryPressureMeterView] = member(spacingPreview, "pressureMeters")
                 let rect = meters["pressure"]!.frame
-                check(size == normalSize, "Horizontal meters occupy the same slot as the word normal")
+                check(size.width == normalWidth, "Horizontal meters occupy the normal text column without text-edge insets")
                 check(rect.minX > 0 && abs(rect.minX - (size.width - rect.maxX)) < 0.01,
                       "Horizontal meters have equal breathing room on both sides")
                 for state in ["warning", "critical", ""] {

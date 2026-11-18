@@ -174,7 +174,12 @@ import AppKit
         }
     }
     @MainActor static func horizontalCores() throws {
-        let hud = HUDWindowController()
+        let types = [HUDCPUCoreType(name: "Super", count: 4), .init(name: "Performance", count: 24),
+                     .init(name: "Efficiency", count: 16)]
+        let topology = CPUCoreTopology(groups: [.init(name: "Super", ids: Array(0..<4)),
+            .init(name: "Performance", ids: Array(4..<28)), .init(name: "Efficiency", ids: Array(28..<44))])
+        let info = HUDDeviceInfo(chipName: "Fixture", macOSVersion: "", cpuCores: 44, gpuCores: 0, coreTypes: types)
+        let hud = HUDWindowController(deviceInfo: info, cpuTopology: topology)
         defer { hud.shutdown() }
         let panel: HUDPanel = member(hud, "panel")
         panel.alphaValue = 0
@@ -184,9 +189,19 @@ import AppKit
         hud.setPackagePowerOptions(.init(enabled: false))
         for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
         let horizontal: HUDHorizontalView = member(hud, "horizontalView")
-        let topology = CPUCoreTopology.current
         let frequencies = CPUFrequencySample(frequencies: Dictionary(uniqueKeysWithValues:
             topology.groups.flatMap { group in group.ids.map { ($0, group.name == "Efficiency" ? 2.1 : 3.7) } }))
+        for count in 1...3 {
+            let view = HUDCoreDetailView(frame: .zero, types: Array(types.prefix(count)), topology: topology)
+            view.configure(options: .init(enabled: true, mode: .bars), scale: .normal, background: .dark)
+            let strip = HUDHorizontalView(frame: .zero)
+            let size = strip.configure(sections: [view.horizontalReadings()], showsBattery: false,
+                                       scale: .normal, background: .dark)
+            let bars: [String: HUDCPUCoreBarsView] = member(strip, "coreBars")
+            let ordered = types.prefix(count).map { bars["\(HUDMetric.cpuCores.rawValue).\($0.name)"]!.frame }
+            precondition(size.height == 21 && (ordered.first!.midY + ordered.last!.midY) / 2 == size.height / 2)
+            precondition(zip(ordered, ordered.dropFirst()).allSatisfy { $0.midY - $1.midY == (count == 2 ? 18 : 14) })
+        }
         var expectedHeight: CGFloat?
         for mode in HUDCoreDisplayMode.allCases {
             hud.setCPUCoreOptions(.init(enabled: true, mode: mode, highlighted: true))
@@ -202,15 +217,27 @@ import AppKit
                 panel.contentView?.layoutSubtreeIfNeeded()
                 let labels: [String: NSTextField] = member(horizontal, "labels")
                 let ids = ["\(HUDMetric.gpuCores.rawValue).Cores"]
-                    + HUDDeviceInfo.current.coreTypes.map { "\(HUDMetric.cpuCores.rawValue).\($0.name)" }
+                    + types.map { "\(HUDMetric.cpuCores.rawValue).\($0.name)" }
                 for id in ids {
-                    let title = labels["\(id).title"]!, value = labels["\(id).value"]!
-                    precondition(!title.isHidden && !value.isHidden && value.stringValue.hasSuffix(" GHz"),
-                                 "Core GHz stays visible with every other reading selection and saved mode")
+                    let title = labels["\(id).title"]!
+                    let showsGHz = id == ids[0] || mode.showsValue
+                    precondition(!title.isHidden && (labels["\(id).value"]?.isHidden == false) == showsGHz)
+                    if mode.showsBars && id != ids[0] {
+                        let stacks: [String: HUDCPUCoreBarsView] = member(horizontal, "coreBars")
+                        let view = stacks[id]!
+                        let count = types.first { id.hasSuffix("." + $0.name) }!.count
+                        precondition(view.frame.width == CGFloat(count * 6 - 2) && view.frame.height == 10)
+                        precondition(view.singleRow && horizontal.bounds.contains(view.frame))
+                        precondition(abs(title.frame.midY - view.frame.midY) <= 1)
+                    }
                     let abbreviations = ["Cores": "C", "Super": "S", "Performance": "P", "Efficiency": "E"]
                     let fullName = String(id.split(separator: ".").last!)
                     precondition(title.stringValue == (abbreviations[fullName] ?? fullName),
                                  "Horizontal uses compact core-type labels and preserves their full accessible names")
+                    guard showsGHz else { continue }
+                    let value = labels["\(id).value"]!
+                    precondition(value.stringValue.hasSuffix(" GHz"))
+                    if id != ids[0] && mode.showsBars { continue }
                     let titleRect = title.alignmentRect(forFrame: title.frame)
                     let valueRect = value.alignmentRect(forFrame: value.frame)
                     let visibleGap = valueRect.maxX - value.intrinsicContentSize.width
@@ -221,17 +248,27 @@ import AppKit
                 }
                 let visible = labels.values.filter { !$0.isHidden }.sorted { $0.frame.minX < $1.frame.minX }
                 for (left, right) in zip(visible, visible.dropFirst()) {
+                    guard abs(left.frame.midY - right.frame.midY) < 1 else { continue }
                     let l = left.alignmentRect(forFrame: left.frame), r = right.alignmentRect(forFrame: right.frame)
                     let leftEnd = left.alignment == .right ? l.maxX : l.minX + left.intrinsicContentSize.width
                     let rightStart = right.alignment == .right ? r.maxX - right.intrinsicContentSize.width : r.minX
                     precondition(rightStart - leftEnd >= HUDStyle.memoryLabelValueSpacing - 0.1,
                                  "Adjacent horizontal text never crowds or overlaps")
                 }
+                if mode.showsBars {
+                    let stacks: [String: HUDCPUCoreBarsView] = member(horizontal, "coreBars")
+                    let views = ids.dropFirst().map { stacks[$0]! }
+                    precondition(views.allSatisfy { $0.frame.minX == views[0].frame.minX })
+                    precondition(zip(views, views.dropFirst()).allSatisfy { $0.frame.midY - $1.frame.midY == HUDCoreBarLayout.rowStride })
+                    hud.updateCPUCores(.init(usage: [4: 75, 27: 100, 43: 65]))
+                    precondition(views[1].values[0] == 75 && views[1].values[23] == 100 && views[2].values[15] == 65)
+                }
                 if let expectedHeight { precondition(panel.frame.height == expectedHeight, "Horizontal cores never add bar rows") }
                 else { expectedHeight = panel.frame.height }
                 let size = panel.frame.size
                 hud.updatePower(.unavailable)
-                precondition(ids.allSatisfy { labels["\($0).value"]?.stringValue == "—" }
+                let visibleIDs = mode.showsValue ? ids : [ids[0]]
+                precondition(visibleIDs.allSatisfy { labels["\($0).value"]?.stringValue == "—" }
                              && panel.frame.size == size, "Missing clocks use stable-width dash placeholders")
                 hud.updatePower(.init(cpu: 1.7, gpu: 3.5, package: 5.2, cpuFrequencies: frequencies, gpuFrequency: 1.2))
             }
@@ -240,7 +277,7 @@ import AppKit
             let bitmap = horizontal.bitmapImageRepForCachingDisplay(in: horizontal.bounds)!
             horizontal.cacheDisplay(in: horizontal.bounds, to: bitmap)
             try bitmap.representation(using: .png, properties: [:])!.write(
-                to: URL(fileURLWithPath: "/tmp/performancehud-v32-horizontal-cores.png"))
+                to: URL(fileURLWithPath: "/tmp/performancehud-v34-horizontal-cores.png"))
         }
         hud.setCPUCoreOptions(.init(enabled: false)); hud.setGPUCoreOptions(.init(enabled: false))
         let labels: [String: NSTextField] = member(horizontal, "labels")
@@ -366,8 +403,8 @@ import AppKit
         selection.alignment = .horizontal
         let horizontal = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true, isLogging: false, autoHideMode: .off, selection: selection, menuBar: .init())
         precondition(!horizontal.cpuAppUsage && !horizontal.gpuAppUsage && !horizontal.appMemory
-                     && !horizontal.cpuCores && horizontal.gpuCores && horizontal.power,
-                     "Horizontal retains GHz without Process or per-core usage polling")
+                     && horizontal.cpuCores && horizontal.gpuCores && horizontal.power,
+                     "Horizontal Both collects clocks and per-core usage")
         precondition(!selection.columns(fanSample: .unavailable).contains(.process))
         var coresOnly = selection
         coresOnly.alignment = .vertical; coresOnly.process.enabled = false
@@ -412,9 +449,9 @@ import AppKit
             horizontalCPU.alignment = .horizontal
             let horizontalDemand = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true, isLogging: false,
                 autoHideMode: .off, selection: horizontalCPU, menuBar: .init())
-            precondition(horizontalDemand.power && !horizontalDemand.cpuCores
-                         && horizontalCPU.columns(fanSample: .noFans) == HUDDeviceInfo.current.coreTypes.map { .cpuTypeFrequency($0.name) },
-                         "Every saved Vertical mode resolves to CPU GHz only in Horizontal demand and CSV")
+            precondition(horizontalDemand.power == mode.showsValue && horizontalDemand.cpuCores == mode.showsBars
+                         && horizontalCPU.columns(fanSample: .noFans) == expected,
+                         "Horizontal core sampling and CSV follow the selected mode")
         }
         let hiddenDemand = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: false, isLogging: false,
             autoHideMode: .all, selection: coresOnly, menuBar: .init())

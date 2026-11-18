@@ -2,7 +2,7 @@ import Foundation
 
 /// Stable column identities, independent of fonts, formatting, and changing values.
 enum HUDLogColumn: Hashable {
-    case fps, gpuPower, gpuTemperature, gpuUsage, gpuAppUsage, gpuFrequency
+    case fps, frameTimeAverage, frameTimeWorst, gpuPower, gpuTemperature, gpuUsage, gpuAppUsage, gpuFrequency
     case cpuPower, cpuTemperature, cpuUsage, cpuAppUsage, anePower, socPower
     case memoryUsage, memoryPhysical, memorySwap, memoryPressure, memoryAppUsage, memoryAppPhysical
     case fanUsage(Int), fanRPM(Int), fanAverageUsage, fanAverageRPM
@@ -14,6 +14,8 @@ enum HUDLogColumn: Hashable {
     var title: String {
         switch self {
         case .fps: return "FPS"
+        case .frameTimeAverage: return "Average Frame Time (ms)"
+        case .frameTimeWorst: return "Worst Frame Time in Sample (ms)"
         case .gpuFrequency: return "GPU Frequency (GHz)"
         case .gpuPower: return "GPU Power (W)"
         case .gpuTemperature: return "GPU Temperature (°C)"
@@ -65,7 +67,7 @@ enum HUDLogColumn: Hashable {
         guard number.isFinite else { return nil }
         let places: Int
         switch self {
-        case .fps, .gpuPower, .cpuPower, .anePower, .socPower, .batteryPower,
+        case .fps, .frameTimeAverage, .frameTimeWorst, .gpuPower, .cpuPower, .anePower, .socPower, .batteryPower,
              .memoryPhysical, .memorySwap, .memoryAppPhysical, .refreshMinimum, .refreshMaximum, .cpuTypeFrequency, .gpuFrequency:
             places = 2
         case .gpuTemperature, .cpuTemperature, .batteryTemperature,
@@ -104,18 +106,23 @@ struct HUDLogSelection {
     var cpuCores = HUDCoreOptions()
     var gpuCores = HUDCoreOptions(mode: .value)
 
+    var fpsMeasure: HUDFPSMeasure = .frameRate
+
     static var current: Self {
-        Self(fps: HUDPreferences.fpsOptions.enabled,
+        let fpsOptions = HUDPreferences.fpsOptions
+        return Self(fps: fpsOptions.enabled,
              resources: Dictionary(uniqueKeysWithValues: HUDResourceGroup.allCases.map {
                  ($0, HUDPreferences.resourceOptions(for: $0))
              }), package: HUDPreferences.packagePowerOptions, fans: HUDPreferences.fanOptions,
              battery: HUDPreferences.batteryOptions,
              alignment: HUDPreferences.alignment, misc: HUDPreferences.miscOptions,
-             process: HUDPreferences.processOptions, cpuCores: HUDPreferences.cpuCoreOptions, gpuCores: HUDPreferences.gpuCoreOptions)
+             process: HUDPreferences.processOptions, cpuCores: HUDPreferences.cpuCoreOptions,
+             gpuCores: HUDPreferences.gpuCoreOptions, fpsMeasure: fpsOptions.measure)
     }
 
     func columns(fanSample: FanSample) -> [HUDLogColumn] {
         var result: [HUDLogColumn] = fps ? [.fps] : []
+        if fps && fpsMeasure == .frameTime { result += [.frameTimeAverage, .frameTimeWorst] }
         if alignment == .vertical && process.enabled {
             result.append(.process)
             if process.readings.contains(.gpu) { result.append(.gpuAppUsage) }
@@ -136,7 +143,7 @@ struct HUDLogSelection {
                 result.append(.gpuFrequency)
             }
             if group == .cpu && cpuCores.enabled {
-                let mode = cpuCores.mode.resolved(for: alignment)
+                let mode = cpuCores.mode
                 for type in HUDDeviceInfo.current.coreTypes {
                     if mode.showsValue { result.append(.cpuTypeFrequency(type.name)) }
                     if mode.showsBars {
@@ -147,7 +154,7 @@ struct HUDLogSelection {
         }
         if package.enabled { result.append(.socPower) }
         if let memory = resources[.ram], memory.enabled {
-            // Match the independent Pressure, Details, and Use menu rows.
+            // Preserve the existing memory column order for CSV consumers.
             if memory.showsPressure { result.append(.memoryPressure) }
             if memory.showsDetails { result += [.memoryPhysical, .memorySwap] }
             if memory.totalUse { result.append(.memoryUsage) }
@@ -195,6 +202,12 @@ struct HUDLogSnapshot {
     // Keep display precision independent of CSV formatting. Re-rounding a CSV
     // number could otherwise put a menu-bar reading across a heat threshold.
     private(set) var numbers: [HUDLogColumn: Double] = [:]
+
+    mutating func setFPS(_ fps: Double?, timing: MetalFrameTiming? = nil) {
+        set(.fps, fps)
+        set(.frameTimeAverage, timing?.averageMS)
+        set(.frameTimeWorst, timing?.worstMS)
+    }
 
     mutating func set(_ column: HUDLogColumn, _ number: Double?) {
         numbers[column] = number.flatMap { $0.isFinite ? $0 : nil }

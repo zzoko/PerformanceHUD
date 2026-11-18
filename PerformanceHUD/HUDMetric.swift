@@ -24,7 +24,7 @@ enum HUDMetric: Int, CaseIterable, Hashable {
     var menuTitle: String {
 
         switch self {
-        case .process: return "Process"
+        case .process: return "APP"
         case .cpuCores: return "CPU cores"
         case .gpuCores: return "GPU cores"
 
@@ -71,7 +71,7 @@ enum HUDMetric: Int, CaseIterable, Hashable {
     var hudTitle: String {
 
         switch self {
-        case .process: return "Process"
+        case .process: return "APP"
         case .cpuCores: return "CPU cores"
         case .gpuCores: return "GPU cores"
 

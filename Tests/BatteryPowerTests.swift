@@ -380,7 +380,7 @@ import IOKit.ps
                     ("use", "80%", HUDStyle.horizontalPercentageReference, usageFont)]
                 let readings: [HUDHorizontalView.Reading] = fields.map { role, text, reference, font in
                     .init(id: role, text: text, reference: reference, font: font, color: .white,
-                          help: nil, startsMetric: role == "title", resourceGroup: .gpu)
+                          help: nil, startsMetric: role == "title", metric: .gpuTotal)
                 }
                 let size = comparison.configure(sections: [readings], showsBattery: false, scale: .normal, background: .dark)
                 let labels: [String: NSTextField] = member(comparison, "labels")
@@ -390,11 +390,11 @@ import IOKit.ps
                     temperatureHighlighted: emphasized, power: true, powerHighlighted: emphasized))
                 view.update(percentage: 80, source: .powerAdapter, temperature: 36, power: watts)
                 view.frame = NSRect(x: 0, y: 0, width: view.minimumRowWidth, height: 21)
-                check(abs(view.minimumRowWidth - size.width - 2) < 0.01, "Battery uses the GPU/CPU total column width")
+                check(abs(size.width - view.minimumRowWidth - labels["use"]!.alignmentRectInsets.right) < 0.01, "Battery reserves the same columns and keeps its graphic trailing edge flush")
                 for (key, rect) in [("power", view.powerTextRect), ("temperature", view.temperatureTextRect)] {
                     let label = labels[key]!
                     let edge = label.alignmentRect(forFrame: label.frame).maxX
-                    check(abs(rect.maxX - edge - 2) < 0.01, "Battery \(key) has the same column position as GPU/CPU")
+                    check(abs(rect.maxX - edge) < 0.01, "Battery \(key) has the same column position as GPU/CPU")
                 }
             }
         }
@@ -504,7 +504,7 @@ import IOKit.ps
                 .init(id: role, text: text, reference: sizing,
                     font: role == "title" ? HUDStyle.titleFont(for: .battery, scale: .normal)
                         : HUDStyle.readingFont(scale: .normal, highlighted: false),
-                    color: .white, help: nil, startsMetric: role == "title", resourceGroup: .gpu)
+                    color: .white, help: nil, startsMetric: role == "title", metric: .gpuTotal)
             }
             let size = reference.configure(sections: [readings], showsBattery: false, scale: .normal, background: .dark)
             reference.isHidden = false

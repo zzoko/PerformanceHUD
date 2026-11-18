@@ -13,6 +13,32 @@ import AppKit
         let recovery = root.appendingPathComponent("Recovery")
         let desktop = root.appendingPathComponent("Desktop")
         try files.createDirectory(at: desktop, withIntermediateDirectories: true)
+        // Exercise the same saved selection and column snapshot used at Start Logging.
+        do {
+            let defaults = UserDefaults.standard
+            let original = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+            defer { defaults.setVolatileDomain(original, forName: UserDefaults.argumentDomain) }
+            func frameColumns(_ measure: HUDFPSMeasure) -> [HUDLogColumn] {
+                defaults.setVolatileDomain(["hud.metric.fps": true, "hud.fps.measure": measure.rawValue],
+                                           forName: UserDefaults.argumentDomain)
+                return HUDLogSelection.current.columns(fanSample: .noFans).filter {
+                    [.fps, .frameTimeAverage, .frameTimeWorst].contains($0)
+                }
+            }
+            check(frameColumns(.frameRate) == [.fps], "Frame rate keeps the original CSV columns")
+            let columns = frameColumns(.frameTime)
+            check(columns == [.fps, .frameTimeAverage, .frameTimeWorst], "Frame time includes both interval columns")
+            var frameSample = HUDLogSnapshot()
+            frameSample.setFPS(60, timing: MetalFrameTiming(averageMS: 16.67, worstMS: 83))
+            let logger = HUDCSVLogger()
+            try logger.start(columns: columns, recoveryDirectory: recovery, scheduled: false) {
+                (frameSample, Set(columns))
+            }
+            let saved = try logger.stop(savingTo: desktop)!
+            let contents = try String(contentsOf: saved, encoding: .utf8)
+            check(contents.contains("FPS,Average Frame Time (ms),Worst Frame Time in Sample (ms)\r\n")
+                && contents.hasSuffix(",60.00,16.67,83.00\r\n"), "Export includes measured frame intervals")
+        }
         let disabled = HUDResourceOptions(enabled: false, temperature: false, totalUse: false, focusedApp: false)
         var selection = HUDLogSelection(fps: false,
             resources: Dictionary(uniqueKeysWithValues: HUDResourceGroup.allCases.map { ($0, disabled) }),

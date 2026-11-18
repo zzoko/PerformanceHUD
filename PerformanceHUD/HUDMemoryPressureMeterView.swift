@@ -54,7 +54,7 @@ final class HUDMemoryPressureMeterView: NSView {
         let colors = [
             NSColor(srgbRed: 0.29, green: 0.90, blue: 0.46, alpha: 1),
             HUDStyle.warningYellow,
-            NSColor(srgbRed: 1, green: 0.39, blue: 0.36, alpha: 1)
+            HUDStyle.pressureRed
         ]
         let gap = (stacked ? 2 : 3) * scale
         let width = stacked ? bounds.width : (bounds.width - 2 * gap) / 3

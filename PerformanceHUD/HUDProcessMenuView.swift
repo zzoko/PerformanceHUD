@@ -5,20 +5,20 @@ final class HUDProcessMenuView: HUDCategoryMenuView {
     var onChange: ((HUDProcessOptions) -> Void)?
     private var options: HUDProcessOptions
     private var alignment: HUDAlignment
-    private let master = HUDResourceMasterButton(title: "Process", target: nil, action: nil)
+    private let master = HUDResourceMasterButton(title: "APP", target: nil, action: nil)
     private var controls: [HUDProcessReading: HUDReadingCheckbox] = [:]
 
     init(options: HUDProcessOptions, alignment: HUDAlignment) {
         self.options = options; self.alignment = alignment
         super.init()
-        setAccessibilityLabel("Process display options")
+        setAccessibilityLabel("APP display options")
         master.target = self; master.action = #selector(toggleCategory)
-        master.setAccessibilityLabel("Show selected process")
+        master.setAccessibilityLabel("Show focused app")
         setCategory(master)
         setRows(HUDProcessReading.allCases.enumerated().map { index, reading in
             let button = HUDReadingCheckbox(title: reading.title, supportsEmphasis: true)
             button.tag = index; button.target = self; button.action = #selector(toggleReading(_:))
-            button.setControlAccessibilityLabel("Process \(reading.title)")
+            button.setControlAccessibilityLabel("APP \(reading.title)")
             button.onHighlight = { [weak self] in
                 guard let self else { return }
                 if self.options.highlighted.contains(reading) { self.options.highlighted.remove(reading) }

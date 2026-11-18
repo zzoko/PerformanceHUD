@@ -1,11 +1,30 @@
 import Foundation
 
+/// Displayed-frame intervals for the same Metal layer and reporting second as FPS.
+nonisolated struct MetalFrameTiming: Equatable, Sendable {
+    let averageMS: Double
+    let worstMS: Double?
+
+    init?(averageMS: Double?, worstMS: Double?) {
+        guard let averageMS, averageMS.isFinite, averageMS > 0 else { return nil }
+        self.averageMS = averageMS
+        self.worstMS = worstMS.flatMap { $0.isFinite && $0 >= averageMS ? $0 : nil }
+    }
+
+    enum Hitch { case warning, severe }
+    var hitch: Hitch? {
+        guard let worstMS, worstMS >= 25, worstMS >= 2.5 * averageMS else { return nil }
+        return worstMS >= 100 ? .severe : .warning
+    }
+}
+
 @MainActor
 final class MetalPerfTraceMonitor {
     nonisolated struct MetalMetrics: Sendable {
         let fps: Double?
         let gpuUsage: Double?
         var resolution: HUDResolution? = nil
+        var frameTiming: MetalFrameTiming? = nil
     }
     var onMetricsUpdate: ((MetalMetrics) -> Void)?
     private var process: Process?
@@ -189,7 +208,12 @@ nonisolated final class MetalMetricsParser: @unchecked Sendable {
             }
             if selected == nil || area > selectedArea {
                 selectedArea = area
-                selected = .init(fps: fps, gpuUsage: gpuUsage, resolution: resolution)
+                let intervals = performance["Frame-On-Glass Interval Stats"] as? [String: Any]
+                let count = (intervals?["Count"] as? NSNumber)?.intValue ?? 0
+                let timing = count > 0 ? MetalFrameTiming(
+                    averageMS: (intervals?["Average (ms)"] as? NSNumber)?.doubleValue,
+                    worstMS: (intervals?["Max (ms)"] as? NSNumber)?.doubleValue) : nil
+                selected = .init(fps: fps, gpuUsage: gpuUsage, resolution: resolution, frameTiming: timing)
             }
         }
         return selected

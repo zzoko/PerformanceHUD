@@ -56,7 +56,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         unavailableLabel.font = .menuFont(ofSize: 0)
         unavailableLabel.textColor = .disabledControlTextColor
 
-        let readings: [(Int, String)] = group == .ram ? [(8, "Pressure"), (5, "Details"), (7, "Use")]
+        let readings: [(Int, String)] = group == .ram ? [(7, "Use"), (5, "Details"), (8, "Pressure")]
             : group == .ane ? [(4, "Power")]
             : group == nil ? [(4, "Charge"), (1, "Temperature"), (6, "Energy")]
             : [(4, "Power"), (1, "Temperature"), (7, "Use")]
@@ -295,7 +295,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     @objc private func coreModeChanged(_ sender: NSSegmentedControl) {
-        guard alignment == .vertical, sender.isEnabled,
+        guard sender.isEnabled,
               HUDCoreDisplayMode.allCases.indices.contains(sender.selectedSegment) else { refresh(); return }
         coreOptions.mode = HUDCoreDisplayMode.allCases[sender.selectedSegment]
         refresh(); onCoresChange?(coreOptions)
@@ -336,18 +336,13 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     private func refresh() {
-        let coreMode = coreOptions.mode.resolved(for: alignment)
+        let coreMode = coreOptions.mode
         controls[9]?.state = coreOptions.enabled ? .on : .off
         controls[9]?.isEnabled = options.enabled
         (controls[9] as? HUDReadingCheckbox)?.emphasized = coreOptions.highlighted
         (controls[9] as? HUDReadingCheckbox)?.highlightAvailable = group == .gpu || coreMode.showsValue
         coreModeControl?.selectedSegment = HUDCoreDisplayMode.allCases.firstIndex(of: coreMode) ?? 2
         coreModeControl?.isEnabled = options.enabled && coreOptions.enabled
-        for (index, mode) in HUDCoreDisplayMode.allCases.enumerated() {
-            coreModeControl?.setEnabled(options.enabled && coreOptions.enabled
-                && (alignment == .vertical || mode == .value), forSegment: index)
-        }
-        coreModeControl?.toolTip = alignment == .horizontal ? "Horizontal shows GHz only. Your Vertical mode is retained." : nil
         if group == nil {
             let available = batteryAvailability != .unavailable
             master.isEnabled = available

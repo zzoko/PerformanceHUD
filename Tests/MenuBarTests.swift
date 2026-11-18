@@ -587,9 +587,19 @@ import AppKit
               "Collapsed FPS leaves no title or value showing underneath its arrow")
         check(content.bounds.contains(arrow.frame) && arrow.frame.width == 12,
               "The FPS arrow fits its original horizontal HUD slot before uniform scaling")
-        check(gpuLabels.map(\.frame) == gpuFrames && gpuLabels.map(\.font) == gpuFonts
-              && gpuLabels.allSatisfy { !$0.isHidden && $0.alphaValue == 1 },
-              "Collapsing FPS leaves other readings' internal spacing, fonts, and visibility unchanged (frames \(gpuLabels.map(\.frame)), expected \(gpuFrames); fonts equal \(gpuLabels.map(\.font) == gpuFonts))")
+        let pixel = horizontal.convertFromBacking(NSSize(width: 1, height: 1)).width
+        for (label, expanded) in zip(gpuLabels, gpuFrames) {
+            let frame = label.frame
+            check(abs(frame.width - expanded.width) < 0.0001 && abs(frame.height - expanded.height) < 0.0001
+                  && abs(frame.minX - expanded.minX) <= pixel && abs(frame.minY - expanded.minY) <= pixel,
+                  "Collapsing FPS preserves column sizes and only shifts their local positions for pixel alignment")
+            let pixels = horizontal.convertToBacking(frame)
+            for edge in [pixels.minX, pixels.maxX, pixels.minY, pixels.maxY] {
+                check(abs(edge.rounded() - edge) < 0.0001, "Pinned GPU text aligns to backing pixels")
+            }
+        }
+        check(gpuLabels.map(\.font) == gpuFonts && gpuLabels.allSatisfy { !$0.isHidden && $0.alphaValue == 1 },
+              "Collapsing FPS preserves neighboring fonts and visibility")
         check(abs(content.frame.width / content.bounds.width - fullScale) < 0.0001
               && abs(content.frame.height / content.bounds.height - fullScale) < 0.0001,
               "The compact FPS arrow changes only occupied width, never the menu-bar scaling")

@@ -8,6 +8,7 @@ final class HUDBatteryIndicatorView: NSView {
     var showsUnavailableReadings = false {
         didSet { needsDisplay = true }
     }
+    private static let horizontalTextInsets = NSTextField(labelWithString: "").alignmentRectInsets
     private var horizontal = false
     private var percentage: Double?
     private var source: BatterySample.Source?
@@ -137,9 +138,11 @@ final class HUDBatteryIndicatorView: NSView {
         let size = (text as NSString).size(withAttributes: [.font: sourceLabelFont])
         let sourceHeight = ("Adapter" as NSString).size(withAttributes: [.font: sourceFont]).height
         let midY = horizontal ? bounds.midY : bounds.minY + 10.5 * scale
-        return NSRect(x: bounds.minX + 2 * scale,
+        let leading = horizontal ? Self.horizontalTextInsets.left : 2 * scale
+        let rect = NSRect(x: bounds.minX + leading,
                       y: midY - sourceHeight / 2 + sourceLabelFont.descender - sourceFont.descender,
                       width: size.width, height: size.height)
+        return alignedTextRect(rect)
     }
 
     var powerText: String {
@@ -189,9 +192,14 @@ final class HUDBatteryIndicatorView: NSView {
         let size = (text as NSString).size(withAttributes: [.font: font])
         let sourceHeight = ("Adapter" as NSString).size(withAttributes: [.font: sourceFont]).height
         let midY = horizontal ? bounds.midY : bounds.minY + 10.5 * scale
-        return NSRect(x: bounds.maxX - trailing - size.width,
+        let rect = NSRect(x: bounds.maxX - trailing - size.width,
                       y: midY - sourceHeight / 2 + font.descender - sourceFont.descender,
                       width: size.width, height: size.height)
+        return alignedTextRect(rect)
+    }
+
+    private func alignedTextRect(_ rect: NSRect) -> NSRect {
+        horizontal && window != nil ? backingAlignedRect(rect, options: .alignAllEdgesNearest) : rect
     }
 
     private var sharedVerticalPowerTrailingInset: CGFloat?
@@ -228,7 +236,7 @@ final class HUDBatteryIndicatorView: NSView {
     }
 
     private var horizontalReadingTrailingInset: CGFloat {
-        options.charge ? horizontalIconWidth + horizontalGap : 2 * scale
+        options.charge ? horizontalIconWidth + horizontalGap : Self.horizontalTextInsets.right
     }
 
     // Useful for standalone previews; the HUD itself has a fixed vertical width.
@@ -244,10 +252,9 @@ final class HUDBatteryIndicatorView: NSView {
             let widths: [CGFloat] = [reservesPowerSpace ? horizontalPowerWidth : nil,
                 options.temperature ? horizontalTemperatureWidth : nil,
                 options.charge ? horizontalIconWidth : nil].compactMap { $0 }
-            let gaps = widths.isEmpty ? 0
-                : horizontalGap * (HUDStyle.horizontalLabelGapMultiplier + CGFloat(widths.count - 1))
-            return 2 * scale + titleWidth + gaps + widths.reduce(0, +)
-                + (options.charge ? 0 : 2 * scale)
+            let gaps = horizontalGap * CGFloat(widths.count)
+            return Self.horizontalTextInsets.left + titleWidth + gaps + widths.reduce(0, +)
+                + (options.charge ? 0 : Self.horizontalTextInsets.right)
         }
         // Keep the baseline reference independent of enabled readings. The full
         // row is fitted separately, after the controller's spacing expansion.

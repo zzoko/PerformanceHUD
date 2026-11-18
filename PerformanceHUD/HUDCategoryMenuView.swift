@@ -135,7 +135,8 @@ class HUDCategoryMenuView: NSView {
                 // Apply native alignment insets so every selector's visible bezel shares a column.
                 mode.frame = mode.frame(forAlignmentRect: NSRect(x: grid.modeLeading,
                     y: y + (grid.rowHeight - grid.modeHeight) / 2,
-                    width: grid.modeWidth, height: grid.modeHeight))
+                    width: (mode as? HUDReadingCheckbox)?.intrinsicContentSize.width ?? grid.modeWidth,
+                    height: grid.modeHeight))
             }
             row.emphasisView?.frame = NSRect(x: grid.emphasisLeading, y: y + 3, width: 22, height: 22)
             row.menuBar?.frame = NSRect(x: grid.menuBarLeading, y: y + 3, width: 22, height: 22)

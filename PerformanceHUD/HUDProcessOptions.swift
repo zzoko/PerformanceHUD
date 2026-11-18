@@ -29,10 +29,6 @@ enum HUDCoreDisplayMode: String, CaseIterable, Codable {
     var title: String { rawValue.capitalized }
     var showsValue: Bool { self != .bars }
     var showsBars: Bool { self != .value }
-
-    func resolved(for alignment: HUDAlignment) -> Self {
-        alignment == .horizontal ? .value : self
-    }
 }
 
 struct HUDCoreOptions: Codable, Equatable {

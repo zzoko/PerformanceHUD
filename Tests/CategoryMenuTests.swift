@@ -158,7 +158,8 @@ import AppKit
         let pressureStyle: NSSegmentedControl = member(memory, "pressureStyleControl") as NSSegmentedControl?
             ?? { fatalError("Missing pressure style selector") }()
         let memoryControls: [Int: NSButton] = member(memory, "controls")
-        check(memoryControls[8]!.frame.minY < memoryControls[5]!.frame.minY, "Pressure is above Details")
+        check(memoryControls[7]!.frame.maxY < memoryControls[5]!.frame.minY
+              && memoryControls[5]!.frame.maxY < memoryControls[8]!.frame.minY, "MEM orders Use, Details, Pressure")
         check((memoryControls[8] as! HUDReadingCheckbox).emphasisControl?.isEnabled == false,
               "Default Colored graph mode disables Pressure emphasis")
         check(abs(pressureMode.frame.midY - memoryControls[8]!.frame.midY) < 1, "Pressure owns the style selector")
@@ -166,8 +167,8 @@ import AppKit
         memory.onChange = { memoryOptions = $0 }
         check(pressureMode.selectedSegment == 1 && pressureStyle.selectedSegment == 3 && pressureMode.isEnabled,
               "Pressure starts in Graph, style B2")
-        check(pressureStyle.frame.minY > pressureMode.frame.maxY && pressureStyle.frame.maxY < memoryControls[5]!.frame.minY,
-              "Graph styles are below Text/Graph and above Details")
+        check(pressureStyle.frame.minY > pressureMode.frame.maxY && memory.bounds.contains(pressureStyle.frame),
+              "Graph styles fit below the final Pressure row")
         check(abs(pressureMode.frame.width - pressureStyle.frame.width) < 0.5, "Pressure selectors share the same total width")
         pressureStyle.selectedSegment = 1
         pressureStyle.sendAction(pressureStyle.action, to: pressureStyle.target)
@@ -243,14 +244,18 @@ import AppKit
             category.update(alignment: .horizontal)
             check(coreControls[9]!.isEnabled && (coreMode == nil || coreMode!.isEnabled),
                   "Both core checkboxes work in Horizontal")
-            check(coreMode == nil || coreMode!.selectedSegment == 0, "Horizontal CPU Cores displays Value")
             if let coreMode {
-                check(coreMode.isEnabled(forSegment: 0) && !coreMode.isEnabled(forSegment: 1)
-                      && !coreMode.isEnabled(forSegment: 2), "Only Value is available in Horizontal, matching FPS")
+                check(coreMode.selectedSegment == 1 && (0..<3).allSatisfy { coreMode.isEnabled(forSegment: $0) },
+                      "Horizontal CPU Cores offers all three modes and preserves Bars")
+                coreMode.selectedSegment = 2
+                coreMode.sendAction(coreMode.action, to: coreMode.target)
+                check(options?.mode == .both, "Horizontal can select Both")
+                coreMode.selectedSegment = 1
+                coreMode.sendAction(coreMode.action, to: coreMode.target)
             }
             let horizontalCoreCheck = coreControls[9] as! HUDReadingCheckbox
-            check(horizontalCoreCheck.emphasisControl?.isEnabled == true,
-                  "Horizontal GHz has B even when Vertical was Bars-only")
+            check(horizontalCoreCheck.emphasisControl?.isEnabled == (category !== cpu),
+                  "Only a visible clock can be emphasized")
             coreControls[9]!.performClick(nil)
             check(options?.enabled == false, "Horizontal core checkbox can disable GHz")
             coreControls[9]!.performClick(nil)

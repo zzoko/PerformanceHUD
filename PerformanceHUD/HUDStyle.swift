@@ -1,6 +1,7 @@
 import AppKit
 
 enum HUDStyle {
+    static let pressureRed = NSColor(srgbRed: 1, green: 0.39, blue: 0.36, alpha: 1)
     static let warningYellow = NSColor(srgbRed: 1, green: 0.85, blue: 0.24, alpha: 1)
 
     // Shared history fill: a long, gentle fade with a faint tint at the divider.
@@ -63,7 +64,7 @@ enum HUDStyle {
     private static let baseRowSpacing: CGFloat = 6
 
     private static let baseMetricColumnSpacing: CGFloat = 8
-    static let horizontalLabelGapMultiplier: CGFloat = 1.21
+    static let frameValueReference = "999.9 ms"
     static let horizontalPowerReference = "999.9 W"
     static let horizontalTemperatureReference = "149°C"
     static let horizontalPercentageReference = "100%"
@@ -148,7 +149,7 @@ enum HUDStyle {
         if metric == .fpsGraph {
             return (24 + fpsHistoryFadeExtension) * CGFloat(scale.rawValue) + rowSpacing(scale: scale)
         }
-        let detailLines = metric == .ramTotal ? 3 : metric == .ram ? 1 : 0
+        let detailLines = metric == .ramTotal ? 3 : 0
         let detailGroupSpacing = detailLines > 0 ? rowSpacing(scale: scale) : 0
         return rowHeight(scale: scale) + detailGroupSpacing + CGFloat(detailLines) * ramDetailHeight(scale: scale)
     }
@@ -213,13 +214,13 @@ enum HUDStyle {
 
     // Share the compact FPS-only column with the FPS section of the horizontal HUD.
     static func compactFPSValueColumnRight(scale: HUDScale, valueSize: HUDFPSValueSize = .standard) -> CGFloat {
-        let title = NSTextField(labelWithString: "FPS")
+        let title = NSTextField(labelWithString: HUDFPSMeasure.frameTime.caption)
         title.font = titleFont(for: .fps, scale: scale)
-        let value = NSTextField(labelWithString: "60")
+        let value = NSTextField(labelWithString: frameValueReference)
         value.font = fpsValueFont(scale: scale, highlighted: true, size: valueSize)
-        let textWidth = title.intrinsicContentSize.width + value.intrinsicContentSize.width
-        let expanded = expandedValueColumnRight(valueColumnRight(scale: scale), scale: scale)
-        return textWidth + max(metricColumnSpacing(scale: scale), (expanded - textWidth) / 2)
+        let gap = metricColumnSpacing(scale: scale)
+        return ceil(title.intrinsicContentSize.width) + ceil(value.intrinsicContentSize.width) + gap
+            + title.alignmentRectInsets.left + value.alignmentRectInsets.right
     }
 
     // MARK: - Fonts

@@ -2,6 +2,13 @@
 
 [← Back to README](../README.md)
 
+### v3.4
+
+- Choose **Frame rate** or **Frame time** for the HUD and its menu-bar reading. Vertical history shows the last 60 seconds. In Frame time, the line tracks the average interval between displayed frames and each bar shows that second’s longest interval.
+- Optional **Hitch marks** highlight unusually long frames in yellow or red. Longer hitches extend farther down the FPS curve. Frame-time CSV recordings include average and worst intervals in milliseconds alongside FPS.
+- Horizontal CPU **Cores** now supports Value, Bars, and Both. In Bars and Both, each core type has its own row and additional bars extend along the strip. Category dividers keep the same spacing when neighboring readings are hidden.
+- Renamed **Alignment** to **Layout** and **Process** to **APP**. Memory controls now read **Use**, **Details**, **Pressure**, and the horizontal memory readings start with usage.
+
 ### v3.3
 
 - Pinned memory pressure now follows the selected B1/B2 history style, using the existing graph scaled to fit the menu bar. Numeric history keeps updating with the HUD hidden, and B1/B2 stay selectable whenever Pressure is pinned. The Horizontal HUD retains its A1/A2 meter fallback.

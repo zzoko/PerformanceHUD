@@ -2,7 +2,7 @@ import AppKit
 
 @MainActor
 final class HUDProcessView: NSView {
-    private let name = NSTextField(labelWithString: "Process")
+    private let name = NSTextField(labelWithString: "APP")
     private var values: [HUDProcessReading: NSTextField] = [:]
     private var options = HUDProcessOptions()
     private var scale = HUDScale.normal
@@ -16,7 +16,7 @@ final class HUDProcessView: NSView {
         for reading in HUDProcessReading.allCases {
             let field = NSTextField(labelWithString: reading == .memory ? "—" : "\(reading.title) —")
             field.alignment = .right; field.maximumNumberOfLines = 1
-            field.setAccessibilityLabel("Process \(reading.title)")
+            field.setAccessibilityLabel("APP \(reading.title)")
             values[reading] = field; addSubview(field)
         }
     }
@@ -32,7 +32,7 @@ final class HUDProcessView: NSView {
         needsLayout = true
     }
     func setName(_ value: String?) {
-        name.stringValue = value.flatMap { $0.isEmpty ? nil : $0 } ?? "Process"
+        name.stringValue = value.flatMap { $0.isEmpty ? nil : $0 } ?? "APP"
         name.setAccessibilityLabel(name.stringValue)
     }
     func setValue(_ text: String?, for reading: HUDProcessReading) {

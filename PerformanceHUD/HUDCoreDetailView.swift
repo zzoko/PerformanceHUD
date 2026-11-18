@@ -19,8 +19,9 @@ nonisolated enum HUDCoreBarLayout {
 
     // Keep processor order, with longer rows first and every row ending at
     // the same reading edge. The same row calculation also sizes the HUD.
-    static func rects(for count: Int, in bounds: NSRect, scale: CGFloat) -> [NSRect] {
-        let sizes = rowSizes(for: count)
+    static func rects(for count: Int, in bounds: NSRect, scale: CGFloat, singleRow: Bool = false) -> [NSRect] {
+        guard count > 0 else { return [] }
+        let sizes = singleRow ? [count] : rowSizes(for: count)
         guard let columns = sizes.first else { return [] }
         let gap = columnGap * scale
         let width = min(barWidth * scale,
@@ -151,26 +152,36 @@ final class HUDCoreDetailView: NSView {
 
     // Horizontal reuses the existing detail-label/value pairs (PHY/SWP), with
     // the same baseline, reserved numeric width, emphasis, and tight pair gap.
-    // Always include GHz here, independent of the saved Vertical bar mode.
+    // Bars and Both share a stack with one unwrapped row per core type.
     func horizontalReadings() -> [HUDHorizontalView.Reading] {
         let metric: HUDMetric = gpu ? .gpuCores : .cpuCores
-        return rows.flatMap { row in
-            let caption: String
-            if gpu { caption = "C" }
-            else {
-                switch row.type.name {
-                case "Super": caption = "S"
-                case "Efficiency": caption = "E"
-                case "Performance": caption = "P"
-                default: caption = row.type.name
-                }
+        func caption(_ row: Row) -> String {
+            if gpu { return "C" }
+            switch row.type.name {
+            case "Super": return "S"
+            case "Efficiency": return "E"
+            case "Performance": return "P"
+            default: return row.type.name
             }
+        }
+        if !gpu && options.mode.showsBars, let first = rows.first {
+            let stack = rows.map { row in
+                HUDHorizontalView.CoreRow(name: row.type.name, caption: caption(row),
+                    frequency: options.mode.showsValue ? row.frequency.stringValue : nil,
+                    activity: row.bars?.values ?? [])
+            }
+            return [.init(id: "cpu.coreBars", text: "", reference: "", font: first.frequency.font!,
+                color: first.frequency.textColor!, help: nil, startsMetric: false,
+                metric: metric, leftAligned: true, coreRows: stack)]
+        }
+        return rows.flatMap { row in
+            let caption = caption(row)
             return [("title", row.label), ("value", row.frequency)].map { role, field in
                 HUDHorizontalView.Reading(id: "\(metric.rawValue).\(row.type.name).\(role)",
                     text: role == "title" ? caption : field.stringValue,
                     reference: role == "title" ? caption : HUDStyle.horizontalFrequencyReference,
                     font: field.font!, color: field.textColor!, help: row.frequency.accessibilityLabel(),
-                    startsMetric: false, resourceGroup: gpu ? .gpu : .cpu, metric: metric,
+                    startsMetric: false, metric: metric,
                     tightLeading: role == "value", leftAligned: true)
             }
         }
@@ -206,13 +217,14 @@ final class HUDCoreDetailView: NSView {
 }
 
 @MainActor
-private final class HUDCPUCoreBarsView: NSView {
+final class HUDCPUCoreBarsView: NSView {
+    var singleRow = false
     var values: [Double?] = [] { didSet { needsDisplay = true } }
     var scale: CGFloat = 1
     var tint = NSColor.labelColor { didSet { needsDisplay = true } }
     override func draw(_ dirtyRect: NSRect) {
         guard !values.isEmpty else { return }
-        for (rect, value) in zip(HUDCoreBarLayout.rects(for: values.count, in: bounds, scale: scale), values) {
+        for (rect, value) in zip(HUDCoreBarLayout.rects(for: values.count, in: bounds, scale: scale, singleRow: singleRow), values) {
             let path = NSBezierPath(roundedRect: rect, xRadius: scale, yRadius: scale)
             tint.withAlphaComponent(0.18).setFill(); path.fill()
             guard let value else { continue }

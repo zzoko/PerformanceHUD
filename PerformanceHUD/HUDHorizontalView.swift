@@ -4,6 +4,13 @@ import AppKit
 /// metric choices; the controller supplies text and style from the vertical HUD.
 @MainActor
 final class HUDHorizontalView: NSView {
+    struct CoreRow {
+        let name: String
+        let caption: String
+        let frequency: String?
+        let activity: [Double?]
+    }
+
     struct Reading {
         let id: String
         let text: String
@@ -12,7 +19,6 @@ final class HUDHorizontalView: NSView {
         let color: NSColor
         let help: String?
         let startsMetric: Bool
-        var resourceGroup: HUDResourceGroup? = nil
         var metric: HUDMetric? = nil
         var tightLeading = false
         var leftAligned = false
@@ -22,6 +28,7 @@ final class HUDHorizontalView: NSView {
         var sizingFont: NSFont? = nil
         var pressureMode: HUDMemoryPressureMode? = nil
         var pressureHistory: HUDMemoryPressureHistory? = nil
+        var coreRows: [CoreRow]? = nil
     }
 
     let battery = HUDBatteryIndicatorView(frame: .zero)
@@ -32,13 +39,26 @@ final class HUDHorizontalView: NSView {
         fpsLabels.forEach { $0.alphaValue = opacity }
     }
 
-    // Auto Layout pixel-aligns the vertical FPS row. Match that placement after
-    // the horizontal host has its final frame, including rounded outer height.
-    func alignFPSVertically(heightRounding: CGFloat) {
-        for label in fpsLabels {
-            let frame = label.frame.offsetBy(dx: 0, dy: heightRounding)
-            let aligned = backingAlignedRect(frame, options: .alignAllEdgesNearest)
-            label.setFrameOrigin(NSPoint(x: frame.minX, y: aligned.minY))
+    // Snap once the host has its final position and scale. Keep the logical
+    // widths used for measurement independent of the display's pixel grid.
+    func alignReadingFrames(fpsHeightRounding: CGFloat = 0) {
+        for view in subviews where !view.isHidden {
+            var frame = view.frame
+            if fpsHeightRounding != 0 && fpsLabels.contains(where: { $0 === view }) {
+                frame.origin.y += fpsHeightRounding
+            }
+            // A changing strip origin must not change a reserved column's width.
+            var aligned = backingAlignedRect(frame, options: [.alignMinXNearest, .alignMinYNearest,
+                                                              .alignWidthNearest, .alignHeightNearest])
+            if aligned.width == 0 && frame.width > 0 {
+                aligned.size.width = convertFromBacking(NSSize(width: 1, height: 1)).width
+            }
+            if view.frame != aligned {
+                view.frame = aligned
+                if view is HUDMemoryPressureHistoryView {
+                    view.bounds = NSRect(origin: .zero, size: HUDMemoryPressureHistoryView.menuBarReferenceSize)
+                }
+            }
         }
     }
 
@@ -46,6 +66,7 @@ final class HUDHorizontalView: NSView {
     private var dividers: [NSView] = []
     private var symbols: [String: NSImageView] = [:]
     private var bars: [String: HUDFanBarView] = [:]
+    private var coreBars: [String: HUDCPUCoreBarsView] = [:]
     private var pressureMeters: [String: HUDMemoryPressureMeterView] = [:]
     private var pressureHistories: [String: HUDMemoryPressureHistoryView] = [:]
 
@@ -56,6 +77,69 @@ final class HUDHorizontalView: NSView {
         isHidden = true
     }
     required init?(coder: NSCoder) { fatalError("Use init(frame:)") }
+
+    private func label(for id: String) -> NSTextField {
+        if let existing = labels[id] { return existing }
+        let label = NSTextField(labelWithString: "")
+        labels[id] = label
+        addSubview(label)
+        return label
+    }
+
+    private func placeCoreRows(_ rows: ArraySlice<CoreRow>, at x: CGFloat, centerY: CGFloat,
+                               reading: Reading, scale: HUDScale, background: HUDBackground) -> CGFloat {
+        let factor = CGFloat(scale.rawValue)
+        let labelFont = HUDStyle.smallLabelFont(scale: scale)
+        let widestCaption = rows.map {
+            HUDStyle.horizontalColumnWidth(text: $0.caption, reference: $0.caption, font: labelFont)
+        }.max() ?? 0
+        let pitch = (rows.count == 3 ? HUDCoreBarLayout.rowStride : 18) * factor
+        let frequencyStart = x + widestCaption + HUDStyle.memoryLabelValueSpacing * factor
+        let frequencyWidth = HUDStyle.horizontalColumnWidth(text: "", reference: HUDStyle.horizontalFrequencyReference,
+            font: HUDStyle.readingFont(scale: scale, highlighted: true))
+        var end = x
+        for (index, row) in rows.enumerated() {
+            let y = centerY + (CGFloat(rows.count - 1) / 2 - CGFloat(index)) * pitch
+            let prefix = "\(HUDMetric.cpuCores.rawValue).\(row.name)"
+            func place(_ role: String, _ text: String, _ font: NSFont, _ color: NSColor,
+                       _ left: CGFloat, _ width: CGFloat) {
+                let field = label(for: "\(prefix).\(role)")
+                field.stringValue = text
+                field.font = font
+                field.textColor = color
+                field.alignment = role == "value" ? .right : .left
+                field.isHidden = false
+                field.setAccessibilityLabel(role == "value" ? "\(row.name) frequency" : row.name)
+                let h = field.intrinsicContentSize.height
+                field.frame = field.frame(forAlignmentRect: NSRect(x: left, y: y - h / 2, width: width, height: h))
+            }
+            place("title", row.caption, labelFont, HUDStyle.TextStyle.label.color(background: background), x, widestCaption)
+            var barStart = frequencyStart
+            if let frequency = row.frequency {
+                place("value", frequency, reading.font, reading.color, frequencyStart, frequencyWidth)
+                barStart += frequencyWidth + HUDStyle.metricColumnSpacing(scale: scale)
+            }
+            let bars = coreBars[prefix] ?? HUDCPUCoreBarsView()
+            if coreBars[prefix] == nil {
+                coreBars[prefix] = bars
+                bars.singleRow = true
+                bars.setAccessibilityElement(true)
+                bars.setAccessibilityLabel("\(row.name) core activity")
+                addSubview(bars)
+            }
+            let count = CGFloat(row.activity.count)
+            let width = (count * HUDCoreBarLayout.barWidth + max(0, count - 1) * HUDCoreBarLayout.columnGap) * factor
+            let h = HUDCoreBarLayout.barHeight * factor
+            bars.frame = NSRect(x: barStart, y: y - h / 2, width: width, height: h)
+            bars.scale = factor
+            bars.tint = reading.color
+            bars.values = row.activity
+            bars.setAccessibilityValue(row.activity.map { $0.map { "\(Int($0.rounded()))%" } ?? "unavailable" }.joined(separator: ", "))
+            bars.isHidden = false
+            end = max(end, bars.frame.maxX)
+        }
+        return end
+    }
 
     func configure(sections: [[Reading]], showsBattery: Bool, scale: HUDScale, background: HUDBackground,
                    fpsValueSize: HUDFPSValueSize = .standard) -> NSSize {
@@ -72,6 +156,7 @@ final class HUDHorizontalView: NSView {
         let baseline = (height - referenceHeight) / 2 + referenceHeight - reference.firstBaselineOffsetFromTop
         labels.values.forEach { $0.isHidden = true }
         symbols.values.forEach { $0.isHidden = true }
+        coreBars.values.forEach { $0.isHidden = true }
         bars.values.forEach { $0.isHidden = true }
         pressureMeters.values.forEach { $0.isHidden = true }
         pressureHistories.values.forEach { $0.isHidden = true }
@@ -80,11 +165,10 @@ final class HUDHorizontalView: NSView {
         battery.applyStyle(scale: scale, background: background)
         var x: CGFloat = 0
         var dividerIndex = 0
-        func addDivider(compact: Bool = false, faint: Bool = false) {
+        func addDivider(faint: Bool = false) {
             guard x > 0 else { return }
             let width = (faint ? 0.5 : 1.5) * factor
-            // Keep the existing 16pt gap between resources.
-            let padding = compact ? (16 * factor - width) / 2 : 12 * factor
+            let padding = (16 * factor - width) / 2
             x += padding
             if dividerIndex == dividers.count {
                 let divider = NSView()
@@ -105,22 +189,26 @@ final class HUDHorizontalView: NSView {
             let sectionStart = x
             let compactFPSWidth = section.first?.metric == .fps
                 ? HUDStyle.compactFPSValueColumnRight(scale: scale, valueSize: fpsSize) : nil
-            var previousResource: HUDResourceGroup?
             for (index, reading) in section.enumerated() {
                 if index > 0 {
                     if reading.startsMetric {
                         let sameFanCategory = reading.metric == .fans && section[index - 1].metric == .fans
-                        addDivider(compact: true, faint: sameFanCategory
-                            || (reading.resourceGroup != nil && reading.resourceGroup == previousResource))
+                        addDivider(faint: sameFanCategory)
                     } else {
                         // Fan badge/bar/RPM use the same compact gap on both sides of the bar.
                         let followsLabel = section[index - 1].startsMetric && reading.metric != .fps && reading.metric != .fans
-                        let labelGap = followsLabel && reading.leftAligned
-                            ? 2 : HUDStyle.horizontalLabelGapMultiplier
-                        x += reading.tightLeading ? HUDStyle.memoryLabelValueSpacing * factor : gap * (followsLabel ? labelGap : 1)
+                        if reading.tightLeading { x += HUDStyle.memoryLabelValueSpacing * factor }
+                        else { x += followsLabel && reading.leftAligned ? 2 * gap : gap }
                     }
                 }
-                previousResource = reading.resourceGroup
+                if let rows = reading.coreRows {
+                    for start in stride(from: 0, to: rows.count, by: 3) {
+                        if start > 0 { x += gap }
+                        x = placeCoreRows(rows[start..<min(start + 3, rows.count)], at: x,
+                            centerY: height / 2, reading: reading, scale: scale, background: background)
+                    }
+                    continue
+                }
                 if let mode = reading.pressureMode, mode.isHistory {
                     let graph = pressureHistories[reading.id] ?? HUDMemoryPressureHistoryView()
                     if pressureHistories[reading.id] == nil {
@@ -195,13 +283,7 @@ final class HUDHorizontalView: NSView {
                     x += side
                     continue
                 }
-                let label: NSTextField
-                if let existing = labels[reading.id] { label = existing }
-                else {
-                    label = NSTextField(labelWithString: "")
-                    labels[reading.id] = label
-                    addSubview(label)
-                }
+                let label = label(for: reading.id)
                 label.isHidden = false
                 label.alphaValue = 1
                 if reading.metric == .fps { fpsLabels.append(label) }
@@ -233,15 +315,18 @@ final class HUDHorizontalView: NSView {
                 }
                 // Intrinsic size describes the alignment rectangle. NSTextField
                 // also needs its side insets in the frame, or it clips glyphs.
-                // Match the vertical FPS title's standard label inset.
-                let titleInset = reading.metric == .fps && reading.startsMetric ? label.alignmentRectInsets.left : 0
+                // At divider and outer edges, keep the full label frame inside its section.
+                if index == 0 || reading.startsMetric { x += label.alignmentRectInsets.left }
                 let isLargeFPS = reading.metric == .fps && !reading.startsMetric && fpsSize == .enlarged
                 let y = isLargeFPS ? (height - labelHeight) / 2
                     : baseline - labelHeight + label.firstBaselineOffsetFromTop
-                let alignmentRect = NSRect(x: x + titleInset, y: y,
+                let alignmentRect = NSRect(x: x, y: y,
                                            width: width, height: labelHeight)
                 label.frame = label.frame(forAlignmentRect: alignmentRect)
                 x += width
+                if index == section.count - 1 || section[index + 1].startsMetric {
+                    x += label.alignmentRectInsets.right
+                }
             }
             if let compactFPSWidth {
                 x = max(x, sectionStart + compactFPSWidth)
@@ -249,7 +334,7 @@ final class HUDHorizontalView: NSView {
             }
         }
         if showsBattery {
-            addDivider(compact: sections.last?.last?.resourceGroup == .ram)
+            addDivider()
             let width = ceil(battery.minimumRowWidth)
             battery.frame = NSRect(x: x, y: 0, width: width, height: height)
             x += width

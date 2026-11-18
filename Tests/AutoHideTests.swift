@@ -76,8 +76,11 @@ import AppKit
         menu.select(.off)
         precondition(control.selectedSegment == 0)
         let fpsMenu = HUDFPSMenuView(options: .init(enabled: true, mode: .both), alignment: .vertical)
-        precondition(fpsMenu.subviews.compactMap { $0 as? NSSegmentedControl }.count == 1,
-                     "The FPS category must contain only Value / History / Both")
+        let segments = fpsMenu.subviews.compactMap { $0 as? NSSegmentedControl }.map { selector in
+            (0..<selector.segmentCount).compactMap { selector.label(forSegment: $0) }
+        }
+        precondition(segments.contains(["Value", "History", "Both"]) && !segments.contains(["Off", "FPS", "All"]),
+                     "FPS display mode and the global Auto hide selector are independent")
         if CommandLine.arguments.contains("--preview") {
             menu.appearance = NSAppearance(named: .darkAqua)
             menu.wantsLayer = true

@@ -37,7 +37,7 @@ struct HUDMonitoringDemand {
         demand.cpuAppUsage = process && selection.process.readings.contains(.cpu)
         demand.appMemory = process && selection.process.readings.contains(.memory)
         let cpuCoresShown = overlay && selection.resources[.cpu]?.enabled == true && selection.cpuCores.enabled
-        let cpuCoreMode = selection.cpuCores.mode.resolved(for: selection.alignment)
+        let cpuCoreMode = selection.cpuCores.mode
         demand.cpuCores = cpuCoresShown && cpuCoreMode.showsBars
         demand.gpuCores = overlay && selection.resources[.gpu]?.enabled == true && selection.gpuCores.enabled
         for group in HUDResourceGroup.allCases {

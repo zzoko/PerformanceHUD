@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-3.3.svg" alt="App version 3.3 — view changelog" width="56" height="30" align="top"></a>
+## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-3.4.svg" alt="App version 3.4 — view changelog" width="56" height="30" align="top"></a>
 
 Get the ready-built app for **$3.99**, or build it yourself for free. Both have exactly the same features: no subscription, nothing to unlock.
 
@@ -32,7 +32,19 @@ Whichever version you use, you can also support ongoing development through **[G
 <td>
 
 <details>
-<summary><strong>Features, screenshots &amp; controls</strong></summary>
+<summary><strong>Features, screenshots &amp; controls</strong>
+<div align="center">
+  <a href="https://www.youtube.com/watch?v=NwkdeJpFmBQ" title="Watch PerformanceHUD in action on YouTube">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/images/video-preview-dark.webp">
+      <source media="(prefers-color-scheme: light)" srcset="docs/images/video-preview-light.webp">
+      <img src="docs/images/video-preview-light.webp" alt="PerformanceHUD running over a game, showing frame rate history, CPU and GPU readings, core activity and memory pressure. Watch the video on YouTube." width="560">
+    </picture>
+  </a>
+</div>
+<!-- Invisible full-width spacer: keeps this box full width while collapsed, so the preview stays centred when it opens. -->
+<img src="docs/images/layout-spacer.svg" alt="" width="2000" height="0" align="right">
+</summary>
 
 **PerformanceHUD shows what your Mac is doing while you play.** A small overlay sits on top of your game with the live frame rate and what's behind it: CPU and GPU load, temperatures and power draw, memory pressure, fans and battery. It's a native Apple silicon app under 10 MB.
 

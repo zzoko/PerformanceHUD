@@ -12,12 +12,14 @@ enum HUDMenuBarPresentation {
         var fans: HUDFanOptions
         var battery: HUDBatteryOptions
 
+        var fpsMeasure: HUDFPSMeasure = .frameRate
+
         static var current: Self {
             Self(resources: Dictionary(uniqueKeysWithValues: HUDResourceGroup.allCases.map {
                 ($0, HUDPreferences.resourceOptions(for: $0))
             }), fpsHighlighted: HUDPreferences.fpsOptions.valueHighlighted,
                  packageHighlighted: HUDPreferences.packagePowerOptions.highlighted,
-                 fans: HUDPreferences.fanOptions, battery: HUDPreferences.batteryOptions)
+                 fans: HUDPreferences.fanOptions, battery: HUDPreferences.batteryOptions, fpsMeasure: HUDPreferences.fpsOptions.measure)
         }
     }
 
@@ -63,23 +65,27 @@ enum HUDMenuBarPresentation {
             return String(format: "%.*f", locale: Locale(identifier: "en_US_POSIX"),
                           places, places == 0 ? value.rounded() : value) + suffix
         }
-        func title(_ metric: HUDMetric, group: HUDResourceGroup? = nil) -> Reading {
+        func title(_ metric: HUDMetric) -> Reading {
             Reading(id: "\(metric.rawValue).title", text: metric.hudTitle, reference: metric.hudTitle,
                     font: HUDStyle.titleFont(for: metric, scale: scale), color: labelColor,
-                    help: nil, startsMetric: true, resourceGroup: group, metric: metric)
+                    help: nil, startsMetric: true, metric: metric)
         }
         func value(_ metric: HUDMetric, role: String, text: String, reference: String,
-                   group: HUDResourceGroup? = nil, highlighted: Bool = false,
+                   highlighted: Bool = false,
                    color: NSColor? = nil) -> Reading {
             Reading(id: "\(metric.rawValue).\(role)", text: text, reference: reference,
                     font: HUDStyle.readingFont(scale: scale, highlighted: highlighted), color: color ?? valueColor,
-                    help: nil, startsMetric: false, resourceGroup: group, metric: metric)
+                    help: nil, startsMetric: false, metric: metric)
         }
 
         if readings.contains(.fps) {
-            result.append([title(.fps), Reading(id: "fps.value", text: text(.fps), reference: "9999",
-                font: HUDStyle.fpsValueFont(scale: scale, highlighted: style.fpsHighlighted), color: valueColor,
-                help: "Frame rate", startsMetric: false, metric: .fps,
+            let measure = style.fpsMeasure
+            result.append([Reading(id: "\(HUDMetric.fps.rawValue).title", text: measure.caption, reference: measure.caption,
+                font: HUDStyle.titleFont(for: .fps, scale: scale), color: labelColor,
+                help: nil, startsMetric: true, metric: .fps),
+                Reading(id: "fps.value", text: measure.reading(fps: number(.fps), averageMS: number(.frameTimeAverage)) ?? "—",
+                reference: HUDStyle.frameValueReference, font: HUDStyle.fpsValueFont(scale: scale, highlighted: style.fpsHighlighted),
+                color: valueColor, help: measure.menuTitle, startsMetric: false, metric: .fps,
                 sizingFont: HUDStyle.fpsValueFont(scale: scale, highlighted: true))])
         }
 
@@ -93,27 +99,27 @@ enum HUDMenuBarPresentation {
             let totalUsage = usage
             guard power || temperature || totalUsage else { continue }
             let metric = group.totalMetric
-            resources.append(title(metric, group: group))
+            resources.append(title(metric))
             if power {
                 resources.append(value(metric, role: "power", text: text(gpu ? .gpuPower : .cpuPower, places: 1, suffix: " W"),
-                    reference: HUDStyle.horizontalPowerReference, group: group, highlighted: options.highlighted.contains(.power)))
+                    reference: HUDStyle.horizontalPowerReference, highlighted: options.highlighted.contains(.power)))
             }
             if temperature {
                 let column: HUDLogColumn = gpu ? .gpuTemperature : .cpuTemperature
                 resources.append(value(metric, role: "temperature", text: text(column, suffix: "°C"),
-                    reference: HUDStyle.horizontalTemperatureReference, group: group,
+                    reference: HUDStyle.horizontalTemperatureReference,
                     highlighted: options.highlighted.contains(.temperature),
                     color: HUDStyle.temperatureColor(number(column), warning: options.heatWarning, background: background)))
             }
             if totalUsage {
                 resources.append(value(metric, role: "value", text: text(gpu ? .gpuUsage : .cpuUsage, suffix: "%"),
-                    reference: HUDStyle.horizontalPercentageReference, group: group, highlighted: options.usageHighlighted))
+                    reference: HUDStyle.horizontalPercentageReference, highlighted: options.usageHighlighted))
             }
         }
         if readings.contains(.anePower) {
-            resources += [title(.aneTotal, group: .ane), value(.aneTotal, role: "power",
+            resources += [title(.aneTotal), value(.aneTotal, role: "power",
                 text: text(.anePower, places: 1, suffix: " W"), reference: HUDStyle.horizontalPowerReference,
-                group: .ane, highlighted: style.resources[.ane]?.highlighted.contains(.power) ?? false)]
+                highlighted: style.resources[.ane]?.highlighted.contains(.power) ?? false)]
         }
         if readings.contains(.socPower) {
             resources += [Reading(id: "package.title", text: "SOC", reference: "SOC",
@@ -130,14 +136,18 @@ enum HUDMenuBarPresentation {
             func detail(_ metric: HUDMetric, abbreviation: String, column: HUDLogColumn) -> [Reading] {
                 [Reading(id: "\(metric.rawValue).\(abbreviation).title", text: abbreviation, reference: abbreviation,
                     font: HUDStyle.smallLabelFont(scale: scale), color: labelColor, help: nil,
-                    startsMetric: false, resourceGroup: .ram, metric: metric, leftAligned: true),
+                    startsMetric: false, metric: metric, leftAligned: true),
                  Reading(id: "\(metric.rawValue).\(abbreviation).value", text: text(column, places: 2, suffix: " GB"), reference: "999.99 GB",
                     font: HUDStyle.readingFont(scale: scale, highlighted: options.highlighted.contains(.details)),
-                    color: valueColor, help: nil, startsMetric: false, resourceGroup: .ram, metric: metric,
+                    color: valueColor, help: nil, startsMetric: false, metric: metric,
                     tightLeading: true, leftAligned: true)]
             }
             if (usage || details) || pressure {
-                resources.append(title(.ramTotal, group: .ram))
+                resources.append(title(.ramTotal))
+                if usage {
+                    resources.append(value(.ramTotal, role: "value", text: text(.memoryUsage, suffix: "%"),
+                        reference: HUDStyle.horizontalPercentageReference, highlighted: options.usageHighlighted))
+                }
                 if details {
                     resources += detail(.ramTotal, abbreviation: "PHY", column: .memoryPhysical)
                     resources += detail(.ramTotal, abbreviation: "SWP", column: .memorySwap)
@@ -147,13 +157,9 @@ enum HUDMenuBarPresentation {
                     resources.append(Reading(id: "ram.pressure", text: pressureText, reference: "warning",
                         font: HUDStyle.readingFont(scale: scale, highlighted: options.highlighted.contains(.pressure)),
                         color: valueColor, help: "Memory pressure: \(pressureText)", startsMetric: false,
-                        resourceGroup: .ram, metric: .ramTotal,
+                        metric: .ramTotal,
                         sizingFont: HUDStyle.readingFont(scale: scale, highlighted: true),
                         pressureMode: options.pressureMode, pressureHistory: pressureHistory))
-                }
-                if usage {
-                    resources.append(value(.ramTotal, role: "value", text: text(.memoryUsage, suffix: "%"),
-                        reference: HUDStyle.horizontalPercentageReference, group: .ram, highlighted: options.usageHighlighted))
                 }
             }
         }
@@ -421,6 +427,7 @@ final class HUDMenuBarController: NSObject {
                 content.frame = NSRect(x: padding, y: (height - scaled.height) / 2,
                                        width: scaled.width, height: scaled.height)
                 content.bounds = NSRect(origin: .zero, size: visibleSize)
+                horizontal.alignReadingFrames()
                 contentWidth = scaled.width + 2 * padding
             } else {
                 // Retain a valid bounds transform while temporarily empty.

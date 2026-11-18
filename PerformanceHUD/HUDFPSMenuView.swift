@@ -10,23 +10,42 @@ enum HUDFPSValueSize: Int, CaseIterable, Codable {
     var title: String { "\(rawValue)×" }
 }
 
+enum HUDFPSMeasure: String, CaseIterable, Codable {
+    case frameRate, frameTime
+    var menuTitle: String { self == .frameRate ? "Frame rate" : "Frame time" }
+    var caption: String { self == .frameRate ? "FPS" : "Frame time" }
+    func reading(fps: Double?, averageMS: Double?) -> String? {
+        switch self {
+        case .frameRate: return fps.map { String(format: "%.0f", locale: Locale(identifier: "en_US_POSIX"), $0.rounded()) }
+        case .frameTime: return averageMS.map { String(format: "%.1f ms", locale: Locale(identifier: "en_US_POSIX"), $0) }
+        }
+    }
+}
+
 struct HUDFPSOptions: Codable, Equatable {
     var enabled: Bool
     var mode: HUDFPSDisplayMode
     var valueHighlighted = true
     var valueSize: HUDFPSValueSize = .standard
 
+    var measure: HUDFPSMeasure = .frameRate
+    var hitchMarks = true
+
     init(enabled: Bool, mode: HUDFPSDisplayMode, valueHighlighted: Bool = true,
-         valueSize: HUDFPSValueSize = .standard) {
+         valueSize: HUDFPSValueSize = .standard, measure: HUDFPSMeasure = .frameRate, hitchMarks: Bool = true) {
+        self.measure = measure
+        self.hitchMarks = hitchMarks
         self.enabled = enabled
         self.mode = mode
         self.valueHighlighted = valueHighlighted
         self.valueSize = valueSize
     }
 
-    private enum CodingKeys: String, CodingKey { case enabled, mode, valueHighlighted, valueSize }
+    private enum CodingKeys: String, CodingKey { case enabled, mode, valueHighlighted, valueSize, measure, hitchMarks }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        measure = try values.decodeIfPresent(HUDFPSMeasure.self, forKey: .measure) ?? .frameRate
+        hitchMarks = try values.decodeIfPresent(Bool.self, forKey: .hitchMarks) ?? true
         enabled = try values.decode(Bool.self, forKey: .enabled)
         mode = try values.decode(HUDFPSDisplayMode.self, forKey: .mode)
         valueHighlighted = try values.decodeIfPresent(Bool.self, forKey: .valueHighlighted) ?? true
@@ -57,7 +76,12 @@ final class HUDFPSMenuView: HUDCategoryMenuView {
         trackingMode: .selectOne, target: nil, action: nil)
 
     private let valueHighlight = HUDEmphasisButton()
-    private let readingLabel = NSTextField(labelWithString: "Frame rate")
+    private let readingLabel = NSTextField(labelWithString: "Display")
+    private let sizeLabel = NSTextField(labelWithString: "Number size")
+    private let measureLabel = NSTextField(labelWithString: "Measure")
+    private let measureControl = NSSegmentedControl(labels: HUDFPSMeasure.allCases.map(\.menuTitle),
+        trackingMode: .selectOne, target: nil, action: nil)
+    private let hitchControl = HUDReadingCheckbox(title: "Hitch marks", supportsEmphasis: false)
 
     init(options: HUDFPSOptions, alignment: HUDAlignment) {
         self.options = options
@@ -79,10 +103,19 @@ final class HUDFPSMenuView: HUDCategoryMenuView {
         valueHighlight.target = self
         valueHighlight.action = #selector(toggleValueHighlight)
         valueHighlight.setAccessibilityLabel("Emphasize FPS number")
+        sizeLabel.font = .menuFont(ofSize: 0)
+        measureLabel.font = .menuFont(ofSize: 0)
+        measureControl.setAccessibilityLabel("FPS measure")
+        measureControl.target = self
+        measureControl.action = #selector(measureChanged)
+        hitchControl.target = self
+        hitchControl.action = #selector(hitchesChanged)
         setCategory(master)
         setRows([.init(reading: readingLabel, mode: control, emphasis: valueHighlight,
                       menuBar: makeMenuBarButton(for: .fps, title: "FPS")),
-                 .init(reading: NSView(), mode: valueSizeControl)])
+                 .init(reading: measureLabel, mode: measureControl),
+                 .init(reading: sizeLabel, mode: valueSizeControl),
+                 .init(reading: NSView(), mode: hitchControl)])
         refresh()
     }
 
@@ -102,6 +135,11 @@ final class HUDFPSMenuView: HUDCategoryMenuView {
     private func refresh() {
         master.state = options.enabled ? .on : .off
         let pinned = isMenuBarSelected(.fps)
+        measureControl.selectedSegment = HUDFPSMeasure.allCases.firstIndex(of: options.measure)!
+        measureControl.isEnabled = options.enabled || pinned
+        measureLabel.textColor = measureControl.isEnabled ? .labelColor : .disabledControlTextColor
+        hitchControl.state = options.hitchMarks ? .on : .off
+        hitchControl.isEnabled = options.visibleMetrics(alignment: alignment).contains(.fpsGraph)
         readingLabel.textColor = options.enabled || pinned ? .labelColor : .disabledControlTextColor
         control.selectedSegment = alignment == .horizontal ? 0
             : HUDFPSDisplayMode.allCases.firstIndex(of: options.mode)!
@@ -110,9 +148,22 @@ final class HUDFPSMenuView: HUDCategoryMenuView {
         valueHighlight.needsDisplay = true
         valueSizeControl.selectedSegment = HUDFPSValueSize.allCases.firstIndex(of: options.valueSize)!
         valueSizeControl.isEnabled = options.visibleMetrics(alignment: alignment).contains(.fps)
+        sizeLabel.textColor = valueSizeControl.isEnabled ? .labelColor : .disabledControlTextColor
         control.isEnabled = options.enabled
         control.setEnabled(options.enabled, forSegment: 0)
         for index in [1, 2] { control.setEnabled(options.enabled && alignment == .vertical, forSegment: index) }
+    }
+
+    @objc private func measureChanged() {
+        guard measureControl.isEnabled, HUDFPSMeasure.allCases.indices.contains(measureControl.selectedSegment) else { return }
+        options.measure = HUDFPSMeasure.allCases[measureControl.selectedSegment]
+        onChange?(options)
+    }
+
+    @objc private func hitchesChanged() {
+        guard hitchControl.isEnabled else { return }
+        options.hitchMarks = hitchControl.state == .on
+        onChange?(options)
     }
 
     @objc private func toggleValueHighlight() {

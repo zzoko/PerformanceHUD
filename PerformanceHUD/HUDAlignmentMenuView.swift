@@ -9,14 +9,14 @@ final class HUDAlignmentMenuView: NSView {
         control = NSSegmentedControl(labels: ["Vertical", "Horizontal"], trackingMode: .selectOne, target: nil, action: nil)
         super.init(frame: NSRect(x: 0, y: 0, width: 290, height: 28))
         autoresizingMask = [.width]
-        let label = NSTextField(labelWithString: "Alignment")
+        let label = NSTextField(labelWithString: "Layout")
         label.font = .menuFont(ofSize: 0)
         control.segmentStyle = .rounded
         control.font = .menuFont(ofSize: 0)
         control.selectedSegment = selected == .vertical ? 0 : 1
         control.target = self
         control.action = #selector(changed)
-        control.setAccessibilityLabel("HUD alignment")
+        control.setAccessibilityLabel("HUD layout")
         for view in [label, control] { view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view) }
         NSLayoutConstraint.activate([
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: HUDMenuLayout.labelLeading),

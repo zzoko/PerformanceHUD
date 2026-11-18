@@ -317,16 +317,10 @@ final class AppDelegate:
                 return
             }
 
-            logSnapshot.set(.fps, metrics.fps)
+            logSnapshot.setFPS(metrics.fps, timing: metrics.frameTiming)
             miscMonitor.updateResolution(metrics.resolution)
-            if let fps =
-                metrics.fps {
-
-                self
-                    .hudWindow?
-                    .updateFPS(
-                        fps
-                    )
+            if let fps = metrics.fps {
+                hudWindow?.updateFPS(fps, timing: metrics.frameTiming)
             } else {
                 self.hudWindow?.markFPSUnavailable()
             }
@@ -795,7 +789,7 @@ final class AppDelegate:
                 }
                 enabledMetrics = HUDPreferences.visibleMetrics
                 reconcileMonitoring()
-                if options.enabled && (group == .gpu || options.mode.resolved(for: HUDPreferences.alignment).showsValue)
+                if options.enabled && (group == .gpu || options.mode.showsValue)
                     && !powerMonitor.helper.availability.allowsPowerToggle {
                     self.statusItem?.menu?.cancelTracking()
                     Task { @MainActor [weak self] in
@@ -1394,7 +1388,7 @@ final class AppDelegate:
             }
             let alert = NSAlert()
             alert.messageText = "Reset all HUD options to defaults?"
-            alert.informativeText = "This restores the default categories, readings, highlighting, usage modes, alignment, size, position, and appearance, and enables the HUD. Your permissions are kept."
+            alert.informativeText = "This restores the default categories, readings, highlighting, usage modes, layout, size, position, and appearance, and enables the HUD. Your permissions are kept."
             alert.addButton(withTitle: "Reset All Options")
             alert.addButton(withTitle: "Cancel")
             alert.showsSuppressionButton = true
@@ -1671,7 +1665,7 @@ final class AppDelegate:
             pid
 
         // Never attribute the previous app's readings to the newly focused app.
-        logSnapshot.clear([.fps, .gpuAppUsage, .cpuAppUsage, .memoryAppUsage, .memoryAppPhysical])
+        logSnapshot.clear([.fps, .frameTimeAverage, .frameTimeWorst, .gpuAppUsage, .cpuAppUsage, .memoryAppUsage, .memoryAppPhysical])
 
         // MARK: Clear Previous Selected-App Data
 
@@ -1752,10 +1746,10 @@ final class AppDelegate:
         else { logSnapshot.updateMemory(nil, app: true); ramUsageMonitor?.stop(); hudWindow?.updateRAM(.ram, usage: nil) }
         if demand.fps, let pid = currentPID {
             do { try fpsMonitor?.start(pid: pid) }
-            catch { logSnapshot.set(.fps, nil); miscMonitor.updateResolution(nil); hudWindow?.markFPSUnavailable() }
+            catch { logSnapshot.setFPS(nil); miscMonitor.updateResolution(nil); hudWindow?.markFPSUnavailable() }
         } else {
             fpsMonitor?.stop()
-            logSnapshot.set(.fps, nil)
+            logSnapshot.setFPS(nil)
             miscMonitor.updateResolution(nil)
             hudWindow?.resetFPS()
         }

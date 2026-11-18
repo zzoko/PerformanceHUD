@@ -168,7 +168,7 @@ final class HUDMemoryPressureHistoryView: NSView {
         switch level {
         case .low: return NSColor(srgbRed: 0.29, green: 0.90, blue: 0.46, alpha: 1)
         case .medium: return HUDStyle.warningYellow
-        case .high: return NSColor(srgbRed: 1, green: 0.39, blue: 0.36, alpha: 1)
+        case .high: return HUDStyle.pressureRed
         }
     }
 
