@@ -155,8 +155,8 @@ import AppKit
               "Recreating the battery menu preserves its warning settings")
         let pressureMode: NSSegmentedControl = member(memory, "pressureModeControl") as NSSegmentedControl?
             ?? { fatalError("Missing pressure selector") }()
-        let pressureStyle: NSSegmentedControl = member(memory, "pressureStyleControl") as NSSegmentedControl?
-            ?? { fatalError("Missing pressure style selector") }()
+        let stateColor: HUDReadingCheckbox = member(memory, "pressureColorControl") as HUDReadingCheckbox?
+            ?? { fatalError("Missing State color checkbox") }()
         let memoryControls: [Int: NSButton] = member(memory, "controls")
         check(memoryControls[7]!.frame.maxY < memoryControls[5]!.frame.minY
               && memoryControls[5]!.frame.maxY < memoryControls[8]!.frame.minY, "MEM orders Use, Details, Pressure")
@@ -165,21 +165,19 @@ import AppKit
         check(abs(pressureMode.frame.midY - memoryControls[8]!.frame.midY) < 1, "Pressure owns the style selector")
         var memoryOptions = options
         memory.onChange = { memoryOptions = $0 }
-        check(pressureMode.selectedSegment == 1 && pressureStyle.selectedSegment == 3 && pressureMode.isEnabled,
-              "Pressure starts in Graph, style B2")
-        check(pressureStyle.frame.minY > pressureMode.frame.maxY && memory.bounds.contains(pressureStyle.frame),
-              "Graph styles fit below the final Pressure row")
-        check(abs(pressureMode.frame.width - pressureStyle.frame.width) < 0.5, "Pressure selectors share the same total width")
-        pressureStyle.selectedSegment = 1
-        pressureStyle.sendAction(pressureStyle.action, to: pressureStyle.target)
-        check(memoryOptions.pressureMode == .colorMeter, "Pressure selector updates its preference")
+        check(pressureMode.selectedSegment == 2 && stateColor.state == .on && pressureMode.isEnabled,
+              "Pressure starts in Graph with State color selected")
+        check(stateColor.frame.minY > pressureMode.frame.maxY && memory.bounds.contains(stateColor.frame),
+              "State color fits under Pressure")
+        check(abs(pressureMode.frame.minX - stateColor.frame.minX) < 0.5, "State color aligns with the selector")
+        pressureMode.selectedSegment = 1
+        pressureMode.sendAction(pressureMode.action, to: pressureMode.target)
+        check(memoryOptions.pressureMode == .colorMeter, "Switching to Meter keeps State color")
         memory.update(alignment: .horizontal)
-        check(pressureMode.isEnabled && pressureStyle.selectedSegment == 1
-              && !pressureStyle.isEnabled(forSegment: 2) && !pressureStyle.isEnabled(forSegment: 3),
-              "Horizontal supports meters and disables only the history styles")
+        check(pressureMode.selectedSegment == 1 && !pressureMode.isEnabled(forSegment: 2) && stateColor.isEnabled,
+              "Horizontal disables only Graph")
         memory.update(alignment: .vertical)
-        check(pressureMode.isEnabled && pressureStyle.selectedSegment == 1
-              && pressureStyle.isEnabled(forSegment: 2) && pressureStyle.isEnabled(forSegment: 3), "Vertical restores all styles")
+        check(pressureMode.selectedSegment == 1 && pressureMode.isEnabled(forSegment: 2), "Vertical restores Graph")
         memoryControls[5]!.performClick(nil)
         check(pressureMode.isEnabled && memoryOptions.pressureMode == .colorMeter, "Details off leaves Pressure enabled")
         memoryControls[8]!.performClick(nil)
@@ -230,7 +228,8 @@ import AppKit
             coreControls[9]!.performClick(nil)
             check(options?.enabled == true, "Core details are independently enabled")
             if category === cpu {
-                check(coreMode?.isEnabled == true, "CPU keeps its core selector")
+                check(coreMode?.isEnabled == true && (0..<3).map { coreMode?.label(forSegment: $0) } == ["GHz", "Load", "Both"],
+                      "CPU offers GHz, Load and Both")
                 coreMode!.selectedSegment = 1
                 coreMode!.sendAction(coreMode!.action, to: coreMode!.target)
                 check(options?.mode == .bars, "CPU core mode switches to Bars")

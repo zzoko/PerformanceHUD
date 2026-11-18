@@ -13,7 +13,9 @@ enum HUDFPSValueSize: Int, CaseIterable, Codable {
 enum HUDFPSMeasure: String, CaseIterable, Codable {
     case frameRate, frameTime
     var menuTitle: String { self == .frameRate ? "Frame rate" : "Frame time" }
-    var caption: String { self == .frameRate ? "FPS" : "Frame time" }
+    var caption: String { self == .frameRate ? "FPS" : "FT" }
+    var valueWidthReference: String { self == .frameRate ? "9999" : "999.9 ms" }
+
     func reading(fps: Double?, averageMS: Double?) -> String? {
         switch self {
         case .frameRate: return fps.map { String(format: "%.0f", locale: Locale(identifier: "en_US_POSIX"), $0.rounded()) }

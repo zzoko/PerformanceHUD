@@ -20,10 +20,38 @@ enum HUDUsageMode: String, CaseIterable, Codable {
 }
 
 nonisolated enum HUDMemoryPressureMode: String, CaseIterable, Sendable, Codable {
-    case text, meter, colorMeter, history, colorHistory
+    case text, colorText, meter, colorMeter, history, colorHistory
 
-    static let graphStyles: [Self] = [.meter, .colorMeter, .history, .colorHistory]
-    var isHistory: Bool { self == .history || self == .colorHistory }
+    enum Display: Int, CaseIterable {
+        case text, meter, graph
+
+        var title: String {
+            switch self {
+            case .text: return "Text"
+            case .meter: return "Meter"
+            case .graph: return "Graph"
+            }
+        }
+
+        func mode(stateColor: Bool) -> HUDMemoryPressureMode {
+            switch self {
+            case .text: return stateColor ? .colorText : .text
+            case .meter: return stateColor ? .colorMeter : .meter
+            case .graph: return stateColor ? .colorHistory : .history
+            }
+        }
+    }
+
+    var display: Display {
+        switch self {
+        case .text, .colorText: return .text
+        case .meter, .colorMeter: return .meter
+        case .history, .colorHistory: return .graph
+        }
+    }
+
+    var usesStateColor: Bool { self == .colorText || self == .colorMeter || self == .colorHistory }
+    var isHistory: Bool { display == .graph }
 
     func resolved(for alignment: HUDAlignment) -> Self {
         guard alignment == .horizontal else { return self }
@@ -47,6 +75,7 @@ nonisolated enum HUDMemoryPressureMode: String, CaseIterable, Sendable, Codable 
     var title: String {
         switch self {
         case .text: return "Text"
+        case .colorText: return "Colored text"
         case .meter: return "Meter"
         case .colorMeter: return "Color meter"
         case .history: return "Graph"
@@ -148,13 +177,13 @@ struct HUDResourceOptions: Codable, Equatable {
     var heatWarning: HUDHeatWarningOptions = .init()
 
     var selectedPressureGraphStyle: HUDMemoryPressureMode {
-        pressureMode != .text ? pressureMode : (pressureGraphStyle == .text ? .colorHistory : pressureGraphStyle)
+        pressureMode.display != .text ? pressureMode : (pressureGraphStyle.display == .text ? .colorHistory : pressureGraphStyle)
     }
 
     mutating func selectPressureMode(_ mode: HUDMemoryPressureMode) {
-        if pressureMode != .text { pressureGraphStyle = pressureMode }
+        if pressureMode.display != .text { pressureGraphStyle = pressureMode }
         pressureMode = mode
-        if mode != .text { pressureGraphStyle = mode }
+        if mode.display != .text { pressureGraphStyle = mode }
     }
 
     var usageVisible: Bool { totalUse }

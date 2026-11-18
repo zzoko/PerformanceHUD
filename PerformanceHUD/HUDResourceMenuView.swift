@@ -14,7 +14,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     private var controls: [Int: NSButton] = [:]
     private var heatWarningControl: HUDHeatWarningMenuView?
     private var pressureModeControl: NSSegmentedControl?
-    private var pressureStyleControl: NSSegmentedControl?
+    private var pressureColorControl: HUDReadingCheckbox?
     private var alignment: HUDAlignment
     private var flowControl: NSSegmentedControl?
     private let flowHighlight = HUDEmphasisButton()
@@ -110,7 +110,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                 row.mode = control
             }
             if group == .ram && tag == 8 {
-                let control = NSSegmentedControl(labels: ["Text", "Graph"],
+                let control = NSSegmentedControl(labels: HUDMemoryPressureMode.Display.allCases.map(\.title),
                     trackingMode: .selectOne, target: self, action: #selector(pressureModeChanged(_:)))
                 control.font = .menuFont(ofSize: 0)
                 control.segmentStyle = .rounded
@@ -120,11 +120,12 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             }
             rows.append(row)
             if group == .ram && tag == 8 {
-                let styles = NSSegmentedControl(labels: ["A1", "A2", "B1", "B2"],
-                    trackingMode: .selectOne, target: self, action: #selector(pressureStyleChanged(_:)))
-                styles.setAccessibilityLabel("Pressure style: A1 Meter, A2 Colored meter, B1 Graph, B2 Colored graph")
-                pressureStyleControl = styles
-                rows.append(.init(reading: NSView(), mode: styles))
+                let color = HUDReadingCheckbox(title: "State color", supportsEmphasis: false)
+                color.target = self
+                color.action = #selector(pressureColorChanged(_:))
+                color.setControlAccessibilityLabel("Memory pressure state color")
+                pressureColorControl = color
+                rows.append(.init(reading: NSView(), mode: color))
             }
         }
         if group == .cpu || group == .gpu {
@@ -172,18 +173,16 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     @objc private func pressureModeChanged(_ sender: NSSegmentedControl) {
-        guard sender.isEnabled, (0...1).contains(sender.selectedSegment) else { return }
-        options.selectPressureMode(sender.selectedSegment == 0 ? .text : options.selectedPressureGraphStyle)
+        guard sender.isEnabled, let display = HUDMemoryPressureMode.Display(rawValue: sender.selectedSegment),
+              sender.isEnabled(forSegment: sender.selectedSegment) else { refresh(); return }
+        options.selectPressureMode(display.mode(stateColor: options.pressureMode.usesStateColor))
         refresh()
         onChange?(options)
     }
 
-    @objc private func pressureStyleChanged(_ sender: NSSegmentedControl) {
-        guard sender.isEnabled, HUDMemoryPressureMode.graphStyles.indices.contains(sender.selectedSegment),
-              sender.isEnabled(forSegment: sender.selectedSegment) else { refresh(); return }
-        let mode = HUDMemoryPressureMode.graphStyles[sender.selectedSegment]
-        guard alignment != .horizontal || !mode.isHistory || isPinned(8) else { refresh(); return }
-        options.selectPressureMode(mode)
+    @objc private func pressureColorChanged(_ sender: NSButton) {
+        guard sender.isEnabled else { return }
+        options.selectPressureMode(options.pressureMode.display.mode(stateColor: sender.state == .on))
         refresh()
         onChange?(options)
     }
@@ -264,7 +263,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     private func highlightChanged(tag: Int) {
         guard let control = controls[tag] as? HUDReadingCheckbox,
               control.emphasisControl?.isEnabled == true else { return }
-        if tag == 8 && options.pressureMode != .text { return }
+        if tag == 8 && options.pressureMode.display != .text { return }
         if group != nil && tag == 4 && !powerAvailability.allowsPowerToggle { return }
         if tag == 7 {
             options.setUsagePresentation(visible: options.usageVisible, highlighted: !options.usageHighlighted)
@@ -361,14 +360,14 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         }
         heatWarningControl?.update(options: options.heatWarning,
             isEnabled: (options.enabled && options.temperature) || isPinned(1))
-        pressureModeControl?.selectedSegment = options.pressureMode == .text ? 0 : 1
-        pressureModeControl?.isEnabled = options.showsPressure || isPinned(8)
-        let style = isPinned(8) ? options.selectedPressureGraphStyle
-            : options.selectedPressureGraphStyle.resolved(for: alignment)
-        pressureStyleControl?.selectedSegment = HUDMemoryPressureMode.graphStyles.firstIndex(of: style) ?? 3
-        pressureStyleControl?.isEnabled = (options.showsPressure || isPinned(8)) && options.pressureMode != .text
-        for (index, mode) in HUDMemoryPressureMode.graphStyles.enumerated() {
-            pressureStyleControl?.setEnabled(alignment != .horizontal || !mode.isHistory || isPinned(8), forSegment: index)
+        if let control = pressureModeControl {
+            let pinned = isPinned(8)
+            let mode = options.pressureMode
+            control.isEnabled = options.showsPressure || pinned
+            control.setEnabled(alignment != .horizontal || pinned, forSegment: HUDMemoryPressureMode.Display.graph.rawValue)
+            control.selectedSegment = (pinned ? mode : mode.resolved(for: alignment)).display.rawValue
+            pressureColorControl?.isEnabled = control.isEnabled
+            pressureColorControl?.state = mode.usesStateColor ? .on : .off
         }
         flowControl?.selectedSegment = HUDBatteryFlowMode.allCases.firstIndex(of: flowMode) ?? 1
         flowControl?.isEnabled = options.enabled || isPinned(4)
@@ -389,7 +388,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             }
         }
         controls[8]?.isEnabled = options.enabled
-        (controls[8] as? HUDReadingCheckbox)?.highlightAvailable = options.pressureMode == .text
+        (controls[8] as? HUDReadingCheckbox)?.highlightAvailable = options.pressureMode.display == .text
         if let usage = controls[7] as? HUDReadingCheckbox {
             usage.emphasized = options.usageHighlighted
             usage.setAccessibilityValue(!options.usageVisible ? "Off" : usage.emphasized ? "Highlighted" : "Faint")

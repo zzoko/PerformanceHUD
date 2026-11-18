@@ -38,6 +38,7 @@ import AppKit
 
         let menu = HUDGlassMenuView(options: HUDGlassOptions(), systemStrength: 0.836)
         let selector: NSSegmentedControl = member(menu, "control")
+        precondition(selector.label(forSegment: 0) == "Custom" && selector.label(forSegment: 1) == "Follow macOS")
         let slider: NSSlider = member(menu, "slider")
         let value: NSTextField = member(menu, "valueLabel")
         precondition(selector.selectedSegment == 1 && !slider.isEnabled && value.stringValue == "84%")

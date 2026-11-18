@@ -80,11 +80,12 @@ enum HUDMenuBarPresentation {
 
         if readings.contains(.fps) {
             let measure = style.fpsMeasure
-            result.append([Reading(id: "\(HUDMetric.fps.rawValue).title", text: measure.caption, reference: measure.caption,
+            // Reserve the wider caption and value so changing the measure keeps the pin width stable.
+            result.append([Reading(id: "\(HUDMetric.fps.rawValue).title", text: measure.caption, reference: HUDFPSMeasure.frameRate.caption,
                 font: HUDStyle.titleFont(for: .fps, scale: scale), color: labelColor,
                 help: nil, startsMetric: true, metric: .fps),
                 Reading(id: "fps.value", text: measure.reading(fps: number(.fps), averageMS: number(.frameTimeAverage)) ?? "—",
-                reference: HUDStyle.frameValueReference, font: HUDStyle.fpsValueFont(scale: scale, highlighted: style.fpsHighlighted),
+                reference: HUDFPSMeasure.frameTime.valueWidthReference, font: HUDStyle.fpsValueFont(scale: scale, highlighted: style.fpsHighlighted),
                 color: valueColor, help: measure.menuTitle, startsMetric: false, metric: .fps,
                 sizingFont: HUDStyle.fpsValueFont(scale: scale, highlighted: true))])
         }
@@ -140,7 +141,7 @@ enum HUDMenuBarPresentation {
                  Reading(id: "\(metric.rawValue).\(abbreviation).value", text: text(column, places: 2, suffix: " GB"), reference: "999.99 GB",
                     font: HUDStyle.readingFont(scale: scale, highlighted: options.highlighted.contains(.details)),
                     color: valueColor, help: nil, startsMetric: false, metric: metric,
-                    tightLeading: true, leftAligned: true)]
+                    leadingGap: HUDStyle.memoryLabelValueSpacing, leftAligned: true)]
             }
             if (usage || details) || pressure {
                 resources.append(title(.ramTotal))
@@ -154,9 +155,10 @@ enum HUDMenuBarPresentation {
                 }
                 if pressure {
                     let pressureText = snapshot.values[.memoryPressure] ?? "—"
+                    let level = options.pressureMode == .colorText ? MemoryPressureMonitor.Level(displayText: pressureText) : nil
                     resources.append(Reading(id: "ram.pressure", text: pressureText, reference: "warning",
                         font: HUDStyle.readingFont(scale: scale, highlighted: options.highlighted.contains(.pressure)),
-                        color: valueColor, help: "Memory pressure: \(pressureText)", startsMetric: false,
+                        color: HUDStyle.pressureColor(for: level, background: background), help: "Memory pressure: \(pressureText)", startsMetric: false,
                         metric: .ramTotal,
                         sizingFont: HUDStyle.readingFont(scale: scale, highlighted: true),
                         pressureMode: options.pressureMode, pressureHistory: pressureHistory))

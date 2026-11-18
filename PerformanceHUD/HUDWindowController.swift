@@ -75,6 +75,7 @@ final class HUDWindowController {
     private var fpsValueHighlighted = HUDPreferences.fpsOptions.valueHighlighted
     private var fpsValueSize = HUDPreferences.fpsOptions.valueSize
     private var fpsValueHeightConstraint: NSLayoutConstraint?
+    private var fpsCaptionBaselineConstraint: NSLayoutConstraint?
     private var fanSample = FanSample.checking
     private var alignment = HUDPreferences.alignment
     private var ramDetailTitleLabels: [HUDMetric: NSTextField] = [:]
@@ -710,12 +711,16 @@ final class HUDWindowController {
         primaryLabelHeightConstraints[metric] = primaryLabelHeightConstraint
 
         let valueHeightConstraint: NSLayoutConstraint
+        let captionPlacement: NSLayoutConstraint
         if metric == .fps {
+            captionPlacement = titleLabel.firstBaselineAnchor.constraint(equalTo: valueLabel.firstBaselineAnchor)
+            fpsCaptionBaselineConstraint = captionPlacement
             valueHeightConstraint = valueLabel.heightAnchor.constraint(equalToConstant:
                 HUDStyle.fpsValueHeight(scale: hudScale, size: fpsValueSize))
             fpsValueHeightConstraint = valueHeightConstraint
         } else {
             valueHeightConstraint = valueLabel.heightAnchor.constraint(equalTo: titleLabel.heightAnchor)
+            captionPlacement = titleLabel.topAnchor.constraint(equalTo: row.topAnchor)
         }
 
         // MARK: Constraints
@@ -731,10 +736,7 @@ final class HUDWindowController {
                 constant: titleLabel.alignmentRectInsets.left
             ),
 
-            // Center the FPS label and value within their shared row.
-            metric == .fps
-                ? titleLabel.centerYAnchor.constraint(equalTo: row.centerYAnchor)
-                : titleLabel.topAnchor.constraint(equalTo: row.topAnchor),
+            captionPlacement,
 
             valueSpacingConstraint,
 
@@ -1079,6 +1081,7 @@ final class HUDWindowController {
             showsRAMDetails = options.showsDetails
             showsRAMPressure = options.showsPressure
             memoryPressureMode = options.pressureMode
+            ramPressureValueLabel?.textColor = ramPressureColor
             if !showsRAMPressure || !memoryPressureMode.isHistory { ramPressureHistory.clear() }
             if options.usageVisible { hiddenUtilizationMetrics.remove(.ramTotal) }
             else { hiddenUtilizationMetrics.insert(.ramTotal) }
@@ -1167,7 +1170,7 @@ final class HUDWindowController {
         valueLabels[.fps]?.stringValue = fpsReading
         fpsGraphView.configure(measure: fpsMeasure, hitchMarks: fpsHitchMarks)
         if enabledMetrics.intersection([.fps, .fpsGraph]) == visible && !sizeChanged {
-            // A text-only change preserves FPS history, animation and window geometry.
+            // Preserve FPS history when only its presentation changes.
             updateReadingAppearance()
             refreshHorizontalReadings()
             return
@@ -1371,6 +1374,11 @@ final class HUDWindowController {
         readingFont(for: .ramTotal, kind: .details)
     }
 
+    private var ramPressureColor: NSColor {
+        HUDStyle.pressureColor(for: memoryPressureMode == .colorText ? ramPressureMeter.currentLevel : nil,
+                               background: textBackground)
+    }
+
     private var ramPressureFont: NSFont {
         readingFont(for: .ramTotal, kind: .pressure)
     }
@@ -1415,6 +1423,10 @@ final class HUDWindowController {
             label.font = readingFont(for: metric, kind: .totalUse)
             label.textColor = readingColor(for: metric, kind: .totalUse)
         }
+        // Align the visible tops of the caption and digits. Equal-size text shares a baseline.
+        if let caption = titleLabels[.fps]?.font, let number = valueLabels[.fps]?.font {
+            fpsCaptionBaselineConstraint?.constant = caption.capHeight - number.capHeight
+        }
         packageTitleLabel?.font = HUDStyle.titleFont(for: .gpuTotal, scale: hudScale)
         packageTitleLabel?.textColor = HUDStyle.primaryTitleColor(for: .gpuTotal, background: textBackground)
         packageValueLabel?.font = HUDStyle.readingFont(scale: hudScale, highlighted: packageOptions.highlighted)
@@ -1430,7 +1442,7 @@ final class HUDWindowController {
         ramSwapTitleLabel?.textColor = HUDStyle.TextStyle.label.color(background: textBackground)
         ramPressureTitleLabel?.textColor = HUDStyle.TextStyle.label.color(background: textBackground)
         ramSwapValueLabel?.textColor = HUDStyle.readingColor(background: textBackground)
-        ramPressureValueLabel?.textColor = HUDStyle.readingColor(background: textBackground)
+        ramPressureValueLabel?.textColor = ramPressureColor
 
         for metric in HUDMetric.allCases {
 
@@ -1539,7 +1551,7 @@ final class HUDWindowController {
                     guard let field, let font = field.font, let color = field.textColor else { return }
                     readings.append(.init(id: "\(metric.rawValue).\(role)", text: field.stringValue,
                         reference: reference, font: font, color: color, help: field.toolTip, startsMetric: title,
-                        metric: metric,
+                        metric: metric, leadingGap: metric == .fps && !title ? HUDStyle.horizontalFPSLabelGap(for: fpsValueSize) : nil,
                         sizingFont: metric == .fps && !title
                             ? HUDStyle.fpsValueFont(scale: hudScale, highlighted: true, size: fpsValueSize) : nil))
                 }
@@ -1547,7 +1559,7 @@ final class HUDWindowController {
                 if powerMetrics.contains(metric) { append(powerLabels[metric], role: "power", reference: HUDStyle.horizontalPowerReference) }
                 if temperatureMetrics.contains(metric) { append(temperatureLabels[metric], role: "temperature", reference: HUDStyle.horizontalTemperatureReference) }
                 if !hiddenUtilizationMetrics.contains(metric) {
-                    let reference = metric == .fps ? HUDStyle.frameValueReference : HUDStyle.horizontalPercentageReference
+                    let reference = metric == .fps ? fpsMeasure.valueWidthReference : HUDStyle.horizontalPercentageReference
                     append(valueLabels[metric], role: "value", reference: reference)
                 }
                 if showsRAMDetails && metric == .ramTotal {
@@ -1557,7 +1569,7 @@ final class HUDWindowController {
                                 font: role == "value" ? ramDetailsFont : HUDStyle.smallLabelFont(scale: hudScale),
                                 color: (role == "value" ? HUDStyle.TextStyle.reading : .label).color(background: textBackground),
                                 help: help, startsMetric: false, metric: metric,
-                                tightLeading: role == "value", leftAligned: true))
+                                leadingGap: role == "value" ? HUDStyle.memoryLabelValueSpacing : nil, leftAligned: true))
                         }
                     }
                     appendDetail("PHY", value: ramDetailLabels[metric]?.stringValue ?? "", reference: "999.99 GB",
@@ -1571,7 +1583,7 @@ final class HUDWindowController {
                     // normal-width slot. Neither changes with pressure state.
                     readings.append(.init(id: "ram.pressure", text: pressure, reference: "warning",
                         font: ramPressureFont,
-                        color: HUDStyle.readingColor(background: textBackground),
+                        color: ramPressureColor,
                         help: "Memory pressure: \(pressure).", startsMetric: false, metric: metric,
                         sizingFont: HUDStyle.readingFont(scale: hudScale, highlighted: true),
                         pressureMode: memoryPressureMode.resolved(for: .horizontal)))
@@ -1669,8 +1681,8 @@ final class HUDWindowController {
             + [ramSwapTitleLabel, ramSwapValueLabel].compactMap { $0 }
         for label in labels { label.isHidden = !showsRAMDetails }
         ramPressureTitleLabel?.isHidden = !showsRAMPressure
-        ramPressureValueLabel?.isHidden = !showsRAMPressure || memoryPressureMode != .text
-        ramPressureMeter.isHidden = !showsRAMPressure || alignment != .vertical || memoryPressureMode == .text || memoryPressureMode.isHistory
+        ramPressureValueLabel?.isHidden = !showsRAMPressure || memoryPressureMode.display != .text
+        ramPressureMeter.isHidden = !showsRAMPressure || alignment != .vertical || memoryPressureMode.display != .meter
         ramPressureHistory.isHidden = !showsRAMPressure || alignment != .vertical || !memoryPressureMode.isHistory
         rowHeightConstraints[.ramTotal]?.constant = metricRowHeight(.ramTotal, scale: hudScale)
     }
@@ -2145,6 +2157,7 @@ final class HUDWindowController {
     func updateMemoryPressure(_ value: String) {
         ramPressureValueLabel?.stringValue = value
         ramPressureMeter.update(value)
+        ramPressureValueLabel?.textColor = ramPressureColor
         refreshHorizontalReadings()
     }
 

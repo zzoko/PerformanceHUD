@@ -69,7 +69,7 @@ nonisolated struct FanDisplayReading: Equatable, Sendable {
 enum HUDFanMode: String, CaseIterable, Codable {
     // Keep stored values compatible while presenting Total (bar), RPM, Both.
     case bar, rpm, both
-    var title: String { self == .rpm ? "RPM" : self == .bar ? "Total" : "Both" }
+    var title: String { self == .rpm ? "RPM" : self == .bar ? "Bar" : "Both" }
     var showsRPM: Bool { self != .bar }
     var showsBar: Bool { self != .rpm }
 }

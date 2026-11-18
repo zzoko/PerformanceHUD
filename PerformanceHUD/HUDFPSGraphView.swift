@@ -227,7 +227,7 @@ final class HUDFPSGraphView: NSView {
             updateScale()
         }
         heading.stringValue = measure.caption
-        setAccessibilityLabel("\(measure.caption) history, last 60 seconds")
+        setAccessibilityLabel("\(measure.menuTitle) history, last 60 seconds")
         let warning = hitchMarks ? " Yellow marks a hitch. Red marks a severe hitch." : ""
         let depth = hitchMarks && measure == .frameRate ? " Longer hitches extend farther down." : ""
         let series = measure == .frameRate ? "The curve shows FPS." :

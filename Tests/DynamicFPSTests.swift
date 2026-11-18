@@ -109,8 +109,8 @@ import AppKit
                     let rect = field.alignmentRect(forFrame: field.frame)
                     check(field.font!.pointSize == 24 && rect.height >= field.intrinsicContentSize.height,
                           "Both emphasis weights retain the full 2× number")
-                    check(rect.minY >= -0.5 && rect.maxY <= field.superview!.bounds.height + 0.5,
-                          "Enlarged FPS fits its row")
+                    check(container.bounds.contains(field.convert(field.bounds, to: container)),
+                          "Enlarged FPS fits inside the visible HUD")
                     check(container.bounds.size == enlargedFrame, "Digits, missing readings and B cannot resize enlarged FPS")
                 }
             }
@@ -130,6 +130,64 @@ import AppKit
             hud.setFPSOptions(.init(enabled: true, mode: .both))
             panel.contentView?.layoutSubtreeIfNeeded()
             check(container.bounds.size == normal, "1× restores the original layout exactly")
+
+            for scale in [HUDScale.small, HUDScale(rawValue: 0.75), .normal, HUDScale(rawValue: 1.25), .large] {
+                hud.setHUDScale(scale)
+                hud.setFPSOptions(.init(enabled: true, mode: .both))
+                let standardHeight = container.bounds.height
+                for measure in HUDFPSMeasure.allCases {
+                    for emphasis in [false, true] {
+                        hud.setFPSOptions(.init(enabled: true, mode: .both, valueHighlighted: emphasis,
+                                                valueSize: .enlarged, measure: measure))
+                        hud.updateFPS(144, timing: .init(averageMS: 6.94, worstMS: 7))
+                        panel.contentView?.layoutSubtreeIfNeeded()
+                        if alignment == .horizontal {
+                            let fields: [String: NSTextField] = member(horizontal, "labels")
+                            let value = fields["0.value"]!
+                            check(container.bounds.height == standardHeight, "2× keeps the 1× horizontal strip height")
+                            check(container.bounds.contains(value.convert(value.bounds, to: container)),
+                                  "The 2× reading fits within the horizontal padding")
+                        } else {
+                            func capTop(_ field: NSTextField) -> CGFloat {
+                                field.convert(field.bounds, to: container).maxY - field.firstBaselineOffsetFromTop + field.font!.capHeight
+                            }
+                            let titleTop = capTop(titles[.fps]!)
+                            let valueTop = capTop(values[.fps]!)
+                            check(abs(titleTop - valueTop) <= 1 / panel.backingScaleFactor + 0.01,
+                                  "Vertical 2× cap tops at \(scale.rawValue)×: caption \(titleTop), reading \(valueTop)")
+                        }
+                    }
+                }
+            }
+            hud.setHUDScale(.normal)
+        }
+
+        hud.setAlignment(.horizontal)
+        hud.setResourceOptions(.init(enabled: true, temperature: true, totalUse: true, focusedApp: false), for: .gpu)
+        for size in HUDFPSValueSize.allCases {
+            for measure in HUDFPSMeasure.allCases {
+                var dividerX: CGFloat?
+                var valueRight: CGFloat?
+                hud.setFPSOptions(.init(enabled: true, mode: .value, valueSize: size, measure: measure))
+                for fps in [9.0, 60, 144, 9999] {
+                    hud.updateFPS(fps, timing: .init(averageMS: 1000 / fps, worstMS: 1000 / fps))
+                    panel.contentView?.layoutSubtreeIfNeeded()
+                    let fields: [String: NSTextField] = member(horizontal, "labels")
+                    let caption = fields["0.title"]!
+                    let value = fields["0.value"]!
+                    let column = value.alignmentRect(forFrame: value.frame)
+                    let gap = column.minX - caption.alignmentRect(forFrame: caption.frame).maxX
+                    let expectedGap: CGFloat = size == .enlarged ? 30.5 : 19
+                    check(value.alignment == .right && abs(gap - expectedGap) <= 0.5,
+                          "Horizontal FPS keeps the wider label gap and the reading’s right alignment")
+                    check(abs(column.maxX - (valueRight ?? column.maxX)) <= 0.5, "Changing digits keeps the reading’s right edge")
+                    valueRight = column.maxX
+                    let dividers: [NSView] = member(horizontal, "dividers")
+                    let x = dividers.first { !$0.isHidden }!.frame.midX
+                    check(abs(x - (dividerX ?? x)) <= 0.5, "The following divider stays put as digits change")
+                    dividerX = x
+                }
+            }
         }
         let defaults = UserDefaults.standard
         let original = defaults.volatileDomain(forName: UserDefaults.argumentDomain)

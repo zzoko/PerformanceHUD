@@ -245,7 +245,7 @@ import AppKit
                         options.pressureMode = mode
                         hud.setResourceOptions(options, for: .ram)
                         panel.contentView?.layoutSubtreeIfNeeded()
-                        if alignment == .horizontal && mode != .text {
+                        if alignment == .horizontal && mode.display != .text {
                             check(panel.frame.width < size.width && panel.frame.height == size.height,
                                   "Horizontal meters reserve less width than pressure text")
                             if let compactMeterSize {
@@ -258,9 +258,9 @@ import AppKit
                         } else {
                             check(panel.frame.size == size, "Text and meters retain the compact size")
                         }
-                        check(meter.isHidden == (alignment == .horizontal || mode == .text || mode.isHistory), "Only Vertical meters appear")
+                        check(meter.isHidden == (alignment == .horizontal || mode.display == .text || mode.isHistory), "Only Vertical meters appear")
                         check(history.isHidden == (alignment == .horizontal || !mode.isHistory), "History is Vertical only")
-                        check(pressure.isHidden == (mode != .text), "Text and meter are mutually exclusive")
+                        check(pressure.isHidden == (mode.display != .text), "Text and meter are mutually exclusive")
                         check(pressure.stringValue == "critical", "Horizontal retains its pressure state in every display mode")
                         if !meter.isHidden {
                             let rect = meter.convert(meter.bounds, to: container)

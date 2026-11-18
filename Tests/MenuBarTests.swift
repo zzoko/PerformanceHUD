@@ -280,23 +280,23 @@ import AppKit
         memory.update(alignment: .horizontal)
         let pressurePin = memory.subviews.compactMap { $0 as? HUDMenuBarButton }
             .first { $0.accessibilityLabel() == "Show MEM Pressure in menu bar" }!
-        let styles: NSSegmentedControl = member(memory, "pressureStyleControl") as NSSegmentedControl?
-            ?? { fatalError("Missing pressure styles") }()
-        check(!styles.isEnabled(forSegment: 2) && !styles.isEnabled(forSegment: 3),
-              "Unpinned Horizontal pressure keeps its meter-only choices")
+        let modes: NSSegmentedControl = member(memory, "pressureModeControl") as NSSegmentedControl?
+            ?? { fatalError("Missing pressure selector") }()
+        let color: HUDReadingCheckbox = member(memory, "pressureColorControl") as HUDReadingCheckbox?
+            ?? { fatalError("Missing State color checkbox") }()
+        check(!modes.isEnabled(forSegment: 2), "Unpinned Horizontal disables Graph")
         pressurePin.performClick(nil)
-        check(styles.isEnabled && styles.isEnabled(forSegment: 2) && styles.isEnabled(forSegment: 3)
-              && styles.selectedSegment == 3, "Pinning exposes the remembered B2 style independently of HUD layout")
-        styles.selectedSegment = 2
-        _ = styles.sendAction(styles.action, to: styles.target)
+        check(modes.isEnabled && modes.isEnabled(forSegment: 2) && modes.selectedSegment == 2 && color.isEnabled,
+              "Pinning exposes the remembered Graph choice independently of HUD layout")
+        color.performClick(nil)
         let memoryOptions: HUDResourceOptions = member(memory, "options")
         check(memoryOptions.pressureMode == .history && !memoryOptions.enabled,
-              "Changing a pinned B style cannot enable the hidden HUD category")
+              "Changing a pinned graph's color preserves the hidden HUD category")
         check(memoryOptions.pressureMode.resolved(for: .horizontal) == .meter,
-              "The Horizontal HUD retains its A fallback independently of the menu-bar graph")
+              "The Horizontal HUD retains its meter fallback")
         pressurePin.performClick(nil)
-        check(!styles.isEnabled(forSegment: 2) && styles.selectedSegment == 0,
-              "Unpinning restores the Horizontal meter indication without losing the saved B choice")
+        check(!modes.isEnabled(forSegment: 2) && modes.selectedSegment == 1 && !color.isEnabled,
+              "Unpinning restores the Horizontal meter indication")
 
         let noFans = HUDFanMenuView(options: .init(enabled: true), sample: .noFans)
         check(noFans.subviews.compactMap { $0 as? HUDMenuBarButton }.allSatisfy { !$0.isEnabled },
@@ -343,6 +343,11 @@ import AppKit
               "The FPS pin always produces a value, never a history graph")
         let view = HUDHorizontalView(frame: .zero)
         let nativeSize = view.configure(sections: sections(pins), showsBattery: false, scale: .normal, background: .dark)
+        style.fpsMeasure = .frameTime
+        let frameTimeSize = view.configure(sections: sections(pins), showsBattery: false, scale: .normal, background: .dark)
+        check(frameTimeSize == nativeSize, "Switching between FPS and FT keeps neighboring pins in place")
+        style.fpsMeasure = .frameRate
+        _ = view.configure(sections: sections(pins), showsBattery: false, scale: .normal, background: .dark)
         let labels: [String: NSTextField] = member(view, "labels")
         check(labels["fps.value"]?.font == HUDStyle.fpsValueFont(scale: .normal, highlighted: true),
               "FPS keeps the original horizontal HUD emphasis and font size before the uniform transform")
@@ -377,7 +382,11 @@ import AppKit
             check(pressure.map(\.text) == ["MEM", "warning"],
                   "Pressure pin retains system context while the overlay's memory source is App")
             check(pressure.last?.pressureMode == mode,
-                  "The menu-bar pressure pin retains the selected Text/A/B style")
+                  "The menu-bar pressure pin retains the selected display and color")
+            if mode.display == .text {
+                check(pressure.last?.color == (mode.usesStateColor ? HUDStyle.warningYellow : HUDStyle.readingColor(background: .dark)),
+                      "Pinned text uses the selected state color")
+            }
         }
         style.battery.enabled = false
         style.battery.temperature = false

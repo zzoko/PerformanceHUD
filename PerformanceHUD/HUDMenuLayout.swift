@@ -41,7 +41,7 @@ enum HUDMenuLayout {
     // A shared width keeps Background, Alignment, and the Size track aligned.
     // Measure the actual segmented controls so every title fits at menu font size.
     static var backgroundOptionsWidth: CGFloat {
-        [["Light", "Dark", "Follow macOS"], ["Strength", "Follow macOS"], ["Vertical", "Horizontal"]].map { titles in
+        [["Light", "Dark", "Follow macOS"], ["Custom", "Follow macOS"], ["Vertical", "Horizontal"]].map { titles in
             let control = NSSegmentedControl(labels: titles, trackingMode: .selectOne, target: nil, action: nil)
             control.segmentStyle = .rounded
             control.font = .menuFont(ofSize: 0)

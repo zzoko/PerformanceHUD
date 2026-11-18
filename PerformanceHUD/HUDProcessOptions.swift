@@ -26,7 +26,13 @@ struct HUDProcessOptions: Codable, Equatable {
 
 enum HUDCoreDisplayMode: String, CaseIterable, Codable {
     case value, bars, both
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self {
+        case .value: return "GHz"
+        case .bars: return "Load"
+        case .both: return "Both"
+        }
+    }
     var showsValue: Bool { self != .bars }
     var showsBars: Bool { self != .value }
 }

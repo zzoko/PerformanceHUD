@@ -4,6 +4,15 @@ enum HUDStyle {
     static let pressureRed = NSColor(srgbRed: 1, green: 0.39, blue: 0.36, alpha: 1)
     static let warningYellow = NSColor(srgbRed: 1, green: 0.85, blue: 0.24, alpha: 1)
 
+    static func pressureColor(for level: MemoryPressureMonitor.Level?, background: HUDBackground) -> NSColor {
+        switch level {
+        case .low: return NSColor(srgbRed: 0.29, green: 0.90, blue: 0.46, alpha: 1)
+        case .medium: return warningYellow
+        case .high: return pressureRed
+        case nil: return readingColor(background: background)
+        }
+    }
+
     // Shared history fill: a long, gentle fade with a faint tint at the divider.
     static func historyFillGradient(tint: NSColor) -> NSGradient? {
         let locations = (0...32).map { CGFloat($0) / 32 }
@@ -64,7 +73,6 @@ enum HUDStyle {
     private static let baseRowSpacing: CGFloat = 6
 
     private static let baseMetricColumnSpacing: CGFloat = 8
-    static let frameValueReference = "999.9 ms"
     static let horizontalPowerReference = "999.9 W"
     static let horizontalTemperatureReference = "149°C"
     static let horizontalPercentageReference = "100%"
@@ -141,6 +149,11 @@ enum HUDStyle {
         * CGFloat(scale.rawValue)
     }
 
+    // With the four-digit FPS column, these gaps leave about 30 / 53 pt of visible space at 144 FPS.
+    static func horizontalFPSLabelGap(for size: HUDFPSValueSize) -> CGFloat {
+        size == .enlarged ? 30.5 : 19
+    }
+
     static let memoryLabelValueSpacing: CGFloat = 4
     static let fpsHistoryFadeExtension: CGFloat = 16
 
@@ -212,11 +225,11 @@ enum HUDStyle {
         285 * CGFloat(scale.rawValue) - 2 * horizontalPadding(scale: scale)
     }
 
-    // Share the compact FPS-only column with the FPS section of the horizontal HUD.
+    // A compact Vertical HUD keeps its width when switching between FPS and frame time.
     static func compactFPSValueColumnRight(scale: HUDScale, valueSize: HUDFPSValueSize = .standard) -> CGFloat {
-        let title = NSTextField(labelWithString: HUDFPSMeasure.frameTime.caption)
+        let title = NSTextField(labelWithString: HUDFPSMeasure.frameRate.caption)
         title.font = titleFont(for: .fps, scale: scale)
-        let value = NSTextField(labelWithString: frameValueReference)
+        let value = NSTextField(labelWithString: HUDFPSMeasure.frameTime.valueWidthReference)
         value.font = fpsValueFont(scale: scale, highlighted: true, size: valueSize)
         let gap = metricColumnSpacing(scale: scale)
         return ceil(title.intrinsicContentSize.width) + ceil(value.intrinsicContentSize.width) + gap

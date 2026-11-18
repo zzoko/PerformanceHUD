@@ -101,7 +101,7 @@ final class HUDMemoryPressureHistoryView: NSView {
         setAccessibilityElement(true)
         setAccessibilityRole(.image)
         setAccessibilityLabel("Memory pressure history")
-        setAccessibilityHelp("Last 30 seconds on a fixed 0–100 scale. The dotted line marks 100; the endpoint dot marks the current reading. Style B2 uses colour to show macOS pressure state.")
+        setAccessibilityHelp("Last 30 seconds on a fixed 0–100 scale. The dotted line marks 100; the endpoint dot marks the current reading. State color shows the macOS pressure state.")
     }
 
     required init?(coder: NSCoder) { fatalError("Use init()") }
@@ -160,16 +160,7 @@ final class HUDMemoryPressureHistoryView: NSView {
     }
 
     private func color(for level: MemoryPressureMonitor.Level?) -> NSColor {
-        colored ? stateColor(for: level) : HUDStyle.readingColor(background: background)
-    }
-
-    private func stateColor(for level: MemoryPressureMonitor.Level?) -> NSColor {
-        guard let level else { return HUDStyle.readingColor(background: background) }
-        switch level {
-        case .low: return NSColor(srgbRed: 0.29, green: 0.90, blue: 0.46, alpha: 1)
-        case .medium: return HUDStyle.warningYellow
-        case .high: return HUDStyle.pressureRed
-        }
+        HUDStyle.pressureColor(for: colored ? level : nil, background: background)
     }
 
     override func draw(_ dirtyRect: NSRect) {

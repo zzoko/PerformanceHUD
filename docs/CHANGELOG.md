@@ -2,6 +2,13 @@
 
 [← Back to README](../README.md)
 
+### v3.5
+
+- At **2×**, the FPS or frame-time number fits within the regular Horizontal HUD height. In Vertical, the enlarged number aligns with the top of its label. Horizontal readings stay right-aligned as the digits change.
+- Frame time now appears as **FT** in the HUD and its menu-bar pin. The Measure selector still spells out **Frame time**.
+- Memory **Pressure** now offers **Text / Meter / Graph** with a separate **State color** checkbox for all three. Existing pressure selections keep their appearance.
+- Renamed the fan modes to **Bar / RPM / Both**, CPU core modes to **GHz / Load / Both**, and the adjustable Liquid Glass mode to **Custom**.
+
 ### v3.4
 
 - Choose **Frame rate** or **Frame time** for the HUD and its menu-bar reading. Vertical history shows the last 60 seconds. In Frame time, the line tracks the average interval between displayed frames and each bar shows that second’s longest interval.

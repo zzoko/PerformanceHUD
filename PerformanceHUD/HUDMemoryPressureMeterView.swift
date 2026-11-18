@@ -49,19 +49,14 @@ final class HUDMemoryPressureMeterView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard mode != .text, let currentLevel else { return }
+        guard mode.display == .meter, let currentLevel else { return }
         let neutral = HUDStyle.readingColor(background: background)
-        let colors = [
-            NSColor(srgbRed: 0.29, green: 0.90, blue: 0.46, alpha: 1),
-            HUDStyle.warningYellow,
-            HUDStyle.pressureRed
-        ]
+        let active = HUDStyle.pressureColor(for: mode.usesStateColor ? currentLevel : nil, background: background)
         let gap = (stacked ? 2 : 3) * scale
         let width = stacked ? bounds.width : (bounds.width - 2 * gap) / 3
         let height = Self.segmentThickness * scale
         for index in 0..<3 {
             let isActive = index < activeSegmentCount
-            let active = mode == .colorMeter ? colors[currentLevel.rawValue] : neutral
             // Inactive segments progress from lighter grey in the middle to
             // darker grey at the end. Active bars share the current state's colour.
             let inactiveAlpha: CGFloat = index == 2 ? (background == .light ? 0.22 : 0.10) : 0.16

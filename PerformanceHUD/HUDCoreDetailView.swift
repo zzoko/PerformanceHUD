@@ -182,7 +182,7 @@ final class HUDCoreDetailView: NSView {
                     reference: role == "title" ? caption : HUDStyle.horizontalFrequencyReference,
                     font: field.font!, color: field.textColor!, help: row.frequency.accessibilityLabel(),
                     startsMetric: false, metric: metric,
-                    tightLeading: role == "value", leftAligned: true)
+                    leadingGap: role == "value" ? HUDStyle.memoryLabelValueSpacing : nil, leftAligned: true)
             }
         }
     }

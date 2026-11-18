@@ -20,7 +20,7 @@ final class HUDHorizontalView: NSView {
         let help: String?
         let startsMetric: Bool
         var metric: HUDMetric? = nil
-        var tightLeading = false
+        var leadingGap: CGFloat? = nil // Points at normal HUD scale.
         var leftAligned = false
         var fanMarker: String? = nil
         var barWidth: CGFloat? = nil
@@ -150,7 +150,8 @@ final class HUDHorizontalView: NSView {
         reference.font = HUDStyle.titleFont(for: .fps, scale: scale)
         let hasFPSValue = sections.joined().contains { $0.metric == .fps && !$0.startsMetric }
         let fpsSize = hasFPSValue ? fpsValueSize : .standard
-        let height = HUDStyle.fpsRowHeight(scale: scale, size: fpsSize)
+        // The enlarged number can extend into the strip’s vertical padding, like the core bars.
+        let height = HUDStyle.rowHeight(scale: scale)
         let gap = HUDStyle.metricColumnSpacing(scale: scale)
         let referenceHeight = reference.intrinsicContentSize.height
         let baseline = (height - referenceHeight) / 2 + referenceHeight - reference.firstBaselineOffsetFromTop
@@ -187,8 +188,6 @@ final class HUDHorizontalView: NSView {
         for section in sections where !section.isEmpty {
             addDivider()
             let sectionStart = x
-            let compactFPSWidth = section.first?.metric == .fps
-                ? HUDStyle.compactFPSValueColumnRight(scale: scale, valueSize: fpsSize) : nil
             for (index, reading) in section.enumerated() {
                 if index > 0 {
                     if reading.startsMetric {
@@ -197,7 +196,7 @@ final class HUDHorizontalView: NSView {
                     } else {
                         // Fan badge/bar/RPM use the same compact gap on both sides of the bar.
                         let followsLabel = section[index - 1].startsMetric && reading.metric != .fps && reading.metric != .fans
-                        if reading.tightLeading { x += HUDStyle.memoryLabelValueSpacing * factor }
+                        if let leadingGap = reading.leadingGap { x += leadingGap * factor }
                         else { x += followsLabel && reading.leftAligned ? 2 * gap : gap }
                     }
                 }
@@ -228,7 +227,7 @@ final class HUDHorizontalView: NSView {
                     x += graphWidth
                     continue
                 }
-                if let mode = reading.pressureMode, mode != .text {
+                if let mode = reading.pressureMode, mode.display == .meter {
                     let meter = pressureMeters[reading.id] ?? HUDMemoryPressureMeterView()
                     if pressureMeters[reading.id] == nil {
                         pressureMeters[reading.id] = meter
@@ -301,7 +300,7 @@ final class HUDHorizontalView: NSView {
                 let width = HUDStyle.horizontalColumnWidth(text: reading.text, reference: reading.reference,
                     font: reading.font, sizingFont: reading.sizingFont)
                 let labelHeight = ceil(label.intrinsicContentSize.height)
-                if reading.tightLeading && reading.leftAligned, index > 0,
+                if reading.leadingGap != nil && reading.leftAligned, index > 0,
                    let title = labels[section[index - 1].id] {
                     // Reserve a stable value column, but move its short label with
                     // the right-aligned value to retain the tight label/value gap.
@@ -309,9 +308,6 @@ final class HUDHorizontalView: NSView {
                     let unusedWidth = width - label.intrinsicContentSize.width
                     title.frame.origin.x += unusedWidth
                     label.alignment = .right
-                }
-                if let compactFPSWidth, !reading.startsMetric {
-                    x = max(x, sectionStart + compactFPSWidth - width - label.alignmentRectInsets.right)
                 }
                 // Intrinsic size describes the alignment rectangle. NSTextField
                 // also needs its side insets in the frame, or it clips glyphs.
@@ -328,8 +324,7 @@ final class HUDHorizontalView: NSView {
                     x += label.alignmentRectInsets.right
                 }
             }
-            if let compactFPSWidth {
-                x = max(x, sectionStart + compactFPSWidth)
+            if section.first?.metric == .fps {
                 fpsSectionWidth = x - sectionStart
             }
         }

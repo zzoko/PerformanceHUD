@@ -95,10 +95,10 @@ import AppKit
             HUDMenuBarPresentation.sections(snapshot: snapshot, fanSample: .noFans, readings: [.fps],
                 style: style, background: .dark).flatMap { $0.map(\.text) }
         }
-        check(pinned() == ["Frame time", "16.8 ms"], "The pin uses the selected measure and average")
+        check(pinned() == ["FT", "16.8 ms"], "The pin uses the selected measure and average")
         check(snapshot.numbers[.frameTimeWorst] == 142, "CSV uses the measured, unclipped worst frame")
         snapshot.setFPS(59)
-        check(pinned() == ["Frame time", "—"] && snapshot.numbers[.frameTimeWorst] == nil, "Missing timing clears both readings")
+        check(pinned() == ["FT", "—"] && snapshot.numbers[.frameTimeWorst] == nil, "Missing timing clears both readings")
 
         let name = "FPSOverhaul.tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
@@ -267,7 +267,12 @@ import AppKit
                     hud.setFPSOptions(options)
                     panel.contentView?.layoutSubtreeIfNeeded()
                     let after: FPSHistory = member(graph, "history")
-                    check(panel.frame.size == original && graph.plotBounds == plot, "Measure switches preserve geometry in \(layout), \(mode), \(size)")
+                    check(panel.frame.height == original.height && graph.plotBounds == plot, "Measure switches preserve height and history geometry")
+                    if layout == .horizontal {
+                        check(panel.frame.width > original.width, "Horizontal FPS uses a narrower column than Frame time")
+                    } else {
+                        check(panel.frame.width == original.width, "Vertical keeps its width across measures")
+                    }
                     check(before.samples.count == after.samples.count, "Switching measures retains collected history")
                     if !after.samples.isEmpty {
                         let axis: FPSHistoryScale = member(graph, "plotScale")
@@ -276,10 +281,12 @@ import AppKit
                     }
                     if layout == .horizontal {
                         let fields: [String: NSTextField] = member(strip, "labels")
-                        check(fields["0.title"]?.stringValue == "Frame time" && fields["0.value"]?.stringValue == "16.8 ms", "Horizontal label and number switch together")
+                        check(fields["0.title"]?.stringValue == "FT" && fields["0.value"]?.stringValue == "16.8 ms", "Horizontal label and number switch together")
                     } else {
-                        check(titles[.fps]?.stringValue == "Frame time" && values[.fps]?.stringValue == "16.8 ms", "Vertical label and number switch together")
-                        check(graph.showsHeading == (mode == .history), "History alone retains its measure heading")
+                        check(titles[.fps]?.stringValue == "FT" && values[.fps]?.stringValue == "16.8 ms", "Vertical label and number switch together")
+                        let heading: NSTextField = member(graph, "heading")
+                        check(graph.showsHeading == (mode == .history) && heading.stringValue == "FT",
+                              "History alone displays the abbreviated measure heading")
                     }
                     hud.updateFPS(59)
                     check(values[.fps]?.stringValue == "—", "FPS-only telemetry cannot create displayed-frame timings")

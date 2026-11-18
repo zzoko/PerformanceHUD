@@ -25,7 +25,7 @@ final class HUDControlsGuide: NSWindowController {
         .init(title: "Layout", rows: [("", "Vertical stacks categories. Horizontal arranges them in a strip. APP and Misc are Vertical-only. Switching back restores your Vertical selections.")]),
         .init(title: "Appearance", rows: [("Light / Dark / Follow macOS", "Choose a HUD appearance. Follow macOS is the default. Pins always follow macOS.")]),
         .init(title: "Liquid Glass", rows: [
-            ("Strength / Follow macOS", "Adjust the HUD from Clear (0%) to Frosted (100%), or follow the system setting (default)."),
+            ("Custom / Follow macOS", "Adjust the HUD from Clear (0%) to Frosted (100%), or follow the system setting (default)."),
             ("Retry Glass Compatibility", "Appears if glass compatibility needs attention. Retry if a game seems capped at 60 FPS.")]),
         .init(title: "Preset", rows: [
             ("FPS / Balanced / Detailed", "FPS shows frame rate alone. Balanced includes CPU core bars. Detailed adds CPU and GPU GHz, APP, and Misc. Built-in presets clear all pins."),
@@ -36,7 +36,7 @@ final class HUDControlsGuide: NSWindowController {
             ("B · Emphasis", "A filled B emphasizes the reading. Pins share the same formatting and heat warnings as the HUD.")]),
         .init(title: "FPS", rows: [
             ("Display", "Choose Value, 60-second History, or Both (default). Horizontal and pinned readings show the value only."),
-            ("Measure", "In either layout, choose Frame rate (default) or Frame time (ms). The frame-time number and line show the average gap between displayed frames. Each bar shows that second’s longest gap."),
+            ("Measure", "In either layout, choose Frame rate (FPS, default) or Frame time (FT, in ms). The frame-time number and line show the average gap between displayed frames. Each bar shows that second’s longest gap."),
             ("Number size", "Choose 1× (default) or 2× for the HUD number. The pin stays at 1×."),
             ("Hitch marks", "Both graphs flag hitches by default at 25 ms or more and at least 2.5× that second’s average. Yellow turns red at 100 ms. In FPS history, line depth grows with duration, reaching the baseline at 200 ms.")]),
         .init(title: "APP", rows: [
@@ -50,18 +50,17 @@ final class HUDControlsGuide: NSWindowController {
             ("Power", "Estimated CPU watts."),
             ("Temperature / Heat warning", "Average CPU sensor temperature. Its warning defaults to 95°C."),
             ("Use", "Total CPU usage across all cores, from 0–100%."),
-            ("Cores · Value / Bars / Both", "Value shows GHz per core type. Each bar shows one core’s usage. Horizontal stacks one line per type. Vertical splits bars evenly into rows of up to 12."),
+            ("Cores · GHz / Load / Both", "GHz shows frequency per core type. Load shows one usage bar per core. Horizontal stacks one line per type. Vertical splits bars evenly into rows of up to 12."),
             ("GHz", "Average speed while cores are active. Clusters of the same type share one reading, weighted by active time. B emphasizes GHz.")]),
         .init(title: "ANE", rows: [("Power", "Estimated Apple Neural Engine watts.")]),
         .init(title: "SOC", rows: [("Combined power", "Adds CPU, GPU, and Neural Engine watts, even if their individual readings are hidden.")]),
         .init(title: "MEM", rows: [
             ("Use / Details", "Use shows the percentage of memory in use. Physical is memory in use (GB). Swap is disk space used for swap (GB)."),
-            ("Pressure · Text / Graph", "Text shows the macOS pressure state. Graph offers a meter or 30-second history. B emphasizes the text."),
-            ("A1 / A2 · Meters", "One segment means normal, two warning, three critical. A1 is neutral. A2 uses green, yellow, or red."),
-            ("B1 / B2 · History", "Pressure runs from 0 to 100. The dotted line marks 100 and the dot marks now. B1 is neutral. B2 uses state colours (default). Pins can show history even when Horizontal uses the matching meter.")]),
+            ("Pressure · Text / Meter / Graph", "Text names the state. Meter shows one to three segments. Graph shows the past 30 seconds. Its dotted line marks 100 and its dot marks now. Horizontal uses Meter. Pins can show Graph."),
+            ("State color", "Green means normal, yellow warning, and red critical. Turn off for neutral readings. B emphasizes Text.")]),
         .init(title: "FAN", rows: [
             ("Average", "Combine two or more fans in Vertical, Horizontal (default), or Both. A marks the average. Numbers identify individual fans."),
-            ("Use · Total / RPM / Both", "Total shows speed as a fraction of maximum. RPM shows the number. Both is the default. Fanless Macs show Not available.")]),
+            ("Use · Bar / RPM / Both", "Bar shows speed as a fraction of maximum. RPM shows the number. Both is the default. Fanless Macs show Not available.")]),
         .init(title: "Battery", rows: [
             ("Charge · Always / Auto / Off", "Positive watts mean charging, negative watts mean discharging. Always includes zero. Auto (default) hides near-zero flow after three seconds, including the battery section if Charge is its only pin."),
             ("Temperature / Heat warning", "Battery temperature in °C. Its warning defaults to 45°C."),

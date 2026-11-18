@@ -5,7 +5,7 @@ final class HUDGlassMenuView: NSView {
     var onChange: ((HUDGlassOptions) -> Void)?
     private var options: HUDGlassOptions
     private var systemStrength: Double
-    private let control = NSSegmentedControl(labels: ["Strength", "Follow macOS"],
+    private let control = NSSegmentedControl(labels: ["Custom", "Follow macOS"],
         trackingMode: .selectOne, target: nil, action: nil)
     private let slider = HUDFillSlider()
     private let clearLabel = NSTextField(labelWithString: "Clear")
