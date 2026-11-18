@@ -36,13 +36,13 @@ Whichever version you use, you can also support ongoing development through **[G
 
 **PerformanceHUD shows what your Mac is doing while you play.** A small overlay sits on top of your game with the live frame rate and what's behind it: CPU and GPU load, temperatures and power draw, memory pressure, fans and battery. It's a native Apple silicon app under 10 MB.
 
-**Read it at a glance.** Start from a preset: **FPS** for just the number, **Balanced** for the everyday essentials, or **Detailed** for everything down to per-core activity, clock speeds and the resolution a game is actually outputting. From there, each reading can be turned on or off, emphasized, or shown as a number, a bar or a graph. A 60-second FPS history makes dips easy to spot, temperatures turn red past thresholds you choose, and memory pressure has its own history graph. Lay it out as a vertical panel or a horizontal strip, from 0.5× to 2× size.
+You can use the **FPS** preset for just the frame-rate number, **Balanced** for the everyday essentials, or **Detailed** for everything down to per-core activity, clock speeds and the resolution a game is actually outputting. From there, each reading can be turned on or off, emphasized, or shown as a number, a bar or a graph. A 60-second FPS history makes dips easy to spot, temperatures automatically highlight with a warning in the overlay past certain thresholds, and memory pressure has its own history graph. Lay it out as a vertical panel or a horizontal strip, from 0.5× to 2× size.
 
-**It stays out of your way.** The HUD never takes focus from your game, and clicks pass straight through it; hold Option to drag it somewhere else. Toggle it with **Option-H**, even mid-game, or let it hide itself when no frame rate is detected and come back when a game starts rendering. Readings you've turned off aren't measured at all, so the overlay only costs what you choose to show.
+The HUD never takes focus from the game, and clicks pass straight through it; hold Option to drag it somewhere else. Toggle it with **Option-H**, even mid-game, or let it hide itself when no frame rate is detected and come back when a game starts rendering. Readings turned off aren't measured at all, so the overlay only samples what you use.
 
-**Keep a record, or keep an eye out.** Press **Option-L** to log your selected readings to CSV once per second and compare settings or games in a spreadsheet afterwards. Or pin a few readings to the menu bar to watch your Mac outside games, even with the HUD switched off.
+Press **Option-L** to log your selected readings to CSV once per second and compare settings or games in a spreadsheet afterwards. Or pin a few readings to the menu bar to watch your Mac outside games, even with the HUD switched off.
 
-I built PerformanceHUD as the tool I wanted on my own Mac, and as it has grown I've kept one rule: more features shouldn't make it harder to read.
+I built PerformanceHUD as the tool I wanted on my own Mac, and I've kept it purposeful with every iteration to be as useful as it can be without adding things for the sake of it or make it bloated. It prioritizes a clean design, low overhead and delivering the important metrics.
 
 <table>
   <tr>
