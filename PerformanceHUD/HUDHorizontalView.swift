@@ -31,6 +31,7 @@ final class HUDHorizontalView: NSView {
         var coreRows: [CoreRow]? = nil
     }
 
+    let storage = HUDStorageView(horizontal: true)
     let battery = HUDBatteryIndicatorView(frame: .zero)
     private(set) var fpsSectionWidth: CGFloat = 0
     private var fpsLabels: [NSTextField] = []
@@ -73,6 +74,8 @@ final class HUDHorizontalView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         battery.setHorizontal(true)
+        storage.isHidden = true
+        addSubview(storage)
         addSubview(battery)
         isHidden = true
     }
@@ -162,6 +165,7 @@ final class HUDHorizontalView: NSView {
         pressureMeters.values.forEach { $0.isHidden = true }
         pressureHistories.values.forEach { $0.isHidden = true }
         dividers.forEach { $0.isHidden = true }
+        storage.isHidden = true
         battery.isHidden = !showsBattery
         battery.applyStyle(scale: scale, background: background)
         var x: CGFloat = 0
@@ -199,6 +203,13 @@ final class HUDHorizontalView: NSView {
                         if let leadingGap = reading.leadingGap { x += leadingGap * factor }
                         else { x += followsLabel && reading.leftAligned ? 2 * gap : gap }
                     }
+                }
+                if reading.metric == .storage {
+                    let size = storage.contentSize
+                    storage.frame = NSRect(x: x, y: (height - size.height) / 2, width: size.width, height: size.height)
+                    storage.isHidden = false
+                    x += size.width
+                    continue
                 }
                 if let rows = reading.coreRows {
                     for start in stride(from: 0, to: rows.count, by: 3) {

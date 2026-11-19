@@ -17,6 +17,7 @@ struct HUDMonitoringDemand {
     var power = false
     var cpuTemperature = false
     var gpuTemperature = false
+    var storage: HUDStorageOptions?
     var fans = false
     var battery = false
     var batteryTemperature = false
@@ -67,6 +68,7 @@ struct HUDMonitoringDemand {
             }
         }
         demand.power = demand.power || demand.gpuCores || (cpuCoresShown && cpuCoreMode.showsValue) || (overlay && selection.package.enabled) || pins.contains(.socPower)
+        if overlay { demand.storage = selection.storage.monitoringOptions }
         demand.fans = (overlay && selection.fans.enabled && selection.fans.usage) || pins.contains(.fanUsage)
         let batteryShown = overlay && selection.battery.enabled
         // Auto keeps sampling to detect returning flow; Off has no menu-bar

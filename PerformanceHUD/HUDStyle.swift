@@ -275,7 +275,7 @@ enum HUDStyle {
 
     static func titleFont(for metric: HUDMetric, scale: HUDScale) -> NSFont {
         switch metric {
-        case .fps, .gpu, .gpuTotal, .cpu, .cpuTotal, .aneTotal, .ram, .ramTotal, .battery:
+        case .fps, .gpu, .gpuTotal, .cpu, .cpuTotal, .aneTotal, .ram, .ramTotal, .storage, .battery:
             // SOC shares the GPU category style. Detail captions remain regular.
             return NSFont.systemFont(ofSize: baseFontSize * CGFloat(scale.rawValue), weight: .medium)
         default:

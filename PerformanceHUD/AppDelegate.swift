@@ -122,6 +122,7 @@ final class AppDelegate:
 
     private var enabledMetrics = HUDPreferences.visibleMetrics
     private let temperatureMonitor = TemperatureMonitor()
+    private let storageMonitor = StorageMonitor()
     private let fanMonitor = FanMonitor()
     private var fanMenuView: HUDFanMenuView?
     private var batteryMenuView: HUDResourceMenuView?
@@ -200,6 +201,8 @@ final class AppDelegate:
         setupTotalRAMUsageMonitor()
         setupMemoryPressureMonitor()
 
+        storageMonitor.onUpdate = { [weak self] drives in self?.hudWindow?.updateStorage(drives) }
+
         // Fans (read-only; independent of the power helper).
         fanMonitor.onUpdate = { [weak self] sample in
             guard let self else { return }
@@ -265,6 +268,7 @@ final class AppDelegate:
             hud.setResourceOptions(HUDPreferences.resourceOptions(for: group), for: group)
         }
         hud.setBatteryOptions(HUDPreferences.batteryOptions)
+        hud.setStorageOptions(HUDPreferences.storageOptions())
         hud.setFanOptions(HUDPreferences.fanOptions)
         hud.setMiscOptions(HUDPreferences.miscOptions)
         hud.setProcessOptions(HUDPreferences.processOptions)
@@ -820,6 +824,15 @@ final class AppDelegate:
                 updatePackagePowerMenu()
             }
         }
+        let storage = HUDStorageMenuView(options: HUDPreferences.storageOptions())
+        storage.onChange = { [weak self] options in
+            guard let self else { return }
+            HUDPreferences.setStorageOptions(options)
+            enabledMetrics = HUDPreferences.visibleMetrics
+            hudWindow?.setStorageOptions(options)
+            reconcileMonitoring()
+        }
+        categories.append(storage)
         let fanView = HUDFanMenuView(options: HUDPreferences.fanOptions,
                                      sample: fanMonitor.sample)
         fanView.onChange = { [weak self] options in
@@ -1526,6 +1539,7 @@ final class AppDelegate:
             hudWindow?.setResourceOptions(HUDPreferences.resourceOptions(for: group), for: group)
         }
         hudWindow?.setBatteryOptions(HUDPreferences.batteryOptions)
+        hudWindow?.setStorageOptions(HUDPreferences.storageOptions())
         hudWindow?.setFanOptions(HUDPreferences.fanOptions)
         hudWindow?.setMiscOptions(HUDPreferences.miscOptions)
         hudWindow?.setProcessOptions(HUDPreferences.processOptions)
@@ -1698,6 +1712,7 @@ final class AppDelegate:
 
     private func reconcileMonitoring() {
         let demand = monitoringDemand
+        storageMonitor.configure(demand.storage)
         miscMonitor.configure(demand.misc)
         cpuCoreMonitor.configure(enabled: demand.cpuCores)
         fanMonitor.configure(readings: demand.fans)
@@ -1772,7 +1787,7 @@ final class AppDelegate:
         guard !loggingActionPending else { return }
         loggingActionPending = true
         statusItem?.menu?.cancelTracking()
-        DispatchQueue.main.async { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self else { return }
             defer { loggingActionPending = false }
             if csvLogger.isLogging { stopLogging(showFeedback: showFeedback); return }
@@ -1799,10 +1814,16 @@ final class AppDelegate:
                 let directory = try FileManager.default.url(for: .applicationSupportDirectory,
                     in: .userDomainMask, appropriateFor: nil, create: true)
                     .appendingPathComponent("PerformanceHUD/Logs", isDirectory: true)
-                let columns = HUDLogSelection.current.columns(fanSample: fanMonitor.sample)
+                let initialDrives = await storageMonitor.drivesForLogging(HUDPreferences.storageOptions())
+                guard hudEnabled else { return }
+                let columns = HUDLogSelection.current.columns(fanSample: fanMonitor.sample, drives: initialDrives)
+                var firstSample: [StorageDrive]? = initialDrives
                 try csvLogger.start(columns: columns, recoveryDirectory: directory) { [weak self] in
                     guard let self else { return (HUDLogSnapshot(), []) }
                     var snapshot = logSnapshot
+                    let drives = firstSample ?? storageMonitor.drives
+                    firstSample = nil
+                    snapshot.updateStorage(drives, recording: initialDrives)
                     snapshot.setText(.chip, HUDDeviceInfo.current.chipName)
                     snapshot.setText(.os, HUDDeviceInfo.current.macOSVersion)
                     let device = HUDDeviceInfo.current
@@ -1814,7 +1835,7 @@ final class AppDelegate:
                     // Match the Energy icon; macOS does not expose High Power here.
                     snapshot.set(.lowPowerMode, snapshot.values[.batteryCharge] == nil ? nil
                         : (ProcessInfo.processInfo.isLowPowerModeEnabled ? 1 : 0))
-                    return (snapshot, Set(HUDLogSelection.current.columns(fanSample: fanMonitor.sample)))
+                    return (snapshot, Set(HUDLogSelection.current.columns(fanSample: fanMonitor.sample, drives: initialDrives)))
                 }
                 HUDPreferences.loggingExplanationDismissed = dismissExplanation
                 loggingMenuItem?.toolTip = nil
@@ -1874,6 +1895,7 @@ final class AppDelegate:
         stopLogging()
         temperatureMonitor.stop()
         miscMonitor.stop()
+        storageMonitor.configure(nil)
         fanMonitor.stop()
         powerMonitor.stop()
         cpuCoreMonitor.stop()

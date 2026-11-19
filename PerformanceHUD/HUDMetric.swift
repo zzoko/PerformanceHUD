@@ -18,12 +18,14 @@ enum HUDMetric: Int, CaseIterable, Hashable {
     case process = 14
     case cpuCores = 15
     case gpuCores = 16
+    case storage = 17
 
     // MARK: - Menu Titles
 
     var menuTitle: String {
 
         switch self {
+        case .storage: return "Storage"
         case .process: return "APP"
         case .cpuCores: return "CPU cores"
         case .gpuCores: return "GPU cores"
@@ -56,7 +58,7 @@ enum HUDMetric: Int, CaseIterable, Hashable {
             return "Unified Memory Total"
 
         case .fans:
-            return "FAN"
+            return "Fans"
 
         case .battery:
             return "Battery"
@@ -71,6 +73,7 @@ enum HUDMetric: Int, CaseIterable, Hashable {
     var hudTitle: String {
 
         switch self {
+        case .storage: return "Storage"
         case .process: return "APP"
         case .cpuCores: return "CPU cores"
         case .gpuCores: return "GPU cores"

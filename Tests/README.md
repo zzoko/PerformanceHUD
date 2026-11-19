@@ -26,6 +26,8 @@ python3 Tests/run-all-tests.py --list
 
 Individual shell suites can still be run directly, for example `sh Tests/run-host-port-tests.sh`.
 
+`sh Tests/run-storage-tests.sh` checks physical-drive grouping, shared free space, transfer rates, CSV selection, and HUD layout. Add `--live` to print a sample from the mounted drives.
+
 `sh Tests/run-device-info-tests.sh` checks Chip Tier/Full and independent OS visibility within Misc, detected core counts and fallback text, migration from the former Mac category, saved choices/presets, Misc row geometry and CSV selection.
 
 `sh Tests/run-hotkey-tests.sh` also checks the brief appearance/logging confirmations: message text, click-through placement, no focus change, replacement on repeated presses, and dismissal without an idle timer. These checks show a disposable notification panel.

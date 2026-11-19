@@ -18,14 +18,14 @@ final class HUDFanMenuView: HUDCategoryMenuView {
     init(options: HUDFanOptions, sample: FanSample) {
         self.options = options
         self.sample = sample
-        master = HUDResourceMasterButton(title: "FAN", target: nil, action: nil)
+        master = HUDResourceMasterButton(title: HUDMetric.fans.menuTitle, target: nil, action: nil)
         super.init()
         setAccessibilityLabel("Fan display options")
         setCategory(master)
         unavailableLabel.font = .menuFont(ofSize: 0)
         unavailableLabel.textColor = .disabledControlTextColor
         master.target = self; master.action = #selector(toggleCategory)
-        master.setAccessibilityLabel("Show FAN")
+        master.setAccessibilityLabel("Show fans")
         usage.target = self; usage.action = #selector(toggleUsage)
         usage.font = .menuFont(ofSize: 0)
         usage.setControlAccessibilityLabel("Fan Use")

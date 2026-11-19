@@ -23,7 +23,8 @@ import AppKit
         let fan = HUDFanMenuView(options: .init(), sample: fanSample)
         let battery = HUDResourceMenuView(batteryOptions: .init(enabled: true, temperature: true, charge: true))
         let misc = HUDMiscMenuView(options: .init(enabled: true))
-        let categories: [HUDCategoryMenuView] = [fps, gpu, cpu, ane, soc, memory, fan, battery, misc]
+        let storage = HUDStorageMenuView(options: .init())
+        let categories: [HUDCategoryMenuView] = [fps, gpu, cpu, ane, soc, memory, storage, fan, battery, misc]
         let list = HUDCategoryListView(categories: categories)
         list.fit(availableHeight: 1000)
         let window = NSWindow(contentRect: list.frame, styleMask: [], backing: .buffered, defer: false)
@@ -57,6 +58,33 @@ import AppKit
             }
         }
         verifyGeometry()
+        var storageOptions = HUDStorageOptions()
+        storage.onChange = { storageOptions = $0 }
+        let storageMaster: HUDResourceMasterButton = member(storage, "master")
+        let driveSelector: NSSegmentedControl = member(storage, "location")
+        let transferDetails: HUDReadingCheckbox = member(storage, "details")
+        let freeBold: HUDEmphasisButton = member(storage, "freeSpaceHighlight")
+        let ratesBold = transferDetails.emphasisControl!
+        check(!freeBold.isEnabled && !ratesBold.isEnabled, "Disabled Storage gates both B controls")
+        check(!driveSelector.isEnabled && driveSelector.selectedSegment == 2 && transferDetails.state == .on,
+              "Storage defaults to Both and Details, with the category off")
+        storageMaster.performClick(nil)
+        driveSelector.selectedSegment = 1
+        driveSelector.sendAction(driveSelector.action, to: driveSelector.target)
+        transferDetails.performClick(nil)
+        check(storageOptions == .init(enabled: true, location: .external, details: false),
+              "The native Storage controls change the independent filter and Details selection")
+        freeBold.performClick(nil)
+        check(storageOptions.freeSpaceHighlighted && !storageOptions.detailsHighlighted && !ratesBold.isEnabled,
+              "Free space has its own B even when Details is hidden")
+        transferDetails.performClick(nil)
+        ratesBold.performClick(nil)
+        freeBold.performClick(nil)
+        storageMaster.performClick(nil)
+        storageMaster.performClick(nil)
+        check(!storageOptions.freeSpaceHighlighted && storageOptions.detailsHighlighted && ratesBold.state == .on,
+              "Details retains independent emphasis when Storage is toggled")
+        check(storage.subviews.allSatisfy { !($0 is HUDMenuBarButton) }, "Storage has no pin")
         func warningParts(_ category: HUDResourceMenuView) -> (HUDHeatWarningMenuView, HUDReadingCheckbox, NSTextField) {
             let warning: HUDHeatWarningMenuView = member(category, "heatWarningControl") as HUDHeatWarningMenuView?
                 ?? { fatalError("Missing heat warning controls") }()

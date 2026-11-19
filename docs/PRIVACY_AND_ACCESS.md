@@ -24,6 +24,7 @@ Update information and downloaded app packages are cryptographically signed and 
 
 - **FPS:** Apple's macOS `metalperftrace` tool provides readings for the focused app. The 60-second history stays in memory. CSV logging saves FPS and, when Frame time is selected, average and worst displayed-frame intervals.
 - **CPU, GPU, and memory:** macOS process and system statistics provide CPU and memory usage, swap, and memory pressure. GPU usage comes from IOKit counters. The Vertical-only APP category identifies the frontmost process for focused-app readings; those readings may exclude the app's helper processes.
+- **Storage** reads mounted drive names, available space, and device-wide read/write counters locally. It does not read file contents.
 - **Temperatures and fans:** Read-only AppleSMC access provides available temperature sensors, fan RPM, and maximum fan speeds. Battery temperature can fall back to the battery controller. Fan monitoring does not need the power helper and never changes fan speeds or cooling settings.
 - **Battery charge rate:** Read-only AppleSMC battery voltage and signed current provide net charging or discharging power, with macOS’s published battery-controller readings as a fallback. This does not need the power helper or change charging settings.
 - **Battery and device information:** macOS power and system information provides charge, power source, power mode, chip name, and macOS version.

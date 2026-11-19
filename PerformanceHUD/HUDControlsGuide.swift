@@ -58,7 +58,10 @@ final class HUDControlsGuide: NSWindowController {
             ("Use / Details", "Use shows the percentage of memory in use. Physical is memory in use (GB). Swap is disk space used for swap (GB)."),
             ("Pressure · Text / Meter / Graph", "Text names the state. Meter shows one to three segments. Graph shows the past 30 seconds. Its dotted line marks 100 and its dot marks now. Horizontal uses Meter. Pins can show Graph."),
             ("State color", "Green means normal, yellow warning, and red critical. Turn off for neutral readings. B emphasizes Text.")]),
-        .init(title: "FAN", rows: [
+        .init(title: "Storage", rows: [
+            ("Internal / External / Both", "Shows free space per mounted drive. B emphasizes free space. Detailed enables Storage."),
+            ("Details", "Shows read and write rates. B emphasizes both rates. Horizontal places drives side by side.")]),
+        .init(title: HUDMetric.fans.menuTitle, rows: [
             ("Average", "Combine two or more fans in Vertical, Horizontal (default), or Both. A marks the average. Numbers identify individual fans."),
             ("Use · Bar / RPM / Both", "Bar shows speed as a fraction of maximum. RPM shows the number. Both is the default. Fanless Macs show Not available.")]),
         .init(title: "Battery", rows: [

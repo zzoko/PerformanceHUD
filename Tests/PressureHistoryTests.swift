@@ -89,6 +89,8 @@ import AppKit
         let title: NSTextField = member(hud, "ramPressureTitleLabel") as NSTextField? ?? { fatalError() }()
         let meter: HUDMemoryPressureMeterView = member(hud, "ramPressureMeter")
         let dividers: [Int: NSView] = member(hud, "groupDividers")
+        let groups: [[HUDMetric]] = member(hud, "verticalMetricGroups")
+        let divider = dividers[groups.firstIndex { $0.contains(.battery) }!]!
         panel.contentView?.layoutSubtreeIfNeeded()
         let originalSize = panel.frame.size
         let originalWindowTop = panel.frame.maxY
@@ -127,7 +129,6 @@ import AppKit
             cpuPower.stringValue = "0.0 W"
             panel.contentView?.layoutSubtreeIfNeeded()
             precondition(container.bounds.contains(frame), "The fade fits within the existing HUD")
-            let divider = dividers[5]!
             let line = divider.convert(NSRect(x: 0, y: 4, width: 1, height: 0.5), to: container)
             let plot = graph.convert(graph.plotBounds, to: container)
             let dividerFrame = divider.convert(divider.bounds, to: container)

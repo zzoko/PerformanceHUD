@@ -50,8 +50,9 @@ import AppKit
         expectedFull.cpuCores.enabled = true
         expectedFull.cpuCores.mode = .both
         expectedFull.gpuCores.enabled = true
+        expectedFull.storage.enabled = true
         expectedFull.misc.enabled = true
-        check(full == expectedFull, "Detailed adds Process, CPU/GPU cores, and Misc")
+        check(full == expectedFull, "Detailed adds Process, CPU/GPU cores, Storage, and Misc")
 
         let designSettings: [String: Any] = [
             "hud.alignment": "horizontal", "hud.background": "dark", "hud.scale": 1.37,
@@ -100,6 +101,8 @@ import AppKit
             options.heatWarning = .init(enabled: false, thresholdCelsius: group == .gpu ? 87 : 101)
             HUDPreferences.setResourceOptions(options, for: group, in: defaults)
         }
+        HUDPreferences.setStorageOptions(.init(enabled: true, location: .external, details: false,
+            freeSpaceHighlighted: true, detailsHighlighted: true), in: defaults)
         let selectedMenuBarReadings = Set(HUDMenuBarReading.allCases)
         HUDMenuBarOptions(readings: selectedMenuBarReadings, isCollapsed: true).save(in: defaults)
         let existing = defaults.persistentDomain(forName: suite)! as NSDictionary
@@ -114,6 +117,12 @@ import AppKit
         check(try JSONDecoder().decode(HUDPresetConfiguration.self, from: encoded) == customized,
               "Saved configuration encoding retains every selected and hidden category setting")
         let encodedObject = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
+        var legacyStorage = encodedObject
+        legacyStorage["storage"] = ["enabled": true, "location": "external", "details": false] as [String: Any]
+        let legacyStorageData = try JSONSerialization.data(withJSONObject: legacyStorage)
+        let restoredStorage = try JSONDecoder().decode(HUDPresetConfiguration.self, from: legacyStorageData).storage
+        check(restoredStorage == .init(enabled: true, location: .external, details: false),
+              "A saved Storage preset without B controls keeps its selections at normal weight")
         let independentFields = ["alignment", "background", "glass", "autoHideMode", "autoHideAnimated", "scale", "position", "isCollapsed"]
         check(independentFields.allSatisfy { encodedObject[$0] == nil },
               "New saved configurations exclude every independent design field")

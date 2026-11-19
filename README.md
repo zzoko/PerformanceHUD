@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-3.5.svg" alt="App version 3.5 — view changelog" width="56" height="30" align="top"></a>
+## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-3.6.svg" alt="App version 3.6 — view changelog" width="56" height="30" align="top"></a>
 
 Get the ready-built app for **$3.99**, or build it yourself for free. Both have exactly the same features: no subscription, nothing to unlock.
 
@@ -46,7 +46,7 @@ Whichever version you use, you can also support ongoing development through **[G
 <img src="docs/images/layout-spacer.svg" alt="" width="2000" height="0" align="right">
 </summary>
 
-**PerformanceHUD shows what your Mac is doing while you play.** A small overlay sits on top of your game with the live frame rate and what's behind it: CPU and GPU load, temperatures and power draw, memory pressure, fans and battery. It's a native Apple silicon app under 10 MB.
+**PerformanceHUD shows what your Mac is doing while you play.** A small overlay sits on top of your game with the live frame rate and what's behind it: CPU and GPU load, temperatures and power draw, memory pressure, disk activity, fans and battery. It's a native Apple silicon app under 10 MB.
 
 You can use the **FPS** preset for just the frame-rate number, **Balanced** for the everyday essentials, or **Detailed** for everything down to per-core activity, clock speeds and the resolution a game is actually outputting. From there, each reading can be turned on or off, emphasized, or shown as a number, a bar or a graph. A 60-second FPS history makes dips easy to spot, temperatures automatically highlight with a warning in the overlay past certain thresholds, and memory pressure has its own history graph. Lay it out as a vertical panel or a horizontal strip, from 0.5× to 2× size.
 

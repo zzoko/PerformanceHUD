@@ -27,13 +27,14 @@ struct HUDPresetConfiguration: Codable, Equatable {
     var fans: HUDFanOptions
     var battery: HUDBatteryOptions
     var misc: HUDMiscOptions
+    var storage = HUDStorageOptions()
     var process = HUDProcessOptions()
     var cpuCores = HUDCoreOptions.cpuDefault
     var gpuCores = HUDCoreOptions.gpuDefault
     var menuBarReadings: Set<HUDMenuBarReading> = []
 
     private enum CodingKeys: String, CodingKey {
-        case fps, resources, packagePower, fans, battery, misc, deviceInfo, menuBarReadings, process, cpuCores, gpuCores
+        case fps, resources, packagePower, fans, battery, misc, storage, deviceInfo, menuBarReadings, process, cpuCores, gpuCores
     }
 
     static func capture(in store: UserDefaults = .standard) -> Self {
@@ -45,6 +46,7 @@ struct HUDPresetConfiguration: Codable, Equatable {
              fans: HUDPreferences.fanOptions(in: store),
              battery: HUDPreferences.batteryOptions(in: store),
              misc: HUDPreferences.miscOptions(in: store),
+             storage: HUDPreferences.storageOptions(in: store),
              process: HUDPreferences.processOptions(in: store), cpuCores: HUDPreferences.cpuCoreOptions(in: store), gpuCores: HUDPreferences.gpuCoreOptions(in: store),
              menuBarReadings: HUDMenuBarOptions.load(in: store).readings)
             .canonicalized()
@@ -60,6 +62,7 @@ struct HUDPresetConfiguration: Codable, Equatable {
             }
         }
         HUDPreferences.setPackagePowerOptions(configuration.packagePower, in: store)
+        HUDPreferences.setStorageOptions(configuration.storage, in: store)
         HUDPreferences.setFanOptions(configuration.fans, in: store)
         HUDPreferences.setBatteryOptions(configuration.battery, in: store)
         HUDPreferences.setMiscOptions(configuration.misc, in: store)
@@ -94,6 +97,7 @@ struct HUDPresetConfiguration: Codable, Equatable {
             configuration.battery.enabled = false
             configuration.misc.enabled = false
         case .full:
+            configuration.storage.enabled = true
             configuration.process.enabled = true
             configuration.cpuCores.enabled = true
             configuration.cpuCores.mode = .both
@@ -170,6 +174,7 @@ extension HUDPresetConfiguration {
         try values.encode(fps, forKey: .fps)
         try values.encode(resources, forKey: .resources)
         try values.encode(packagePower, forKey: .packagePower)
+        try values.encode(storage, forKey: .storage)
         try values.encode(fans, forKey: .fans)
         try values.encode(battery, forKey: .battery)
         try values.encode(misc, forKey: .misc)
@@ -181,6 +186,7 @@ extension HUDPresetConfiguration {
         fps = try values.decode(HUDFPSOptions.self, forKey: .fps)
         resources = try values.decode([HUDResourceGroup: HUDResourceOptions].self, forKey: .resources)
         packagePower = try values.decode(HUDPackagePowerOptions.self, forKey: .packagePower)
+        storage = try values.decodeIfPresent(HUDStorageOptions.self, forKey: .storage) ?? .init()
         fans = try values.decode(HUDFanOptions.self, forKey: .fans)
         battery = try values.decode(HUDBatteryOptions.self, forKey: .battery)
         misc = try values.decode(HUDMiscOptions.self, forKey: .misc)

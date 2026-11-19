@@ -39,6 +39,7 @@ final class HUDWindowController {
     private let metricGroups: [[HUDMetric]] = [
         [.fps, .fpsGraph],
         [.gpuTotal, .gpuCores, .cpuTotal, .cpuCores, .aneTotal, .ramTotal],
+        [.storage],
         [.fans],
         [.battery]
     ]
@@ -48,6 +49,7 @@ final class HUDWindowController {
         [.process],
         [.gpuTotal, .gpuCores, .cpuTotal, .cpuCores, .aneTotal],
         [.ramTotal],
+        [.storage],
         [.fans],
         [.battery],
         [.misc]
@@ -66,6 +68,13 @@ final class HUDWindowController {
     private var ramDetailGroupSpacingConstraints: [HUDMetric: NSLayoutConstraint] = [:]
     private let fpsGraphView = HUDFPSGraphView()
     private let horizontalView = HUDHorizontalView(frame: .zero)
+    private let storageView = HUDStorageView(horizontal: false)
+    private var storageOptions = HUDPreferences.storageOptions()
+    private var storageDrives: [StorageDrive] = []
+    private var visibleDrives: [StorageDrive] {
+        storageOptions.enabled ? storageDrives.filter { storageOptions.location.includes(internalDrive: $0.internalDrive) } : []
+    }
+
     private let fanView = HUDFanView(frame: .zero)
     private var fanOptions = HUDPreferences.fanOptions
     private var fpsMeasure = HUDPreferences.fpsOptions.measure
@@ -155,7 +164,7 @@ final class HUDWindowController {
 
     private var hudEnabled = HUDPreferences.hudEnabled
 
-    private var enabledMetrics = HUDPreferences.visibleMetrics
+    private var enabledMetrics = HUDPreferences.visibleMetrics.subtracting([.storage])
 
     private var hudScale =
         HUDPreferences.hudScale
@@ -471,7 +480,7 @@ final class HUDWindowController {
                 metricRows[metric] = row
                 stackView.addArrangedSubview(row)
                 if metric == .aneTotal { createPackageRow() }
-                if metric == .fpsGraph || metric == .battery || metric == .fans || metric == .misc || metric == .process || metric == .cpuCores || metric == .gpuCores {
+                if metric == .fpsGraph || metric == .battery || metric == .storage || metric == .fans || metric == .misc || metric == .process || metric == .cpuCores || metric == .gpuCores {
                     NSLayoutConstraint.activate([
                         row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor),
                         row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor)
@@ -572,6 +581,13 @@ final class HUDWindowController {
             rowHeightConstraints[.fpsGraph] = height
             height.isActive = true
             return fpsGraphView
+        }
+        if metric == .storage {
+            storageView.translatesAutoresizingMaskIntoConstraints = false
+            let height = storageView.heightAnchor.constraint(equalToConstant: 0)
+            rowHeightConstraints[.storage] = height
+            height.isActive = true
+            return storageView
         }
         if metric == .fans {
             fanView.translatesAutoresizingMaskIntoConstraints = false
@@ -1042,6 +1058,8 @@ final class HUDWindowController {
         self.alignment = alignment
         if alignment == .horizontal { ramPressureHistory.clear() }
         enabledMetrics = HUDPreferences.visibleMetrics
+        if visibleDrives.isEmpty { enabledMetrics.remove(.storage) }
+        else { enabledMetrics.insert(.storage) }
         for (metric, row) in metricRows { row.isHidden = !enabledMetrics.contains(metric) }
         updateLayout()
         restorePosition()
@@ -1049,6 +1067,23 @@ final class HUDWindowController {
     }
 
     // MARK: - Metric Visibility
+
+    func setStorageOptions(_ options: HUDStorageOptions) {
+        storageOptions = options
+        setMetricEnabled(.storage, enabled: options.enabled)
+    }
+
+    func updateStorage(_ drives: [StorageDrive]) {
+        let oldCount = visibleDrives.count
+        storageDrives = drives
+        let visible = visibleDrives
+        if oldCount != visible.count || enabledMetrics.contains(.storage) != !visible.isEmpty {
+            setMetricEnabled(.storage, enabled: !visible.isEmpty)
+        } else if hudEnabled && !isAutomaticallyHidden && !visible.isEmpty {
+            if alignment == .horizontal { refreshHorizontalReadings() }
+            else { storageView.configure(visible, options: storageOptions, scale: hudScale, background: textBackground) }
+        }
+    }
 
     func setFanOptions(_ options: HUDFanOptions) {
         fanOptions = options
@@ -1188,6 +1223,7 @@ final class HUDWindowController {
 
     func setMetricEnabled(_ metric: HUDMetric, enabled: Bool) {
         guard let row = metricRows[metric] else { return }
+        let enabled = enabled && (metric != .storage || !visibleDrives.isEmpty)
         if enabled { enabledMetrics.insert(metric) }
         else { enabledMetrics.remove(metric) }
         row.isHidden = !enabled
@@ -1530,6 +1566,12 @@ final class HUDWindowController {
                     readings.append(contentsOf: (metric == .cpuCores ? cpuCoreView : gpuCoreView).horizontalReadings())
                     continue
                 }
+                if metric == .storage, enabledMetrics.contains(.storage) {
+                    horizontalView.storage.configure(visibleDrives, options: storageOptions, scale: hudScale, background: textBackground)
+                    readings.append(.init(id: "storage", text: "", reference: "", font: HUDStyle.titleFont(for: .storage, scale: hudScale),
+                        color: HUDStyle.primaryTitleColor(for: .storage, background: textBackground), help: nil, startsMetric: true, metric: .storage))
+                    continue
+                }
                 if metric == .fans, enabledMetrics.contains(.fans) {
                     readings.append(contentsOf: horizontalFanReadings())
                     continue
@@ -1659,6 +1701,7 @@ final class HUDWindowController {
         if metric == .cpuCores { return cpuCoreView.height(scale: scale) }
         if metric == .gpuCores { return gpuCoreView.height(scale: scale) }
         if metric == .misc { return miscView.height(scale: scale) }
+        if metric == .storage { return storageView.contentSize.height }
         if metric == .fans { return fanView.height(scale: scale) }
         if metric == .ramTotal {
             let detailLines = showsRAMDetails ? 2 : 0
@@ -1702,6 +1745,8 @@ final class HUDWindowController {
         rowHeightConstraints[.fpsGraph]?.constant = metricRowHeight(.fpsGraph, scale: hudScale)
         updateReadingAppearance()
         updateRAMDetailsVisibility()
+        storageView.configure(visibleDrives, options: storageOptions, scale: hudScale, background: textBackground)
+        rowHeightConstraints[.storage]?.constant = storageView.contentSize.height
         fanView.update(sample: fanSample, options: fanOptions, scale: hudScale, background: textBackground)
         rowHeightConstraints[.fans]?.constant = fanView.height(scale: hudScale)
         if !showsPackagePower {

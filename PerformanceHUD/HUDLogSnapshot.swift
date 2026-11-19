@@ -5,6 +5,7 @@ enum HUDLogColumn: Hashable {
     case fps, frameTimeAverage, frameTimeWorst, gpuPower, gpuTemperature, gpuUsage, gpuAppUsage, gpuFrequency
     case cpuPower, cpuTemperature, cpuUsage, cpuAppUsage, anePower, socPower
     case memoryUsage, memoryPhysical, memorySwap, memoryPressure, memoryAppUsage, memoryAppPhysical
+    case storageFree(UInt64, String), storageRead(UInt64, String), storageWrite(UInt64, String)
     case fanUsage(Int), fanRPM(Int), fanAverageUsage, fanAverageRPM
     case powerSource, batteryPower, batteryTemperature, batteryCharge, lowPowerMode, chip, os
     case cpuCores, cpuEfficiencyCores, cpuPerformanceCores, cpuSuperCores, gpuCores
@@ -33,6 +34,9 @@ enum HUDLogColumn: Hashable {
         case .memoryPressure: return "Memory Pressure"
         case .memoryAppUsage: return "Memory App Usage (%)"
         case .memoryAppPhysical: return "Memory App Physical (GiB)"
+        case .storageFree(_, let name): return "Storage \(name) Free (GB)"
+        case .storageRead(_, let name): return "Storage \(name) Read (MB/s)"
+        case .storageWrite(_, let name): return "Storage \(name) Write (MB/s)"
         case .fanUsage(let id): return "Fan \(id + 1) Usage (%)"
         case .fanRPM(let id): return "Fan \(id + 1) RPM"
         case .fanAverageUsage: return "Fan Average Usage (%)"
@@ -67,7 +71,7 @@ enum HUDLogColumn: Hashable {
         guard number.isFinite else { return nil }
         let places: Int
         switch self {
-        case .fps, .frameTimeAverage, .frameTimeWorst, .gpuPower, .cpuPower, .anePower, .socPower, .batteryPower,
+        case .storageFree, .storageRead, .storageWrite, .fps, .frameTimeAverage, .frameTimeWorst, .gpuPower, .cpuPower, .anePower, .socPower, .batteryPower,
              .memoryPhysical, .memorySwap, .memoryAppPhysical, .refreshMinimum, .refreshMaximum, .cpuTypeFrequency, .gpuFrequency:
             places = 2
         case .gpuTemperature, .cpuTemperature, .batteryTemperature,
@@ -101,6 +105,7 @@ struct HUDLogSelection {
     var fans: HUDFanOptions
     var battery: HUDBatteryOptions
     var alignment: HUDAlignment
+    var storage = HUDStorageOptions()
     var misc = HUDMiscOptions()
     var process = HUDProcessOptions()
     var cpuCores = HUDCoreOptions()
@@ -115,12 +120,12 @@ struct HUDLogSelection {
                  ($0, HUDPreferences.resourceOptions(for: $0))
              }), package: HUDPreferences.packagePowerOptions, fans: HUDPreferences.fanOptions,
              battery: HUDPreferences.batteryOptions,
-             alignment: HUDPreferences.alignment, misc: HUDPreferences.miscOptions,
+             alignment: HUDPreferences.alignment, storage: HUDPreferences.storageOptions(), misc: HUDPreferences.miscOptions,
              process: HUDPreferences.processOptions, cpuCores: HUDPreferences.cpuCoreOptions,
              gpuCores: HUDPreferences.gpuCoreOptions, fpsMeasure: fpsOptions.measure)
     }
 
-    func columns(fanSample: FanSample) -> [HUDLogColumn] {
+    func columns(fanSample: FanSample, drives: [StorageDrive] = []) -> [HUDLogColumn] {
         var result: [HUDLogColumn] = fps ? [.fps] : []
         if fps && fpsMeasure == .frameTime { result += [.frameTimeAverage, .frameTimeWorst] }
         if alignment == .vertical && process.enabled {
@@ -158,6 +163,14 @@ struct HUDLogSelection {
             if memory.showsPressure { result.append(.memoryPressure) }
             if memory.showsDetails { result += [.memoryPhysical, .memorySwap] }
             if memory.totalUse { result.append(.memoryUsage) }
+        }
+        if storage.enabled {
+            for drive in drives where storage.location.includes(internalDrive: drive.internalDrive) {
+                result.append(.storageFree(drive.id, drive.name))
+                if storage.details {
+                    result += [.storageRead(drive.id, drive.name), .storageWrite(drive.id, drive.name)]
+                }
+            }
         }
         if fans.enabled && fans.usage {
             if fans.averages(in: alignment) && fanSample.canAverage {
@@ -242,6 +255,17 @@ struct HUDLogSnapshot {
         set(app ? .memoryAppUsage : .memoryUsage, sample?.percentage)
         set(app ? .memoryAppPhysical : .memoryPhysical, sample.map { Double($0.usedBytes) / 1_073_741_824 })
         if !app { set(.memorySwap, sample?.swapUsedBytes.map { Double($0) / 1_073_741_824 }) }
+    }
+
+    mutating func updateStorage(_ samples: [StorageDrive], recording drives: [StorageDrive]) {
+        // CSV headers keep their original names when a mounted volume is renamed.
+        let byID = Dictionary(uniqueKeysWithValues: samples.map { ($0.id, $0) })
+        for drive in drives {
+            let sample = byID[drive.id]
+            set(.storageFree(drive.id, drive.name), sample?.freeBytes.map { Double($0) / 1e9 })
+            set(.storageRead(drive.id, drive.name), sample?.readMBps)
+            set(.storageWrite(drive.id, drive.name), sample?.writeMBps)
+        }
     }
 
     mutating func updateFans(_ sample: FanSample) {

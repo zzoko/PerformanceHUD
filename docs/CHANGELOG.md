@@ -2,6 +2,13 @@
 
 [← Back to README](../README.md)
 
+### v3.6
+
+- Added **Storage** below Memory. Each mounted physical drive gets one free-space reading, with optional read and write speeds. Choose **Internal**, **External**, or **Both**. Drives stack in Vertical and sit side by side in Horizontal.
+- Free space uses three significant digits, such as **48.7 GB** or **9.82 GB**. Free space and transfer rates have separate bold controls. **Detailed** enables Storage with **Both** and **Details** selected. **Balanced** keeps it off.
+- CSV logging includes free space and the selected transfer rates for each drive present when recording starts.
+- Renamed the **FAN** category to **Fans** in the menu and Controls Guide.
+
 ### v3.5
 
 - At **2×**, the FPS or frame-time number fits within the regular Horizontal HUD height. In Vertical, the enlarged number aligns with the top of its label. Horizontal readings stay right-aligned as the digits change.

@@ -24,6 +24,7 @@ enum HUDPreferences {
     // and independent “Don’t show this again” choices stay.
     static func resetOptions(in store: UserDefaults = .standard) {
         var keys = [hudEnabledKey, hudScaleKey, "hud.menuBar.readings", "hud.menuBar.collapsed", "hud.alignment", "hud.background", "hud.fps.dynamic", "hud.fps.displayMode", "hud.fps.valueHighlighted", "hud.fps.valueSize", "hud.fps.measure", "hud.fps.hitchMarks", "hud.autoHide", "hud.autoHide.mode", "hud.autoHide.animated",
+                    "hud.storage.location", "hud.storage.details", "hud.storage.freeSpaceHighlighted", "hud.storage.detailsHighlighted",
                     "hud.glass.mode", "hud.glass.strength", "hud.process.options", "hud.cpu.cores", "hud.gpu.cores", "hud.package.power", "hud.package.highlighted",
                     "hud.battery.temperature", "hud.battery.charge", "hud.battery.temperatureHighlighted",
                     "hud.battery.power", "hud.battery.powerHighlighted", "hud.battery.flowMode",
@@ -317,6 +318,22 @@ enum HUDPreferences {
         return changed
     }
 
+    static func storageOptions(in store: UserDefaults = .standard) -> HUDStorageOptions {
+        HUDStorageOptions(enabled: isMetricEnabled(.storage, in: store),
+            location: store.string(forKey: "hud.storage.location").flatMap(HUDStorageLocation.init(rawValue:)) ?? .both,
+            details: store.object(forKey: "hud.storage.details") as? Bool ?? true,
+            freeSpaceHighlighted: store.bool(forKey: "hud.storage.freeSpaceHighlighted"),
+            detailsHighlighted: store.bool(forKey: "hud.storage.detailsHighlighted"))
+    }
+
+    static func setStorageOptions(_ options: HUDStorageOptions, in store: UserDefaults = .standard) {
+        setMetricEnabled(.storage, enabled: options.enabled, in: store)
+        store.set(options.location.rawValue, forKey: "hud.storage.location")
+        store.set(options.details, forKey: "hud.storage.details")
+        store.set(options.freeSpaceHighlighted, forKey: "hud.storage.freeSpaceHighlighted")
+        store.set(options.detailsHighlighted, forKey: "hud.storage.detailsHighlighted")
+    }
+
     static var fanOptions: HUDFanOptions {
         get { fanOptions(in: defaults) }
         set { setFanOptions(newValue, in: defaults) }
@@ -475,6 +492,7 @@ enum HUDPreferences {
     ) -> String {
 
         switch metric {
+        case .storage: return "hud.metric.storage"
         case .process: return "hud.metric.process"
         case .cpuCores: return "hud.metric.cpuCores"
         case .gpuCores: return "hud.metric.gpuCores"
