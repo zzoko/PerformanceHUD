@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/banner-dark.webp">
-    <source media="(prefers-color-scheme: light)" srcset="docs/images/banner-light.webp">
-    <img src="docs/images/banner-light.webp" alt="PerformanceHUD — a lightweight performance overlay for macOS" width="860">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/v3.7/banner-dark.webp">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/v3.7/banner-light.webp">
+    <img src="docs/images/v3.7/banner-light.webp" alt="PerformanceHUD — a lightweight performance overlay for macOS" width="860">
   </picture>
 </p>
 
@@ -58,17 +58,17 @@ I built PerformanceHUD as the tool I wanted on my own Mac, and I've kept it purp
   </tr>
   <tr>
     <td width="33%" valign="top" align="center">
-      <a href="docs/images/HUD_vertical_dark.png"><img src="docs/images/HUD_vertical_dark.png" alt="PerformanceHUD vertical HUD with a dark background" width="240"></a><br>
+      <a href="docs/images/v3.7/HUD_vertical_dark.png"><img src="docs/images/v3.7/HUD_vertical_dark.png" alt="PerformanceHUD vertical HUD with a dark background" width="240"></a><br>
       <sub>Vertical HUD</sub>
     </td>
     <td width="67%" valign="top" align="center">
-      <a href="docs/images/HUD_menu_dark.png"><img src="docs/images/HUD_menu_dark.png" alt="PerformanceHUD menu controls in dark mode" width="480"></a><br>
+      <a href="docs/images/v3.7/HUD_menu_dark.png"><img src="docs/images/v3.7/HUD_menu_dark.png" alt="PerformanceHUD menu controls in dark mode" width="480"></a><br>
       <sub>Menu controls</sub>
     </td>
   </tr>
   <tr>
     <td colspan="2" align="center">
-      <a href="docs/images/HUD_horizontal_dark.png"><img src="docs/images/HUD_horizontal_dark.png" alt="PerformanceHUD horizontal HUD with a dark background" width="760"></a><br>
+      <a href="docs/images/v3.7/HUD_horizontal_dark.png"><img src="docs/images/v3.7/HUD_horizontal_dark.png" alt="PerformanceHUD horizontal HUD with a dark background" width="760"></a><br>
       <sub>Horizontal HUD</sub>
     </td>
   </tr>
@@ -81,17 +81,17 @@ I built PerformanceHUD as the tool I wanted on my own Mac, and I've kept it purp
   </tr>
   <tr>
     <td width="33%" valign="top" align="center">
-      <a href="docs/images/HUD_vertical_light.png"><img src="docs/images/HUD_vertical_light.png" alt="PerformanceHUD vertical HUD with a light background" width="240"></a><br>
+      <a href="docs/images/v3.7/HUD_vertical_light.png"><img src="docs/images/v3.7/HUD_vertical_light.png" alt="PerformanceHUD vertical HUD with a light background" width="240"></a><br>
       <sub>Vertical HUD</sub>
     </td>
     <td width="67%" valign="top" align="center">
-      <a href="docs/images/HUD_menu_light.png"><img src="docs/images/HUD_menu_light.png" alt="PerformanceHUD menu controls in light mode" width="480"></a><br>
+      <a href="docs/images/v3.7/HUD_menu_light.png"><img src="docs/images/v3.7/HUD_menu_light.png" alt="PerformanceHUD menu controls in light mode" width="480"></a><br>
       <sub>Menu controls</sub>
     </td>
   </tr>
   <tr>
     <td colspan="2" align="center">
-      <a href="docs/images/HUD_horizontal_light.png"><img src="docs/images/HUD_horizontal_light.png" alt="PerformanceHUD horizontal HUD with a light background" width="760"></a><br>
+      <a href="docs/images/v3.7/HUD_horizontal_light.png"><img src="docs/images/v3.7/HUD_horizontal_light.png" alt="PerformanceHUD horizontal HUD with a light background" width="760"></a><br>
       <sub>Horizontal HUD</sub>
     </td>
   </tr>
