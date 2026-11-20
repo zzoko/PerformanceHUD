@@ -27,7 +27,7 @@ Buying the app helps keep PerformanceHUD maintained, and lets you use it persona
 
 <details>
 <summary><strong>Features, screenshots &amp; controls</strong>
-<!-- Remove these comment markers to restore the YouTube preview.
+<!-- To restore the YouTube preview, add the two thumbnail files referenced below and uncomment this block.
 <div align="center">
   <a href="https://www.youtube.com/watch?v=NwkdeJpFmBQ" title="Watch PerformanceHUD in action on YouTube">
     <picture>
