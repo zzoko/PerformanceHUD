@@ -324,8 +324,8 @@ import AppKit
               && HUDPreferences.background(in: defaults) == .system
               && HUDPreferences.glassOptions(in: defaults).mode == .system
               && HUDPreferences.autoHideMode(in: defaults) == .fps
-              && HUDPreferences.autoHideAnimated(in: defaults),
-              "Reset All keeps its full reset behavior for visibility, design, size, and position")
+              && HUDAccessibility.reduceMotion(in: defaults),
+              "Reset All restores visibility, design, size, and position while preserving accessibility")
 
         // Broken on-disk data must not crash selection or reset the user's HUD.
         var records = defaults.array(forKey: "hud.presets.saved")!

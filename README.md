@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-3.7.svg" alt="App version 3.7 — view changelog" width="56" height="30" align="top"></a>
+## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-3.8.svg" alt="App version 3.8 — view changelog" width="56" height="30" align="top"></a>
 
 Get the ready-built app for **$3.99**, or build it yourself for free. Both have exactly the same features: no subscription, nothing to unlock.
 
@@ -48,7 +48,7 @@ You can use the **FPS** preset for just the frame-rate number, **Balanced** for 
 
 The HUD never takes focus from the game, and clicks pass straight through it; hold Option to drag it somewhere else. Toggle it with **Option-H**, even mid-game, or let it hide itself when no frame rate is detected and come back when a game starts rendering. Readings turned off aren't measured at all, so the overlay only samples what you use.
 
-Press **Option-L** to log your selected readings to CSV once per second and compare settings or games in a spreadsheet afterwards. Or pin a few readings to the menu bar to watch your Mac outside games, even with the HUD switched off.
+Press **Option-L** to log your selected readings to CSV once per second, even with the overlay switched off. You can compare settings or games in a spreadsheet afterwards. Or pin a few readings to the menu bar to watch your Mac outside games, even with the HUD switched off.
 
 I built PerformanceHUD as the tool I wanted on my own Mac, and I've kept it purposeful with every iteration to be as useful as it can be without adding things for the sake of it or make it bloated. It prioritizes a clean design, low overhead and delivering the important metrics.
 
@@ -62,7 +62,7 @@ I built PerformanceHUD as the tool I wanted on my own Mac, and I've kept it purp
       <sub>Vertical HUD</sub>
     </td>
     <td width="67%" valign="top" align="center">
-      <a href="docs/images/v3.7/HUD_menu_dark.png"><img src="docs/images/v3.7/HUD_menu_dark.png" alt="PerformanceHUD menu controls in dark mode" width="480"></a><br>
+      <a href="docs/images/v3.8/HUD_menu_dark.png"><img src="docs/images/v3.8/HUD_menu_dark.png" alt="PerformanceHUD menu controls in dark mode" width="480"></a><br>
       <sub>Menu controls</sub>
     </td>
   </tr>
@@ -85,7 +85,7 @@ I built PerformanceHUD as the tool I wanted on my own Mac, and I've kept it purp
       <sub>Vertical HUD</sub>
     </td>
     <td width="67%" valign="top" align="center">
-      <a href="docs/images/v3.7/HUD_menu_light.png"><img src="docs/images/v3.7/HUD_menu_light.png" alt="PerformanceHUD menu controls in light mode" width="480"></a><br>
+      <a href="docs/images/v3.8/HUD_menu_light.png"><img src="docs/images/v3.8/HUD_menu_light.png" alt="PerformanceHUD menu controls in light mode" width="480"></a><br>
       <sub>Menu controls</sub>
     </td>
   </tr>

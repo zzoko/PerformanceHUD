@@ -11,7 +11,7 @@ final class HUDControlsGuide: NSWindowController {
     // Keep entries brief and in menu order. Explain shared behavior once.
     static let sections: [Section] = [
         .init(title: "Enable / Disable", rows: [
-            ("", "Show or hide the HUD. Visible menu-bar readings keep updating either way.")]),
+            ("", "Disable the overlay to stop sampling its readings. Active recordings and visible pins continue to collect their selected readings.")]),
         .init(title: "Show menu-bar readings", rows: [
             ("Pin a reading", "Click the icon beside B. A line connects the formats a pin supports. Its dot marks the format the pin will show."),
             ("Collapse / expand", "Uncheck Show menu-bar readings to hide all pins. Click the chevron beside the bolt to show them again.")]),
@@ -19,8 +19,7 @@ final class HUDControlsGuide: NSWindowController {
             ("Position / Size", "Position restores the HUD’s starting point. Option-drag moves it. Size restores 1×."),
             ("All", "Enables the HUD, restores Balanced and the default layout settings, and clears pins. Saved presets, hotkeys, and app settings are kept.")]),
         .init(title: "Auto hide", rows: [
-            ("Off / FPS / All", "After three seconds without FPS, FPS (default) collapses that section and its pin. All hides the whole HUD and keeps pins visible. Both restore the HUD content when FPS resumes. Off keeps it visible."),
-            ("Animation", "Animate transitions. Switch off for instant changes. Reduce Motion also skips animations.")]),
+            ("Off / FPS / All", "After three seconds without readings, FPS collapses its section and pin. All hides the HUD, keeps pins visible, and shows a waiting message here. Readings restore the HUD. Off keeps it visible.")]),
         .init(title: "Size", rows: [("", "Scale the HUD from 0.5× to 2×. The default is 1×. Pins keep their own size.")]),
         .init(title: "Layout", rows: [("", "Vertical stacks categories. Horizontal arranges them in a strip. APP and Misc are Vertical-only. Switching back restores your Vertical selections.")]),
         .init(title: "Appearance", rows: [("Light / Dark / Follow macOS", "Choose a HUD appearance. Follow macOS is the default. Pins always follow macOS.")]),
@@ -74,14 +73,17 @@ final class HUDControlsGuide: NSWindowController {
             ("Game Mode / Thermal", "Game Mode shows macOS’s reported on/off state (experimental). Thermal shows system thermal pressure from nominal to critical."),
             ("OS / Chip", "OS shows the macOS version. Chip Tier shows the chip name. Full adds CPU and GPU core counts. B emphasizes all Misc values.")]),
         .init(title: "Start / Stop logging", rows: [
-            ("Recording", "With the HUD enabled, record selected readings to CSV once per second. Columns are fixed at Start. Missing readings stay blank. Frame time adds average and worst frame times alongside FPS."),
-            ("Saving", "Stop logging, disable the HUD, or quit to save to Desktop. Auto hide keeps recording. If saving fails, the alert identifies the recovery file.")]),
+            ("Recording", "Record selected readings to CSV once per second, even with the HUD disabled. Columns are fixed at Start. Missing readings stay blank. Frame time adds average and worst frame times alongside FPS."),
+            ("Saving", "Stop logging or quit to save to Desktop. If saving fails, the alert identifies the recovery file.")]),
         .init(title: "Power Helper", rows: [
             ("Set Up Power Readings…", "Required for CPU, GPU, ANE, and SOC watts and CPU/GPU GHz. Follow the macOS approval prompt. Battery watts and CPU core bars work without setup."),
             ("Remove Power Helper", "Unregisters the helper. Other readings remain available.")]),
         .init(title: "Edit hotkeys", rows: [
             ("Defaults", "Option-H toggles the HUD. Option-L toggles logging. Option-A cycles appearance. Option-drag moves the HUD. Logging and appearance shortcuts briefly show their new state."),
             ("Change a shortcut", "Click an action and press a combination with Control, Option, or Command. Escape cancels. Delete or Clear removes it. You can also change the drag modifier.")]),
+        .init(title: "Accessibility", rows: [
+            ("Reduce motion", "Skip auto-hide animations and shortcut popup fades."),
+            ("Reduce transparency", "Use solid backgrounds for the menu, HUD, and shortcut popups.")]),
         .init(title: "Check for updates", rows: [("", "Check now and choose whether to install. First launch also checks once, even with automatic checks off.")]),
         .init(title: "Automatic update checks", rows: [("Off / Weekly / Monthly", "Off by default. Weekly checks every 7 days, Monthly every 30. Available updates appear in the menu for you to install.")]),
         .init(title: "Auto start on login", rows: [("Off / On", "Open PerformanceHUD when you log in. Off by default.")]),

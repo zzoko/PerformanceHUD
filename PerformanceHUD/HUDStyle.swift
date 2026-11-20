@@ -128,11 +128,6 @@ enum HUDStyle {
 
     // MARK: - Layout
 
-    // With the four-digit FPS column, these gaps leave about 30 / 53 pt of visible space at 144 FPS.
-    static func horizontalFPSLabelGap(for size: HUDFPSValueSize) -> CGFloat {
-        size == .enlarged ? 30.5 : 19
-    }
-
     static let memoryLabelValueSpacing: CGFloat = 4
     static let fpsHistoryFadeExtension: CGFloat = 16
 
@@ -189,21 +184,26 @@ enum HUDStyle {
         return current + gap * gapIncrease
     }
 
-    // A fixed 285pt vertical HUD at 1×, including its two side paddings.
-    // Reading visibility, emphasis, and category selection never change it.
+    static let verticalPanelWidth: CGFloat = 285
+
     static func verticalValueColumnRight() -> CGFloat {
-        285 - 2 * horizontalPadding
+        verticalPanelWidth - 2 * horizontalPadding
     }
 
-    // A compact Vertical HUD keeps its width when switching between FPS and frame time.
-    static func compactFPSValueColumnRight(valueSize: HUDFPSValueSize = .standard) -> CGFloat {
-        let title = NSTextField(labelWithString: HUDFPSMeasure.frameRate.caption)
+    // Reserve the widest supported frame-time reading up front so hitches never resize the panel.
+    private static let enlargedFrameTimeContentWidth: CGFloat = {
+        let measure = HUDFPSMeasure.frameTime
+        let title = NSTextField(labelWithString: measure.caption)
         title.font = titleFont(for: .fps)
-        let value = NSTextField(labelWithString: HUDFPSMeasure.frameTime.valueWidthReference)
-        value.font = fpsValueFont(highlighted: true, size: valueSize)
-        let gap = metricColumnSpacing
-        return ceil(title.intrinsicContentSize.width) + ceil(value.intrinsicContentSize.width) + gap
-            + title.alignmentRectInsets.left + value.alignmentRectInsets.right
+        let value = NSTextField(labelWithString: measure.valueWidthReference)
+        value.font = fpsValueFont(highlighted: true, size: .enlarged)
+        return ceil(title.intrinsicContentSize.width) + ceil(value.intrinsicContentSize.width)
+            + metricColumnSpacing + title.alignmentRectInsets.left + value.alignmentRectInsets.right
+    }()
+
+    static func compactFPSContentWidth(measure: HUDFPSMeasure, valueSize: HUDFPSValueSize) -> CGFloat {
+        let contentWidth = verticalPanelWidth / 2 - 2 * horizontalPadding
+        return measure == .frameTime && valueSize == .enlarged ? max(contentWidth, enlargedFrameTimeContentWidth) : contentWidth
     }
 
     // MARK: - Fonts

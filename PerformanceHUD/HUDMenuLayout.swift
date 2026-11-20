@@ -28,24 +28,20 @@ enum HUDMenuLayout {
         }.max() ?? 0
     }
 
-    static var actionOptionsWidth: CGFloat {
+    // Fit the Reset buttons and the longest segmented control in one shared column.
+    static var controlWidth: CGFloat {
         let widestButton = ["Position", "Size", "All"].map { title in
             let button = NSButton(title: title, target: nil, action: nil)
             button.bezelStyle = .rounded
             button.font = .menuFont(ofSize: 0)
             return ceil(button.intrinsicContentSize.width)
         }.max() ?? 0
-        return max(backgroundOptionsWidth, widestButton * 3 + 12)
-    }
-
-    // A shared width keeps Background, Alignment, and the Size track aligned.
-    // Measure the actual segmented controls so every title fits at menu font size.
-    static var backgroundOptionsWidth: CGFloat {
-        [["Light", "Dark", "Follow macOS"], ["Custom", "Follow macOS"], ["Vertical", "Horizontal"]].map { titles in
+        let widestSelector = [["Light", "Dark", "Follow macOS"], ["Custom", "Follow macOS"], ["Vertical", "Horizontal"]].map { titles in
             let control = NSSegmentedControl(labels: titles, trackingMode: .selectOne, target: nil, action: nil)
             control.segmentStyle = .rounded
             control.font = .menuFont(ofSize: 0)
             return ceil(control.intrinsicContentSize.width)
         }.max() ?? 0
+        return max(widestSelector, widestButton * 3 + 12)
     }
 }

@@ -165,9 +165,11 @@ import AppKit
                                     precondition(meter.isHidden == (!showsPressure || mode.display == .text || mode.isHistory), "Pressure meter is independent")
                                     precondition(history.isHidden == (!showsPressure || !mode.isHistory), "History follows its own style")
                                     if visible.contains(.ramTotal) {
-                                        let expected: CGFloat = (details || showsPressure ? 27 : 21) + (details ? 18 : 0) + (showsPressure ? 18 : 0)
+                                        let expected: CGFloat = (details || showsPressure ? 20 : 21) + (details ? 18 : 0) + (showsPressure ? 18 : 0)
                                             + (showsPressure && mode.isHistory ? 12.375 : 0)
-                                        precondition(abs(rows[.ramTotal]!.frame.height - CGFloat(expected)) < 0.5, "Hidden rows reclaim their height")
+                                        let backing = panel.backingScaleFactor
+                                        let alignedHeight = ceil(expected * backing) / backing
+                                        precondition(rows[.ramTotal]!.frame.height == alignedHeight, "Hidden rows reclaim their height")
                                         if showsPressure {
                                             let rect = pressure.convert(pressure.bounds, to: rows[.ramTotal]!)
                                             precondition(rows[.ramTotal]!.bounds.insetBy(dx: -2, dy: -2).contains(rect), "Pressure fits its row with Details on or off")

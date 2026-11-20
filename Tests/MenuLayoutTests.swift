@@ -36,6 +36,37 @@ import AppKit
                 }
             }
         }
-        print("PASS: native menu column stays aligned when Misc is checked, unchecked, or disabled; no false checkmark")
+        checkMenuTransparency()
+        print("PASS: native menu transparency and restoration; menu column stays aligned when Misc is checked, unchecked, or disabled; no false checkmark")
+    }
+
+    @MainActor private static func checkMenuTransparency() {
+        let transparency = HUDMenuTransparency()
+        func makeWindow(level: NSWindow.Level) -> NSWindow {
+            let window = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 80, height: 40),
+                                  styleMask: .borderless, backing: .buffered, defer: false)
+            window.level = level
+            window.backgroundColor = .clear
+            window.contentView!.addSubview(NSScrollView(frame: window.contentView!.bounds))
+            return window
+        }
+        let root = makeWindow(level: .popUpMenu)
+        let ordinary = makeWindow(level: .normal)
+        transparency.setReduced(true)
+        precondition(root.backgroundColor == .windowBackgroundColor && ordinary.backgroundColor == .clear)
+
+        let submenu = makeWindow(level: .popUpMenu)
+        submenu.orderFront(nil)
+        let companion = makeWindow(level: .popUpMenu)
+        companion.contentView = NSGlassEffectView()
+        submenu.addChildWindow(companion, ordered: .below)
+        companion.orderFront(nil)
+        NotificationCenter.default.post(name: NSWindow.didChangeOcclusionStateNotification, object: companion)
+        precondition(submenu.backgroundColor == .windowBackgroundColor && companion.backgroundColor == .clear)
+        transparency.setReduced(false)
+        precondition(root.backgroundColor == .clear && submenu.backgroundColor == .clear)
+        submenu.removeChildWindow(companion)
+        companion.orderOut(nil)
+        submenu.orderOut(nil)
     }
 }

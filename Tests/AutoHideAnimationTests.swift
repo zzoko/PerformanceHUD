@@ -25,49 +25,51 @@ import AppKit
         let suiteName = "AutoHideAnimation.tests.\(UUID().uuidString)"
         let suite = UserDefaults(suiteName: suiteName)!
         defer { suite.removePersistentDomain(forName: suiteName) }
-        precondition(HUDPreferences.autoHideAnimated(in: suite), "Animation defaults on for fresh and existing settings")
-        HUDPreferences.setAutoHideAnimated(false, in: suite)
+        precondition(!HUDAccessibility.reduceMotion(in: suite))
+        suite.set(false, forKey: "hud.autoHide.animated")
         for mode in HUDAutoHideMode.allCases {
             HUDPreferences.setAutoHideMode(mode, in: suite)
-            precondition(!HUDPreferences.autoHideAnimated(in: UserDefaults(suiteName: suiteName)!))
+            precondition(HUDAccessibility.reduceMotion(in: UserDefaults(suiteName: suiteName)!))
         }
         HUDPreferences.resetOptions(in: suite)
-        precondition(HUDPreferences.autoHideAnimated(in: suite) && HUDPreferences.autoHideMode(in: suite) == .fps)
+        precondition(HUDAccessibility.reduceMotion(in: suite) && HUDPreferences.autoHideMode(in: suite) == .fps)
 
         UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "fps",
             "hud.autoHide.animated": true, "hud.alignment": "vertical", "hud.background": "dark"],
             forName: UserDefaults.argumentDomain)
-        let menu = HUDAutoHideMenuView(selected: .fps, animated: true)
+        let menu = HUDAutoHideMenuView(selected: .fps)
         let control: NSSegmentedControl = member(menu, "control")
-        let checkbox: HUDReadingCheckbox = member(menu, "animatedControl")
+        let status: NSTextField = member(menu, "status")
         let menuWindow = NSWindow(contentRect: menu.frame, styleMask: [], backing: .buffered, defer: false)
         menuWindow.contentView = menu
         menu.layoutSubtreeIfNeeded()
-        precondition(checkbox.title == "Animation" && checkbox.state == .on && checkbox.emphasisControl == nil)
-        let selectorRect = control.alignmentRect(forFrame: control.frame)
-        let checkboxRect = checkbox.alignmentRect(forFrame: checkbox.frame)
-        precondition(checkboxRect.minX >= selectorRect.maxX + 8 && abs(checkboxRect.midY - selectorRect.midY) < 0.1)
-        precondition(menu.bounds.contains(checkbox.frame) && menu.bounds.contains(control.frame))
-        var selectedMode: HUDAutoHideMode?
-        var selectedAnimation: Bool?
-        menu.onChange = { selectedMode = $0 }
-        menu.onAnimatedChange = { selectedAnimation = $0 }
-        checkbox.performClick(nil)
-        precondition(selectedAnimation == false && selectedMode == nil && control.selectedSegment == 1)
-        menu.select(.off)
-        precondition(checkbox.isEnabled && checkbox.state == .off, "Off preserves the independent animation choice")
+        precondition(status.isHidden && status.stringValue == "Hidden · Waiting for FPS readings")
+        for mode in HUDAutoHideMode.allCases {
+            menu.select(mode)
+            for enabled in [false, true] {
+                for hidden in [false, true] {
+                    menu.updateStatus(hudEnabled: enabled, automaticallyHidden: hidden)
+                    precondition(status.isHidden == !(mode == .all && enabled && hidden))
+                }
+            }
+        }
         menu.select(.all)
-        precondition(checkbox.state == .off)
+        menu.updateStatus(hudEnabled: true, automaticallyHidden: true)
+        menu.layoutSubtreeIfNeeded()
+        let selectorRect = control.alignmentRect(forFrame: control.frame)
+        let statusRect = status.alignmentRect(forFrame: status.frame)
+        precondition(statusRect.minX >= selectorRect.maxX + 8 && abs(statusRect.midY - selectorRect.midY) < 0.1)
+        precondition(menu.bounds.contains(status.frame) && menu.bounds.contains(control.frame))
         if CommandLine.arguments.contains("--preview") {
             menu.appearance = NSAppearance(named: .darkAqua)
             menu.wantsLayer = true
             menu.layer?.backgroundColor = NSColor(calibratedWhite: 0.16, alpha: 1).cgColor
-            menu.select(.fps)
-            checkbox.state = .on
             let bitmap = menu.bitmapImageRepForCachingDisplay(in: menu.bounds)!
             menu.cacheDisplay(in: menu.bounds, to: bitmap)
-            try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-animated-checkbox.png"))
+            try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-auto-hide-status.png"))
         }
+        menu.select(.fps)
+        precondition(status.isHidden)
 
         for alignment in HUDAlignment.allCases {
             let hud = fixture(alignment, animated: false)
@@ -252,6 +254,6 @@ import AppKit
             precondition(finished == 1 && timer == nil, "Unchecking Animated finishes an FPS reveal immediately")
             fps.shutdown()
         }
-        print("PASS: shared Animation checkbox and independent preferences; every Off/FPS/All transition animated or instant; stable arrow reveal, rapid switching, unchanged delay, compact handoff at 0.5×/1×/2×, FPS recovery and mid-animation disable in both layouts")
+        print("PASS: auto-hide waiting status and saved Reduce motion preference; every Off/FPS/All transition animated or instant; stable arrow reveal, rapid switching, unchanged delay, compact handoff at 0.5×/1×/2×, FPS recovery and mid-animation disable in both layouts")
     }
 }

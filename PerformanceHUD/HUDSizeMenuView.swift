@@ -10,7 +10,7 @@ final class HUDSizeMenuView: NSView {
     init(selectedScale: HUDScale) {
         self.selectedScale = selectedScale
         let width = HUDMenuLayout.labelLeading + HUDMenuLayout.labelWidth + HUDMenuLayout.spacing
-            + HUDMenuLayout.backgroundOptionsWidth + HUDMenuLayout.sliderValueSpacing + 44 + 12
+            + HUDMenuLayout.controlWidth + HUDMenuLayout.sliderValueSpacing + 44 + 12
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 28))
 
         let label = NSTextField(labelWithString: "Size")
@@ -41,11 +41,11 @@ final class HUDSizeMenuView: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 30),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: HUDMenuLayout.labelLeading),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
             label.widthAnchor.constraint(equalToConstant: HUDMenuLayout.labelWidth),
-            slider.widthAnchor.constraint(equalToConstant: HUDMenuLayout.backgroundOptionsWidth),
+            slider.widthAnchor.constraint(equalToConstant: HUDMenuLayout.controlWidth),
             slider.heightAnchor.constraint(equalToConstant: 24),
             valueLabel.widthAnchor.constraint(equalToConstant: 44)
         ])

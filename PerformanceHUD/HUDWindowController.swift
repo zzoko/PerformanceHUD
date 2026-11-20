@@ -123,6 +123,12 @@ final class HUDWindowController {
     private var showsPackagePower: Bool {
         packageOptions.enabled
     }
+    private var reservedFPSContentWidth: CGFloat? {
+        guard enabledMetrics.contains(.fps) else { return nil }
+        // The horizontal strip grows after FPS. Only Vertical expands the FPS row to the full panel width.
+        guard alignment == .horizontal || (enabledMetrics == [.fps] && !showsPackagePower) else { return nil }
+        return HUDStyle.compactFPSContentWidth(measure: fpsMeasure, valueSize: fpsValueSize)
+    }
     private var temperatureTrailing: [HUDMetric: CGFloat] = [:]
     private var temperatureMetrics: Set<HUDMetric> = []
     private var hiddenUtilizationMetrics: Set<HUDMetric> = []
@@ -152,7 +158,7 @@ final class HUDWindowController {
     var presentationScreen: NSScreen? { panel.screen }
     var isAutomaticallyHidden: Bool { modeTransition == nil && autoHidePresentation.isHidden }
     private var autoHideMode = HUDPreferences.autoHideMode
-    private var autoHideAnimated = HUDPreferences.autoHideAnimated
+    private var autoHideAnimated = !HUDAccessibility.reduceMotion
     // Mode changes interpolate both the rounded surface and the FPS content.
     // Keep this presentation independent of the newly selected mode until it
     // reaches that mode's resting shape, including a compact FPS arrow.
@@ -501,7 +507,8 @@ final class HUDWindowController {
                     + (titleLabel.firstBaselineOffsetFromTop - titleLabel.font!.capHeight)
             }
             row.place(titleLabel, top: captionTop, height: captionHeight)
-            row.place(valueLabel, top: valueTop, height: valueHeight, trailing: readingColumnRight)
+            row.place(valueLabel, top: valueTop, height: valueHeight, trailing: readingColumnRight,
+                      after: metric == .fps && reservedFPSContentWidth != nil ? titleLabel : nil)
             if let field = temperatureLabels[metric], let edge = temperatureTrailing[metric] {
                 row.place(field, top: valueTop, trailing: edge)
             }
@@ -902,6 +909,7 @@ final class HUDWindowController {
 
     func setFPSOptions(_ options: HUDFPSOptions) {
         let visible = options.visibleMetrics(alignment: alignment)
+        let previousCompactWidth = reservedFPSContentWidth
         let sizeChanged = fpsValueSize != options.valueSize
         fpsValueHighlighted = options.valueHighlighted
         fpsValueSize = options.valueSize
@@ -910,7 +918,7 @@ final class HUDWindowController {
         titleLabels[.fps]?.stringValue = fpsMeasure.caption
         valueLabels[.fps]?.stringValue = fpsReading
         fpsGraphView.configure(measure: fpsMeasure, hitchMarks: fpsHitchMarks)
-        if enabledMetrics.intersection([.fps, .fpsGraph]) == visible && !sizeChanged {
+        if enabledMetrics.intersection([.fps, .fpsGraph]) == visible && !sizeChanged && previousCompactWidth == reservedFPSContentWidth {
             // Preserve FPS history when only its presentation changes.
             updateReadingAppearance()
             refreshHorizontalReadings()
@@ -1221,7 +1229,7 @@ final class HUDWindowController {
                     guard let field, let font = field.font, let color = field.textColor else { return }
                     readings.append(.init(id: "\(metric.rawValue).\(role)", text: field.stringValue,
                         reference: reference, font: font, color: color, help: field.toolTip, startsMetric: title,
-                        metric: metric, leadingGap: metric == .fps && !title ? HUDStyle.horizontalFPSLabelGap(for: fpsValueSize) : nil,
+                        metric: metric,
                         sizingFont: metric == .fps && !title
                             ? HUDStyle.fpsValueFont(highlighted: true, size: fpsValueSize) : nil))
                 }
@@ -1251,7 +1259,7 @@ final class HUDWindowController {
             if !readings.isEmpty { sections.append(readings) }
         }
         let size = horizontalView.configure(sections: sections, showsBattery: enabledMetrics.contains(.battery),
-                                            background: textBackground, fpsValueSize: fpsValueSize)
+                                            background: textBackground, fpsValueSize: fpsValueSize, reservedFPSContentWidth: reservedFPSContentWidth)
         let horizontalPadding = HUDStyle.horizontalPadding
         let verticalPadding = HUDStyle.verticalPadding
         let total = pixelAlignedSize(NSSize(width: size.width + 2 * horizontalPadding,
@@ -1386,19 +1394,10 @@ final class HUDWindowController {
                 + packageHeight + dividers.height
                 + (CGFloat(bodyMetrics.count) + dividerCount) * rowSpacing - coreDetailGapsRemoved)).height
 
-        // FPS Value alone retains its compact width. All other configurations use the full panel.
-        let fpsOnly = enabledMetrics == [.fps] && !showsPackagePower
-        let valueColumnRight = fpsOnly
-            ? HUDStyle.compactFPSValueColumnRight(valueSize: fpsValueSize)
-            : HUDStyle.verticalValueColumnRight()
-        readingColumnRight = valueColumnRight
+        readingColumnRight = reservedFPSContentWidth ?? HUDStyle.verticalValueColumnRight()
         updateReadingPositions()
 
-        let width = max(
-            fpsOnly ? 0 : HUDStyle.width,
-            valueColumnRight + 2 * HUDStyle.horizontalPadding
-        )
-
+        let width = readingColumnRight + 2 * HUDStyle.horizontalPadding
         let rowWidth = width - 2 * HUDStyle.horizontalPadding
         let stackHeight = totalHeight - 2 * verticalPadding
         stackView.frame = NSRect(x: HUDStyle.horizontalPadding, y: verticalPadding,
@@ -1942,10 +1941,15 @@ final class HUDWindowController {
 private final class HUDMetricRowView: NSView {
     var layoutReadings: (() -> Void)?
     var layoutDetails: (() -> Void)?
-    func place(_ label: NSTextField, top: CGFloat, height: CGFloat? = nil, trailing: CGFloat? = nil) {
+    func place(_ label: NSTextField, top: CGFloat, height: CGFloat? = nil,
+               trailing: CGFloat? = nil, after caption: NSTextField? = nil) {
         let size = label.intrinsicContentSize
         let h = height ?? size.height
-        let width = size.width + label.alignmentRectInsets.left + label.alignmentRectInsets.right
+        var width = size.width + label.alignmentRectInsets.left + label.alignmentRectInsets.right
+        if let caption, let trailing {
+            let start = caption.alignmentRect(forFrame: caption.frame).maxX + HUDStyle.metricColumnSpacing
+            width = trailing - start + label.alignmentRectInsets.left
+        }
         label.frame = NSRect(x: trailing.map { $0 - width } ?? 0, y: top - h, width: width, height: h)
     }
 

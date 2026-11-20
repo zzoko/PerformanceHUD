@@ -13,6 +13,7 @@ final class NativeGlassHUDBackground: NSView {
     // Transparent sibling above the glass: existing labels/graphs stay independent.
     let contentView = NSView(frame: .zero)
     private let glass = NSGlassEffectView()
+    private let solidSurface = CALayer()
     private let outsideShadow = CALayer()
     private let shadowCutout = CAShapeLayer()
 
@@ -49,13 +50,22 @@ final class NativeGlassHUDBackground: NSView {
         outsideShadow.mask = shadowCutout
         layer?.addSublayer(outsideShadow)
 
-        // No tint, custom opacity, gradient, refraction shader, or background capture.
+        solidSurface.cornerCurve = .continuous
+        layer?.addSublayer(solidSurface)
+
+        NotificationCenter.default.addObserver(self, selector: #selector(updateTransparency(_:)),
+            name: HUDAccessibility.reduceTransparencyDidChange, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(updateTransparency(_:)),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+
+        // Native glass uses the selected Liquid Glass style.
         glass.style = .regular
         glass.tintColor = nil
         if #available(macOS 27.0, *) { glass.effectIsInteractive = false }
         addSubview(glass)
         addSubview(contentView, positioned: .above, relativeTo: glass)
         updateAppearance()
+        updateTransparency()
     }
 
     required init?(coder: NSCoder) { fatalError("Use init(frame:)") }
@@ -77,6 +87,8 @@ final class NativeGlassHUDBackground: NSView {
         contentView.layer?.masksToBounds = clipsContent
         contentView.layer?.cornerCurve = .continuous
         let radius = max(0, min(cornerRadius, min(body.width, body.height) / 2))
+        solidSurface.frame = body
+        solidSurface.cornerRadius = radius
         glass.cornerRadius = radius
         contentView.layer?.cornerRadius = clipsContent ? radius : 0
         outsideShadow.frame = bounds
@@ -109,10 +121,22 @@ final class NativeGlassHUDBackground: NSView {
         needsLayout = true
     }
 
+    @objc private func updateTransparency(_ notification: Notification? = nil) {
+        let solid = HUDAccessibility.reduceTransparency || NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        glass.isHidden = solid
+        solidSurface.isHidden = !solid
+        CATransaction.commit()
+    }
+
     private func updateAppearance() {
         appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            solidSurface.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(1).cgColor
+        }
         // Keep the exterior shadow softer in light appearance.
         outsideShadow.shadowOpacity = isDark ? 0.32 : 0.17
         CATransaction.commit()

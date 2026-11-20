@@ -7,7 +7,8 @@ final class HUDAlignmentMenuView: NSView {
 
     init(selected: HUDAlignment) {
         control = NSSegmentedControl(labels: ["Vertical", "Horizontal"], trackingMode: .selectOne, target: nil, action: nil)
-        super.init(frame: NSRect(x: 0, y: 0, width: 290, height: 28))
+        super.init(frame: NSRect(x: 0, y: 0, width: HUDMenuLayout.labelLeading + HUDMenuLayout.labelWidth
+            + HUDMenuLayout.spacing + HUDMenuLayout.controlWidth + 12, height: 28))
         autoresizingMask = [.width]
         let label = NSTextField(labelWithString: "Layout")
         label.font = .menuFont(ofSize: 0)
@@ -24,7 +25,7 @@ final class HUDAlignmentMenuView: NSView {
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
             control.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: HUDMenuLayout.spacing),
             control.centerYAnchor.constraint(equalTo: centerYAnchor),
-            control.widthAnchor.constraint(equalToConstant: HUDMenuLayout.backgroundOptionsWidth)
+            control.widthAnchor.constraint(equalToConstant: HUDMenuLayout.controlWidth)
         ])
     }
 

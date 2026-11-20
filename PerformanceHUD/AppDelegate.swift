@@ -92,6 +92,7 @@ final class AppDelegate:
     private var hudVisibilityMenuItem:
         NSMenuItem?
 
+    private let menuTransparency = HUDMenuTransparency()
     private var autoHideMenuView: HUDAutoHideMenuView?
 
     private var categoryMenuView: HUDCategoryListView?
@@ -154,6 +155,7 @@ final class AppDelegate:
         )
 
         HUDGlassStyle.apply(HUDPreferences.glassOptions)
+        menuTransparency.setReduced(HUDAccessibility.reduceTransparency)
         glassObservation = NotificationCenter.default.addObserver(
             forName: HUDGlassStyle.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -300,6 +302,7 @@ final class AppDelegate:
         self.hudWindow =
             hud
         hud.onAutoHideVisibilityChange = { [weak self] in
+            self?.updateAutoHideStatus()
             // Let the reveal finish setting up before starting/stopping monitors.
             DispatchQueue.main.async { [weak self] in self?.reconcileMonitoring() }
         }
@@ -675,17 +678,14 @@ final class AppDelegate:
         menu.insertItem(positionItem, at: menu.index(of: sizeItem))
         menu.insertItem(.separator(), at: menu.index(of: sizeItem))
 
-        let autoHideView = HUDAutoHideMenuView(selected: HUDPreferences.autoHideMode, animated: HUDPreferences.autoHideAnimated)
+        let autoHideView = HUDAutoHideMenuView(selected: HUDPreferences.autoHideMode)
         autoHideView.onChange = { [weak self] mode in self?.selectAutoHideMode(mode) }
-        autoHideView.onAnimatedChange = { [weak self] animated in
-            HUDPreferences.autoHideAnimated = animated
-            self?.hudWindow?.setAutoHideAnimated(animated)
-        }
         let autoHideItem = NSMenuItem()
         autoHideItem.view = autoHideView
         menu.insertItem(autoHideItem, at: menu.index(of: sizeItem))
         menu.insertItem(.separator(), at: menu.index(of: sizeItem))
         autoHideMenuView = autoHideView
+        updateAutoHideStatus()
 
         let alignmentView = HUDAlignmentMenuView(selected: HUDPreferences.alignment)
         alignmentView.onAlignmentSelected = { [weak self] alignment in self?.setHUDAlignment(alignment) }
@@ -907,6 +907,16 @@ final class AppDelegate:
         let hotkeysItem = NSMenuItem(title: "Edit hotkeys…", action: #selector(editHotkeys), keyEquivalent: "")
         hotkeysItem.target = self
         menu.addItem(hotkeysItem)
+        let accessibilityItem = NSMenuItem(title: "Accessibility", action: nil, keyEquivalent: "")
+        let accessibilityMenu = NSMenu(title: accessibilityItem.title)
+        let motionItem = accessibilityMenu.addItem(withTitle: "Reduce motion", action: #selector(toggleReduceMotion(_:)), keyEquivalent: "")
+        motionItem.target = self
+        motionItem.state = HUDAccessibility.reduceMotion ? .on : .off
+        let transparencyItem = accessibilityMenu.addItem(withTitle: "Reduce transparency", action: #selector(toggleReduceTransparency(_:)), keyEquivalent: "")
+        transparencyItem.target = self
+        transparencyItem.state = HUDAccessibility.reduceTransparency ? .on : .off
+        accessibilityItem.submenu = accessibilityMenu
+        menu.addItem(accessibilityItem)
         let guideItem = NSMenuItem(title: "Controls guide…", action: #selector(showControlsGuide), keyEquivalent: "")
         guideItem.target = self
         menu.addItem(guideItem)
@@ -1335,8 +1345,6 @@ final class AppDelegate:
 
         shortcutFeedback?.dismiss()
         hudEnabled.toggle()
-        if !hudEnabled { stopLogging() }
-        updateLoggingMenu()
 
         // Save preference.
         HUDPreferences.hudEnabled =
@@ -1350,11 +1358,30 @@ final class AppDelegate:
 
         reconcileMonitoring()
 
+        updateAutoHideStatus()
+
         // Update menu text.
         hudVisibilityMenuItem?.title =
             hudEnabled
             ? "Disable"
             : "Enable"
+    }
+
+    private func updateAutoHideStatus() {
+        autoHideMenuView?.updateStatus(hudEnabled: hudEnabled,
+            automaticallyHidden: hudWindow?.isAutomaticallyHidden == true)
+    }
+
+    @objc private func toggleReduceMotion(_ sender: NSMenuItem) {
+        HUDAccessibility.reduceMotion.toggle()
+        sender.state = HUDAccessibility.reduceMotion ? .on : .off
+        hudWindow?.setAutoHideAnimated(!HUDAccessibility.reduceMotion)
+    }
+
+    @objc private func toggleReduceTransparency(_ sender: NSMenuItem) {
+        HUDAccessibility.reduceTransparency.toggle()
+        menuTransparency.setReduced(HUDAccessibility.reduceTransparency)
+        sender.state = HUDAccessibility.reduceTransparency ? .on : .off
     }
 
     private func selectAutoHideMode(_ mode: HUDAutoHideMode) {
@@ -1385,6 +1412,7 @@ final class AppDelegate:
         HUDPreferences.autoHideMode = mode
         autoHideMenuView?.select(mode)
         hudWindow?.setAutoHideMode(mode)
+        updateAutoHideStatus()
         reconcileMonitoring()
     }
 
@@ -1544,7 +1572,6 @@ final class AppDelegate:
         hudWindow?.setGPUCoreOptions(HUDPreferences.gpuCoreOptions)
         hudWindow?.setPackagePowerOptions(HUDPreferences.packagePowerOptions)
         if resetDesign {
-            hudWindow?.setAutoHideAnimated(HUDPreferences.autoHideAnimated)
             hudWindow?.setAutoHideMode(HUDPreferences.autoHideMode)
             hudWindow?.setAlignment(HUDPreferences.alignment)
         }
@@ -1702,7 +1729,7 @@ final class AppDelegate:
 
     private var monitoringDemand: HUDMonitoringDemand {
         HUDMonitoringDemand.make(hudEnabled: hudEnabled,
-            hudVisible: !(hudWindow?.isAutomaticallyHidden ?? false), isLogging: csvLogger.isLogging,
+            hudVisible: !(hudWindow?.isAutomaticallyHidden ?? false), recordingColumns: csvLogger.activeColumns,
             autoHideMode: HUDPreferences.autoHideMode, selection: .current,
             menuBar: HUDPreferences.menuBarOptions)
     }
@@ -1770,8 +1797,12 @@ final class AppDelegate:
     // MARK: - Logging
 
     private func updateLoggingMenu() {
-        loggingMenuItem?.title = csvLogger.isLogging ? "Stop logging" : "Start logging"
-        loggingMenuItem?.isEnabled = csvLogger.isLogging || hudEnabled
+        guard let loggingMenuItem else { return }
+        let title = csvLogger.isLogging ? "Stop logging" : "Start logging"
+        loggingMenuItem.title = title
+        loggingMenuItem.attributedTitle = csvLogger.isLogging
+            ? NSAttributedString(string: title, attributes: [.foregroundColor: NSColor.systemRed, .font: NSFont.menuFont(ofSize: 0)])
+            : nil
     }
 
     @objc private func toggleLoggingFromMenu() {
@@ -1787,16 +1818,12 @@ final class AppDelegate:
             guard let self else { return }
             defer { loggingActionPending = false }
             if csvLogger.isLogging { stopLogging(showFeedback: showFeedback); return }
-            guard hudEnabled else {
-                if showFeedback { showShortcutFeedback(.loggingRequiresHUD) }
-                return
-            }
             var dismissExplanation = HUDPreferences.loggingExplanationDismissed
             if !dismissExplanation {
                 let alert = NSAlert()
                 alert.alertStyle = .informational
                 alert.messageText = "Start logging HUD readings?"
-                alert.informativeText = "Record selected readings once per second to a CSV for spreadsheets and graphs. Missing readings are left blank. Stop logging, disable the HUD, or quit to save the file to your Desktop. Auto hide does not stop logging.\n\nColumns are chosen when you start. Turning readings off leaves their cells blank; start a new log to include newly selected readings."
+                alert.informativeText = "Record selected readings once per second to a CSV for spreadsheets and graphs. Missing readings are left blank. Logging works with the HUD enabled or disabled. Stop logging or quit to save the file to your Desktop.\n\nColumns are chosen when you start. Turning readings off leaves their cells blank; start a new log to include newly selected readings."
                 alert.addButton(withTitle: "Start logging")
                 alert.addButton(withTitle: "Cancel")
                 alert.showsSuppressionButton = true
@@ -1805,17 +1832,19 @@ final class AppDelegate:
                 guard alert.runModal() == .alertFirstButtonReturn else { return }
                 dismissExplanation = alert.suppressionButton?.state == .on
             }
-            guard hudEnabled else { return }
             do {
                 let directory = try FileManager.default.url(for: .applicationSupportDirectory,
                     in: .userDomainMask, appropriateFor: nil, create: true)
                     .appendingPathComponent("PerformanceHUD/Logs", isDirectory: true)
                 let initialDrives = await storageMonitor.drivesForLogging(HUDPreferences.storageOptions())
-                guard hudEnabled else { return }
+                await fanMonitor.discoverForLogging(ifEnabled: HUDPreferences.fanOptions.enabled)
                 let columns = HUDLogSelection.current.columns(fanSample: fanMonitor.sample, drives: initialDrives)
                 var firstSample: [StorageDrive]? = initialDrives
-                try csvLogger.start(columns: columns, recoveryDirectory: directory) { [weak self] in
-                    guard let self else { return (HUDLogSnapshot(), []) }
+                try csvLogger.start(columns: columns, recoveryDirectory: directory, enabledColumns: { [weak self] in
+                    guard let self else { return [] }
+                    return Set(HUDLogSelection.current.columns(fanSample: fanMonitor.sample, drives: initialDrives))
+                }) { [weak self] in
+                    guard let self else { return HUDLogSnapshot() }
                     var snapshot = logSnapshot
                     let drives = firstSample ?? storageMonitor.drives
                     firstSample = nil
@@ -1831,7 +1860,7 @@ final class AppDelegate:
                     // Match the Energy icon; macOS does not expose High Power here.
                     snapshot.set(.lowPowerMode, snapshot.values[.batteryCharge] == nil ? nil
                         : (ProcessInfo.processInfo.isLowPowerModeEnabled ? 1 : 0))
-                    return (snapshot, Set(HUDLogSelection.current.columns(fanSample: fanMonitor.sample, drives: initialDrives)))
+                    return snapshot
                 }
                 HUDPreferences.loggingExplanationDismissed = dismissExplanation
                 loggingMenuItem?.toolTip = nil

@@ -197,7 +197,7 @@ final class StorageMonitor {
     func drivesForLogging(_ options: HUDStorageOptions) async -> [StorageDrive] {
         guard let options = options.monitoringOptions else { return [] }
         if active == options, !drives.isEmpty { return drives }
-        // Logging may start while Auto hide has paused the HUD collectors.
+        // Logging may start while the HUD collectors are stopped.
         return await Task.detached(priority: .utility) {
             StorageSampler().sample(options: .init(enabled: true, location: options.location, details: false))
         }.value

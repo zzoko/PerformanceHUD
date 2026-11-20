@@ -27,8 +27,23 @@ nonisolated private final class TestRefreshListener: NativeGlassRefreshListening
         let cutout: CAShapeLayer = member(view, "shadowCutout")
         precondition(native.style == .regular && native.tintColor == nil)
         if #available(macOS 27, *) { precondition(!native.effectIsInteractive) }
+        let solid: CALayer = member(view, "solidSurface")
+        let defaults = UserDefaults.standard
+        let arguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        var colors = [CGColor]()
         for dark in [true, false] {
             view.isDark = dark
+            let color = solid.backgroundColor!
+            precondition(color.alpha == 1)
+            colors.append(color)
+            for enabled in [true, false, true] {
+                var overrides = arguments
+                overrides["hud.accessibility.reduceTransparency"] = enabled
+                defaults.setVolatileDomain(overrides, forName: UserDefaults.argumentDomain)
+                NotificationCenter.default.post(name: HUDAccessibility.reduceTransparencyDidChange, object: nil)
+                let opaque = enabled || NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+                precondition(native.isHidden == opaque && solid.isHidden != opaque)
+            }
             for scale in [CGFloat(0.5), 1, 2] {
                 for body in [NSSize(width: 230 * scale, height: 390 * scale),
                              NSSize(width: 900 * scale, height: 32 * scale),
@@ -39,6 +54,7 @@ nonisolated private final class TestRefreshListener: NativeGlassRefreshListening
                     view.clipsContent = true
                     view.layoutSubtreeIfNeeded()
                     let expected = min(16 * scale, min(body.width, body.height) / 2)
+                    precondition(solid.frame == view.bodyFrame && solid.cornerRadius == expected && solid.cornerCurve == .continuous)
                     precondition(view.bodyFrame.size == body && native.frame == view.bodyFrame)
                     precondition(view.contentView.frame == native.frame && native.cornerRadius == expected)
                     precondition(view.layer?.mask == nil && native.layer?.mask == nil,
@@ -55,6 +71,9 @@ nonisolated private final class TestRefreshListener: NativeGlassRefreshListening
                 }
             }
         }
+        precondition(colors[0] != colors[1], "The opaque surface follows the HUD appearance")
+        defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+        NotificationCenter.default.post(name: HUDAccessibility.reduceTransparencyDidChange, object: nil)
         let window = HUDPanel(contentRect: NSRect(x: 20, y: 20, width: 200, height: 80),
                               styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false

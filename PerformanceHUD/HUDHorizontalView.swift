@@ -215,7 +215,8 @@ final class HUDHorizontalView: NSView {
     }
 
     func configure(sections: [[Reading]], showsBattery: Bool, background: HUDBackground,
-                   fpsValueSize: HUDFPSValueSize = .standard, inMenuBar: Bool = false) -> NSSize {
+                   fpsValueSize: HUDFPSValueSize = .standard, reservedFPSContentWidth: CGFloat? = nil,
+                   inMenuBar: Bool = false) -> NSSize {
         fpsSectionWidth = 0
         fpsLabels.removeAll()
         let reference = NSTextField(labelWithString: "FPS")
@@ -258,6 +259,7 @@ final class HUDHorizontalView: NSView {
             x += padding + width
         }
         func placeRow(_ section: ArraySlice<Reading>, offsetY: CGFloat = 0) {
+            let rowStart = x
             for index in section.indices {
                 let reading = section[index]
                 if index > section.startIndex {
@@ -355,8 +357,14 @@ final class HUDHorizontalView: NSView {
                     // Keep RPM centered in the same slot whether the HUD shows its bar or not.
                     label.alignment = .center
                 }
-                let width = HUDStyle.horizontalColumnWidth(text: reading.text, reference: reading.reference,
-                    font: reading.font, sizingFont: reading.sizingFont)
+                let width: CGFloat
+                if let reservedFPSContentWidth, reading.metric == .fps, !reading.startsMetric {
+                    // Keep the FPS reading at the same trailing edge as sections are appended.
+                    width = reservedFPSContentWidth - (x - rowStart) - label.alignmentRectInsets.right
+                } else {
+                    width = HUDStyle.horizontalColumnWidth(text: reading.text, reference: reading.reference,
+                        font: reading.font, sizingFont: reading.sizingFont)
+                }
                 let labelHeight = ceil(label.intrinsicContentSize.height)
                 if reading.leadingGap != nil && reading.leftAligned, index > section.startIndex,
                    let title = labels[section[index - 1].id] {

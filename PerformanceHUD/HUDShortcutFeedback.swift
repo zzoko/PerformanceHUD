@@ -4,14 +4,12 @@ enum HUDShortcutFeedback {
     case appearance(HUDBackground)
     case loggingStarted
     case loggingStopped
-    case loggingRequiresHUD
 
     var text: String {
         switch self {
         case .appearance(let background): return "Appearance · \(background.menuTitle)"
         case .loggingStarted: return "Logging started"
         case .loggingStopped: return "Logging stopped"
-        case .loggingRequiresHUD: return "Enable HUD to start logging"
         }
     }
 
@@ -22,7 +20,6 @@ enum HUDShortcutFeedback {
         case .appearance(.system): return "circle.lefthalf.filled"
         case .loggingStarted: return "record.circle"
         case .loggingStopped: return "stop.circle"
-        case .loggingRequiresHUD: return "info.circle"
         }
     }
 }
@@ -92,7 +89,7 @@ final class HUDShortcutFeedbackController {
         label.frame = label.frame(forAlignmentRect: NSRect(x: 42, y: (size.height - label.intrinsicContentSize.height) / 2,
             width: size.width - 58, height: label.intrinsicContentSize.height))
 
-        fades = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        fades = !HUDAccessibility.reduceMotion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         initialAlpha = panel.isVisible ? panel.alphaValue : 0
         panel.alphaValue = fades ? initialAlpha : 1
         shownAt = ProcessInfo.processInfo.systemUptime

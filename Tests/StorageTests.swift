@@ -174,7 +174,8 @@ import AppKit
         precondition(snapshot.values[.storageFree(external.id, external.name)] == nil)
         precondition(snapshot.values[.storageRead(external.id, external.name)] == nil)
         func demand(visible: Bool, logging: Bool) -> HUDStorageOptions? {
-            HUDMonitoringDemand.make(hudEnabled: true, hudVisible: visible, isLogging: logging,
+            HUDMonitoringDemand.make(hudEnabled: true, hudVisible: visible,
+                                     recordingColumns: logging ? Set(selection.columns(fanSample: .noFans, drives: drives)) : [],
                                      autoHideMode: .all, selection: selection, menuBar: .init()).storage
         }
         precondition(demand(visible: false, logging: false) == nil)

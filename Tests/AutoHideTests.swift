@@ -59,7 +59,7 @@ import AppKit
         menu.layoutSubtreeIfNeeded()
         precondition(control.frame.minX == HUDMenuLayout.labelLeading + HUDMenuLayout.labelWidth + HUDMenuLayout.spacing)
         precondition((0..<control.segmentCount).map { control.label(forSegment: $0) } == ["Off", "FPS", "All"])
-        precondition(control.frame.width == HUDMenuLayout.actionOptionsWidth && menu.bounds.contains(control.frame))
+        precondition(control.frame.width == HUDMenuLayout.controlWidth && menu.bounds.contains(control.frame))
         precondition(menu.subviews.compactMap { ($0 as? NSTextField)?.stringValue }.contains("Auto hide"))
         precondition(control.selectedSegment == 1)
         var requested: HUDAutoHideMode?

@@ -24,11 +24,11 @@ struct HUDMonitoringDemand {
     var batteryPower = false
     var misc = HUDMiscOptions()
 
-    static func make(hudEnabled: Bool, hudVisible: Bool, isLogging: Bool,
+    static func make(hudEnabled: Bool, hudVisible: Bool, recordingColumns: Set<HUDLogColumn> = [],
                      autoHideMode: HUDAutoHideMode, selection: HUDLogSelection,
                      menuBar: HUDMenuBarOptions) -> Self {
         var demand = Self()
-        let overlay = hudEnabled && (hudVisible || isLogging)
+        let overlay = hudEnabled && hudVisible
         let pins = menuBar.activeReadings
         // All auto hide needs the FPS detector even while the overlay is hidden.
         demand.fps = pins.contains(.fps) || (hudEnabled && autoHideMode == .all)
@@ -81,6 +81,46 @@ struct HUDMonitoringDemand {
             demand.misc = selection.misc
             if selection.misc.visibleReadings.contains(.resolution) { demand.fps = true }
         }
+        if !overlay && !recordingColumns.isEmpty {
+            demand.includeRecording(recordingColumns, storageLocation: selection.storage.location)
+        }
         return demand
+    }
+
+    // The CSV captures values, so it needs neither graph history nor the FPS
+    // detector solely used to wake an automatically hidden overlay.
+    private mutating func includeRecording(_ columns: Set<HUDLogColumn>, storageLocation: HUDStorageLocation) {
+        var recordedMisc = Set<HUDMiscReading>()
+        for column in columns {
+            switch column {
+            case .fps, .frameTimeAverage, .frameTimeWorst: fps = true
+            case .gpuUsage: gpuUsage = true
+            case .cpuUsage: cpuUsage = true
+            case .gpuAppUsage: gpuAppUsage = true
+            case .cpuAppUsage: cpuAppUsage = true
+            case .gpuTemperature: gpuTemperature = true
+            case .cpuTemperature: cpuTemperature = true
+            case .cpuCoreUsage: cpuCores = true
+            case .gpuFrequency: gpuCores = true; power = true
+            case .gpuPower, .cpuPower, .anePower, .socPower, .cpuTypeFrequency: power = true
+            case .memoryUsage, .memoryPhysical, .memorySwap: totalMemory = true
+            case .memoryAppUsage, .memoryAppPhysical: appMemory = true
+            case .memoryPressure: pressure = true
+            case .fanUsage, .fanRPM, .fanAverageUsage, .fanAverageRPM: fans = true
+            case .storageFree:
+                if storage == nil { storage = .init(enabled: true, location: storageLocation, details: false) }
+            case .storageRead, .storageWrite: storage = .init(enabled: true, location: storageLocation, details: true)
+            case .powerSource, .batteryCharge, .lowPowerMode: battery = true
+            case .batteryTemperature: battery = true; batteryTemperature = true
+            case .batteryPower: battery = true; batteryPower = true
+            case .resolutionWidth, .resolutionHeight: fps = true; recordedMisc.insert(.resolution)
+            case .refreshMinimum, .refreshMaximum: recordedMisc.insert(.refreshRate)
+            case .gameMode: recordedMisc.insert(.gameMode)
+            case .thermal: recordedMisc.insert(.thermal)
+            case .process, .os, .chip, .cpuCores, .cpuEfficiencyCores, .cpuPerformanceCores, .cpuSuperCores, .gpuCores:
+                break // Supplied by focus events or static device information.
+            }
+        }
+        misc = .init(enabled: !recordedMisc.isEmpty, readings: recordedMisc)
     }
 }

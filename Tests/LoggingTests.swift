@@ -31,9 +31,7 @@ import AppKit
             var frameSample = HUDLogSnapshot()
             frameSample.setFPS(60, timing: MetalFrameTiming(averageMS: 16.67, worstMS: 83))
             let logger = HUDCSVLogger()
-            try logger.start(columns: columns, recoveryDirectory: recovery, scheduled: false) {
-                (frameSample, Set(columns))
-            }
+            try logger.start(columns: columns, recoveryDirectory: recovery, scheduled: false, enabledColumns: { Set(columns) }) { frameSample }
             let saved = try logger.stop(savingTo: desktop)!
             let contents = try String(contentsOf: saved, encoding: .utf8)
             check(contents.contains("FPS,Average Frame Time (ms),Worst Frame Time in Sample (ms)\r\n")
@@ -138,7 +136,7 @@ import AppKit
         let start = wholeSecond.addingTimeInterval(0.665)
         var enabled: Set<HUDLogColumn> = [.fps, .gpuPower, .cpuPower, .batteryTemperature]
         let schema: [HUDLogColumn] = [.fps, .gpuPower, .cpuPower, .batteryTemperature]
-        try logger.start(columns: schema, recoveryDirectory: recovery, at: start, scheduled: false) { (snapshot, enabled) }
+        try logger.start(columns: schema, recoveryDirectory: recovery, at: start, scheduled: false, enabledColumns: { enabled }) { snapshot }
         check(logger.isLogging && logger.columns == schema)
         let activeFile = logger.recoveryURL!
         // Every row is already on disk, rather than held in a growing memory array.
@@ -148,9 +146,10 @@ import AppKit
         snapshot.set(.fps, nil) // Alt-tab or a stale FPS sample.
         enabled.remove(.gpuPower) // A disabled checkbox blanks an existing column.
         enabled.insert(.memoryPhysical) // A newly enabled checkbox cannot change the schema.
+        check(logger.activeColumns == [.fps, .cpuPower, .batteryTemperature], "Only enabled columns in the original CSV can request collectors")
         try logger.record(at: start.addingTimeInterval(1))
         let output = try logger.stop(savingTo: desktop)!
-        check(!logger.isLogging && logger.recoveryURL == nil && !files.fileExists(atPath: activeFile.path))
+        check(!logger.isLogging && logger.activeColumns.isEmpty && logger.recoveryURL == nil && !files.fileExists(atPath: activeFile.path))
         let text = try String(contentsOf: output, encoding: .utf8)
         let rows = text.components(separatedBy: "\r\n")
         check(rows.count == 4 && rows[1].hasSuffix(",120.50,5.13,0.00,") && rows[2].hasSuffix(",,,0.00,"))
@@ -158,15 +157,15 @@ import AppKit
         check(timeParser.date(from: String(rows[1].split(separator: ",")[0])) == wholeSecond)
         check(!rows[1].split(separator: ",")[0].contains("."), "CSV timestamps must omit milliseconds")
         check(timeParser.date(from: String(rows[2].split(separator: ",")[0])) == wholeSecond.addingTimeInterval(1))
-        check(try logger.stop(savingTo: desktop) == nil, "Stop must be idempotent for Disable followed by Quit")
+        check(try logger.stop(savingTo: desktop) == nil, "Stop must be idempotent for Stop followed by Quit")
         try logger.record(at: start.addingTimeInterval(2))
         check(try String(contentsOf: output, encoding: .utf8) == text)
-        try logger.start(columns: schema, recoveryDirectory: recovery, at: start, scheduled: false) { (snapshot, enabled) }
+        try logger.start(columns: schema, recoveryDirectory: recovery, at: start, scheduled: false, enabledColumns: { enabled }) { snapshot }
         let second = try logger.stop(savingTo: desktop)!
         check(second != output && second.lastPathComponent.hasSuffix("-1.csv"))
         check(try String(contentsOf: output, encoding: .utf8) == text, "Never replace a previous recording")
 
-        try logger.start(columns: schema, recoveryDirectory: recovery, at: start, scheduled: false) { (snapshot, enabled) }
+        try logger.start(columns: schema, recoveryDirectory: recovery, at: start, scheduled: false, enabledColumns: { enabled }) { snapshot }
         let recoverable = logger.recoveryURL!
         do {
             _ = try logger.stop(savingTo: root.appendingPathComponent("DoesNotExist"))
@@ -178,21 +177,21 @@ import AppKit
             check(retained.hasPrefix(header) && retained.components(separatedBy: "\r\n").count == 3)
         }
         do {
-            try logger.start(columns: [], recoveryDirectory: recovery, scheduled: false) { (snapshot, enabled) }
+            try logger.start(columns: [], recoveryDirectory: recovery, scheduled: false, enabledColumns: { enabled }) { snapshot }
             preconditionFailure("An empty selection should explain why there is nothing to log")
         } catch HUDCSVLogger.Failure.noReadings { }
         let unwritable = root.appendingPathComponent("NotADirectory")
         try Data().write(to: unwritable)
         do {
-            try logger.start(columns: schema, recoveryDirectory: unwritable) { (snapshot, enabled) }
+            try logger.start(columns: schema, recoveryDirectory: unwritable, enabledColumns: { enabled }) { snapshot }
             preconditionFailure("A failed start cannot claim to be logging")
         } catch { check(!logger.isLogging) }
 
         // Exercise the real timer in AppKit menu-tracking mode, not just manual rows.
         var ticks = 0
-        try logger.start(columns: [.fps], recoveryDirectory: recovery) {
+        try logger.start(columns: [.fps], recoveryDirectory: recovery, enabledColumns: { [.fps] }) {
             ticks += 1
-            return (snapshot, [.fps])
+            return snapshot
         }
         let until = Date().addingTimeInterval(2.2)
         while Date() < until { RunLoop.main.run(mode: .eventTracking, before: until) }

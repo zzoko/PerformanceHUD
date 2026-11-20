@@ -29,7 +29,7 @@ final class HUDPositionMenuView: NSView {
         actions.orientation = .horizontal
         actions.spacing = 6
         actions.distribution = .fillEqually
-        actions.widthAnchor.constraint(equalToConstant: HUDMenuLayout.actionOptionsWidth).isActive = true
+        actions.widthAnchor.constraint(equalToConstant: HUDMenuLayout.controlWidth).isActive = true
         let stack = NSStackView(views: [label, actions])
         stack.orientation = .horizontal
         stack.alignment = .centerY
@@ -52,7 +52,7 @@ final class HUDPositionMenuView: NSView {
             hint.centerYAnchor.constraint(equalTo: actions.centerYAnchor)
         ])
         setFrameSize(NSSize(width: HUDMenuLayout.labelLeading + HUDMenuLayout.labelWidth
-            + HUDMenuLayout.spacing + HUDMenuLayout.actionOptionsWidth + 16
+            + HUDMenuLayout.spacing + HUDMenuLayout.controlWidth + 16
             + ceil(hint.intrinsicContentSize.width) + 18, height: 32))
     }
 

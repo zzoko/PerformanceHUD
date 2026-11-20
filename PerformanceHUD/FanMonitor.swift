@@ -27,5 +27,15 @@ final class FanMonitor {
         })
     }
 
+    // A recording fixes its fan columns at Start, even if the first background
+    // hardware probe has not finished yet.
+    func discoverForLogging(ifEnabled enabled: Bool) async {
+        guard enabled, sample.fans.isEmpty, sample.status != .noFans else { return }
+        let discovered = await Task.detached(priority: .utility) { SMCTemperatureReader().readFans() }.value
+        guard sample.fans.isEmpty, sample.status != .noFans else { return }
+        sample = discovered
+        onUpdate?(discovered)
+    }
+
     func stop() { readingsRequested = false; poller.stop() }
 }

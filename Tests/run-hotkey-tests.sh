@@ -10,6 +10,7 @@ xcrun swiftc -swift-version 5 -parse-as-library \
     "$ROOT/PerformanceHUD/HUDPanel.swift" \
     "$ROOT/PerformanceHUD/HUDPositionMenuView.swift" \
     "$ROOT/PerformanceHUD/HUDMenuLayout.swift" \
+    "$ROOT/PerformanceHUD/HUDAccessibility.swift" \
     "$ROOT/PerformanceHUD/HUDBackground.swift" \
     "$ROOT/PerformanceHUD/NativeGlassHUDBackground.swift" \
     "$ROOT/PerformanceHUD/HUDShortcutFeedback.swift" \

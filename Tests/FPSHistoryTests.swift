@@ -251,13 +251,13 @@ import AppKit
         hud.setAutoHideMode(.off)
         hud.setHUDEnabled(true)
         hud.setPackagePowerOptions(.init(enabled: false))
-        for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
         let graph: HUDFPSGraphView = member(hud, "fpsGraphView")
         let titles: [HUDMetric: NSTextField] = member(hud, "titleLabels")
         let values: [HUDMetric: NSTextField] = member(hud, "valueLabels")
         let strip: HUDHorizontalView = member(hud, "horizontalView")
         for layout in HUDAlignment.allCases {
             hud.setAlignment(layout)
+            for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
             for size in HUDFPSValueSize.allCases {
                 for mode in HUDFPSDisplayMode.allCases {
                     var options = HUDFPSOptions(enabled: true, mode: mode, valueSize: size)
@@ -272,10 +272,10 @@ import AppKit
                     panel.contentView?.layoutSubtreeIfNeeded()
                     let after: FPSHistory = member(graph, "history")
                     check(panel.frame.height == original.height && graph.plotBounds == plot, "Measure switches preserve height and history geometry")
-                    if layout == .horizontal {
-                        check(panel.frame.width > original.width, "Horizontal FPS uses a narrower column than Frame time")
+                    if size == .enlarged && (layout == .horizontal || mode == .value) {
+                        check(panel.frame.width > original.width, "The compact 2× frame-time value reserves room for milliseconds")
                     } else {
-                        check(panel.frame.width == original.width, "Vertical keeps its width across measures")
+                        check(panel.frame.width == original.width, "Standard readings and vertical history keep their width across measures")
                     }
                     check(before.samples.count == after.samples.count, "Switching measures retains collected history")
                     if !after.samples.isEmpty {

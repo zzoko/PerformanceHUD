@@ -2,6 +2,13 @@
 
 [← Back to README](../README.md)
 
+### v3.8
+
+- CSV recording can start or continue with the HUD disabled or automatically hidden. **Stop logging** appears in red while a recording is active.
+- Added **Accessibility** to the menu. **Reduce motion** skips auto-hide animations and shortcut popup fades. **Reduce transparency** gives the HUD, menus, and shortcut popups solid backgrounds.
+- **Auto hide → All** shows *Hidden · Waiting for FPS readings* in the menu while the HUD waits for a game. Size, Layout, Appearance, and Liquid Glass controls now line up with Auto hide.
+- An FPS-only HUD uses the same compact width in both layouts, with extra room for frame time at 2×. Adding readings in Horizontal extends the strip to the right and keeps the FPS number in place.
+
 ### v3.7
 
 - The HUD now scales as one layout from **0.5× to 2×**. Text, graphs, and columns keep their proportions as you resize it, and thin dividers stay visible at the smallest size.

@@ -82,9 +82,9 @@ import AppKit
     static func monitoring() {
         let disabled = disabledSelection()
         func demand(_ pins: Set<HUDMenuBarReading>, selection: HUDLogSelection = disabledSelection(),
-                    enabled: Bool = false, visible: Bool = false, logging: Bool = false,
+                    enabled: Bool = false, visible: Bool = false, recording: Set<HUDLogColumn> = [],
                     collapsed: Bool = false, autoHide: HUDAutoHideMode = .off) -> HUDMonitoringDemand {
-            HUDMonitoringDemand.make(hudEnabled: enabled, hudVisible: visible, isLogging: logging,
+            HUDMonitoringDemand.make(hudEnabled: enabled, hudVisible: visible, recordingColumns: recording,
                 autoHideMode: autoHide, selection: selection,
                 menuBar: .init(readings: pins, isCollapsed: collapsed))
         }
@@ -139,10 +139,18 @@ import AppKit
               == ["cpuTemperature", "gpuTemperature"], "Visible overlay and menu-bar collector demands form a union")
         check(activeCollectors(demand([.gpuTemperature], selection: selection, enabled: true, visible: true, collapsed: true))
               == ["cpuTemperature"], "Global collapse leaves visible overlay sampling active")
-        check(activeCollectors(demand([], selection: selection, enabled: true, logging: true)) == ["cpuTemperature"],
+        check(activeCollectors(demand([], selection: selection, enabled: true, recording: [.cpuTemperature])) == ["cpuTemperature"],
               "Logging continues its overlay collector while the overlay is automatically hidden")
-        check(activeCollectors(demand([], selection: selection, logging: true)).isEmpty,
-              "A disabled overlay cannot retain stale logging demand")
+        check(activeCollectors(demand([.gpuUsage], selection: selection, recording: [.cpuTemperature]))
+              == ["cpuTemperature", "gpuUsage"], "Disabling the HUD keeps only recorded and pinned readings active")
+        check(activeCollectors(demand([], selection: selection, recording: [.memoryPressure], autoHide: .all))
+              == ["pressure"], "CSV pressure needs its state only; a disabled HUD needs no wake-up detector")
+        check(activeCollectors(demand([], selection: selection)).isEmpty, "Stopping recording releases its last collector")
+        let miscLog = demand([], recording: [.resolutionWidth, .resolutionHeight, .thermal, .os])
+        check(activeCollectors(miscLog) == ["fps"] && Set(miscLog.misc.visibleReadings) == [.resolution, .thermal],
+              "Resolution uses the frame collector; static OS information starts no collectors")
+        let coreAndFanLog = demand([], recording: [.gpuFrequency, .cpuTypeFrequency("Super"), .fanRPM(0), .cpuCores])
+        check(activeCollectors(coreAndFanLog) == ["power", "fans"], "Frequency, fan RPM, and static core counts request only their sources")
         check(activeCollectors(demand([], enabled: true, autoHide: .all)) == ["fps"],
               "All auto hide retains the FPS detector needed to restore the overlay")
         check(activeCollectors(demand([], autoHide: .all)).isEmpty,

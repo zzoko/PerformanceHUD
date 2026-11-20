@@ -1,7 +1,7 @@
 import Foundation
 
 /// Stable column identities, independent of fonts, formatting, and changing values.
-enum HUDLogColumn: Hashable {
+nonisolated enum HUDLogColumn: Hashable, Sendable {
     case fps, frameTimeAverage, frameTimeWorst, gpuPower, gpuTemperature, gpuUsage, gpuAppUsage, gpuFrequency
     case cpuPower, cpuTemperature, cpuUsage, cpuAppUsage, anePower, socPower
     case memoryUsage, memoryPhysical, memorySwap, memoryPressure, memoryAppUsage, memoryAppPhysical

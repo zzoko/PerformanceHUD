@@ -177,9 +177,9 @@ import AppKit
                     let value = fields["0.value"]!
                     let column = value.alignmentRect(forFrame: value.frame)
                     let gap = column.minX - caption.alignmentRect(forFrame: caption.frame).maxX
-                    let expectedGap: CGFloat = size == .enlarged ? 30.5 : 19
+                    let expectedGap = HUDStyle.metricColumnSpacing
                     check(value.alignment == .right && abs(gap - expectedGap) <= 0.5,
-                          "Horizontal FPS keeps the wider label gap and the reading’s right alignment")
+                          "Horizontal FPS reserves the caption gap and right-aligns the reading")
                     check(abs(column.maxX - (valueRight ?? column.maxX)) <= 0.5, "Changing digits keeps the reading’s right edge")
                     valueRight = column.maxX
                     let dividers: [NSView] = member(horizontal, "dividers")
@@ -202,6 +202,92 @@ import AppKit
         check(pinnedFields["fps.value"]!.font!.pointSize == 12 && size.height == HUDStyle.rowHeight,
               "Pinned menu-bar FPS retains 1× even when the HUD preference is 2×")
     }
+    @MainActor static func compactValueWidth() {
+        let hud = activeHUD()
+        defer { hud.shutdown() }
+        hud.setAutoHideMode(.off)
+        hud.setHUDScale(.normal)
+        let surface: NativeGlassHUDBackground = member(hud, "backgroundView")
+        let panel: HUDPanel = member(hud, "panel")
+        let pixel = 1 / panel.backingScaleFactor
+        for alignment in HUDAlignment.allCases {
+            hud.setAlignment(alignment)
+            hud.setPackagePowerOptions(.init(enabled: false))
+            for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: metric == .fps) }
+            for size in HUDFPSValueSize.allCases {
+                for measure in [HUDFPSMeasure.frameRate, .frameTime, .frameRate] {
+                    hud.setFPSOptions(.init(enabled: true, mode: .value, valueSize: size, measure: measure))
+                    let expected: CGFloat = size == .enlarged && measure == .frameTime ? 161 : 142.5
+                    for interval in [1000.0 / 9999, 6.94, 999.9, 1000.0] {
+                        hud.updateFPS(1000 / interval, timing: .init(averageMS: interval, worstMS: interval))
+                        panel.contentView?.layoutSubtreeIfNeeded()
+                        check(abs(surface.bodyFrame.width - expected) <= pixel / 2,
+                              "An FPS-only HUD keeps its reserved width for each reading in both layouts")
+                        let caption: NSTextField
+                        let value: NSTextField
+                        if alignment == .vertical {
+                            let titles: [HUDMetric: NSTextField] = member(hud, "titleLabels")
+                            let values: [HUDMetric: NSTextField] = member(hud, "valueLabels")
+                            (caption, value) = (titles[.fps]!, values[.fps]!)
+                        } else {
+                            let strip: HUDHorizontalView = member(hud, "horizontalView")
+                            let labels: [String: NSTextField] = member(strip, "labels")
+                            (caption, value) = (labels["0.title"]!, labels["0.value"]!)
+                        }
+                        let slot = value.alignmentRect(forFrame: value.frame)
+                        let labelEnd = caption.alignmentRect(forFrame: caption.frame).maxX
+                        check(slot.minX - labelEnd >= HUDStyle.metricColumnSpacing - pixel / 2 && value.alignment == .right,
+                              "The compact reading is right aligned and cannot overlap its caption")
+                        if interval <= 999.9 {
+                            check(slot.width >= value.intrinsicContentSize.width - pixel / 2, "The four-digit FPS and 999.9 ms readings fit")
+                        }
+                    }
+                    if alignment == .horizontal {
+                        let strip: HUDHorizontalView = member(hud, "horizontalView")
+                        let fields: [String: NSTextField] = member(strip, "labels")
+                        func screenFrame(_ view: NSView) -> NSRect {
+                            panel.convertToScreen(view.convert(view.bounds, to: nil))
+                        }
+                        let caption = fields["0.title"]!, value = fields["0.value"]!
+                        let captionFrame = screenFrame(caption), valueFrame = screenFrame(value)
+                        let fpsWidth = strip.fpsSectionWidth
+                        for hasSOC in [true, false] {
+                            hud.setPackagePowerOptions(.init(enabled: hasSOC))
+                            panel.contentView?.layoutSubtreeIfNeeded()
+                            check(screenFrame(caption) == captionFrame && screenFrame(value) == valueFrame
+                                  && strip.fpsSectionWidth == fpsWidth,
+                                  "Adding or removing SOC keeps both horizontal FPS fields in place on screen")
+                            if hasSOC {
+                                let expanded: [String: NSTextField] = member(strip, "labels")
+                                let dividers: [NSView] = member(strip, "dividers")
+                                let divider = screenFrame(dividers.first { !$0.isHidden }!)
+                                check(divider.minX > valueFrame.maxX && screenFrame(expanded["package.title"]!).minX > divider.maxX
+                                      && surface.bodyFrame.width > expected,
+                                      "The horizontal HUD grows to the right for the divider and SOC")
+                            } else {
+                                check(abs(surface.bodyFrame.width - expected) <= pixel / 2,
+                                      "Removing SOC returns to the FPS-only width")
+                            }
+                        }
+                    }
+                }
+            }
+            hud.setFPSOptions(.init(enabled: true, mode: .both))
+            if alignment == .vertical {
+                check(surface.bodyFrame.width == 285, "Visible history restores the full Vertical width")
+            } else {
+                check(abs(surface.bodyFrame.width - 142.5) <= pixel / 2,
+                      "A saved history choice still shows just the compact value in Horizontal")
+            }
+            if alignment == .vertical {
+                hud.setFPSOptions(.init(enabled: true, mode: .value))
+                hud.setPackagePowerOptions(.init(enabled: true))
+                check(surface.bodyFrame.width == 285, "Adding SOC restores the ordinary vertical panel")
+                hud.setPackagePowerOptions(.init(enabled: false))
+                check(abs(surface.bodyFrame.width - 142.5) <= pixel / 2, "Removing SOC restores the compact vertical width")
+            }
+        }
+    }
     @MainActor static func main() async {
         _ = NSApplication.shared
         var availability = HUDFPSAvailability()
@@ -223,6 +309,7 @@ import AppKit
             "hud.fps.dynamic": false]
         UserDefaults.standard.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
         valueSizing()
+        compactValueWidth()
         check(HUDPreferences.autoHideMode == .off, "Off preserves static FPS")
         let suiteName = "DynamicFPS.tests.\(UUID().uuidString)"
         let suite = UserDefaults(suiteName: suiteName)!

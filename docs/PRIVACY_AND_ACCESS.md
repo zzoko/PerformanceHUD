@@ -75,7 +75,7 @@ HUD preferences, custom hotkeys, and helper setup state are saved locally using 
 
 **Start logging** records selected HUD readings and timestamps locally, once per second, for use in spreadsheets and graphs. App readings follow the focused process. Process names are included only when **APP** is enabled in Vertical when logging starts; process IDs are not included.
 
-**Stop logging**, disabling the HUD, or quitting saves the CSV to your Desktop. Auto hide does not stop logging. macOS may request Desktop folder access to save the file. Logging never starts automatically.
+Recording can start or continue with the HUD disabled or automatically hidden. **Stop logging** or quit to save the CSV to your Desktop. macOS may request Desktop folder access to save the file. Logging never starts automatically.
 
 During recording, the app writes a recovery CSV under `~/Library/Application Support/PerformanceHUD/Logs/`. That copy is removed after a successful Desktop save. If saving fails or the app exits unexpectedly, the recovery file stays there; a save-error alert offers to show it in Finder. You can delete CSV and recovery files whenever you no longer need them. The files contain no screen images or audio.
 

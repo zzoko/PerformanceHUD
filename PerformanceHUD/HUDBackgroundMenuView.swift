@@ -11,7 +11,7 @@ final class HUDBackgroundMenuView: NSView {
         control = NSSegmentedControl(labels: Self.choices.map(\.menuTitle),
                                      trackingMode: .selectOne, target: nil, action: nil)
         super.init(frame: NSRect(x: 0, y: 0, width: HUDMenuLayout.labelLeading + HUDMenuLayout.labelWidth
-            + HUDMenuLayout.spacing + HUDMenuLayout.backgroundOptionsWidth + 72, height: 28))
+            + HUDMenuLayout.spacing + HUDMenuLayout.controlWidth + 72, height: 28))
         autoresizingMask = [.width]
         let label = NSTextField(labelWithString: "Appearance")
         label.font = .menuFont(ofSize: 0)
@@ -32,7 +32,7 @@ final class HUDBackgroundMenuView: NSView {
             label.centerYAnchor.constraint(equalTo: control.centerYAnchor),
             control.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: HUDMenuLayout.spacing),
             control.centerYAnchor.constraint(equalTo: centerYAnchor),
-            control.widthAnchor.constraint(equalToConstant: HUDMenuLayout.backgroundOptionsWidth),
+            control.widthAnchor.constraint(equalToConstant: HUDMenuLayout.controlWidth),
             shortcutLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
             shortcutLabel.leadingAnchor.constraint(greaterThanOrEqualTo: control.trailingAnchor, constant: 12),
             shortcutLabel.centerYAnchor.constraint(equalTo: control.centerYAnchor)

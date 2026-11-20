@@ -16,7 +16,7 @@ final class HUDGlassMenuView: NSView {
         self.options = options
         self.systemStrength = systemStrength
         let width = HUDMenuLayout.labelLeading + HUDMenuLayout.labelWidth + HUDMenuLayout.spacing
-            + HUDMenuLayout.backgroundOptionsWidth + HUDMenuLayout.sliderValueSpacing + 44 + 12
+            + HUDMenuLayout.controlWidth + HUDMenuLayout.sliderValueSpacing + 44 + 12
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 62))
         autoresizingMask = [.width]
         let label = NSTextField(labelWithString: "Liquid Glass")
@@ -51,7 +51,7 @@ final class HUDGlassMenuView: NSView {
             label.centerYAnchor.constraint(equalTo: control.centerYAnchor),
             control.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: HUDMenuLayout.spacing),
             control.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-            control.widthAnchor.constraint(equalToConstant: HUDMenuLayout.backgroundOptionsWidth),
+            control.widthAnchor.constraint(equalToConstant: HUDMenuLayout.controlWidth),
             clearLabel.trailingAnchor.constraint(equalTo: slider.leadingAnchor, constant: -HUDMenuLayout.spacing),
             clearLabel.centerYAnchor.constraint(equalTo: slider.centerYAnchor),
             slider.leadingAnchor.constraint(equalTo: control.leadingAnchor),

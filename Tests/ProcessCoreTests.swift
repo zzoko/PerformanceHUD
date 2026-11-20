@@ -396,12 +396,12 @@ import AppKit
         var selection = HUDLogSelection(fps: false, resources: balanced.resources, package: .init(enabled: false),
             fans: .init(enabled: false), battery: .init(enabled: false, temperature: false, charge: false), alignment: .vertical,
             process: .init(enabled: true), cpuCores: .init(enabled: true), gpuCores: .init(enabled: true))
-        let demand = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true, isLogging: false, autoHideMode: .off, selection: selection, menuBar: .init())
+        let demand = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true, autoHideMode: .off, selection: selection, menuBar: .init())
         precondition(demand.cpuAppUsage && demand.gpuAppUsage && demand.appMemory && demand.cpuCores && demand.gpuCores)
         let columns = selection.columns(fanSample: .unavailable)
         precondition(Array(columns.prefix(4)) == [.process, .gpuAppUsage, .cpuAppUsage, .memoryAppPhysical])
         selection.alignment = .horizontal
-        let horizontal = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true, isLogging: false, autoHideMode: .off, selection: selection, menuBar: .init())
+        let horizontal = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true, autoHideMode: .off, selection: selection, menuBar: .init())
         precondition(!horizontal.cpuAppUsage && !horizontal.gpuAppUsage && !horizontal.appMemory
                      && horizontal.cpuCores && horizontal.gpuCores && horizontal.power,
                      "Horizontal Both collects clocks and per-core usage")
@@ -413,7 +413,7 @@ import AppKit
                                    totalUse: false, focusedApp: false, power: false, details: false, pressure: false))
         })
         coresOnly.cpuCores.mode = .bars; coresOnly.gpuCores.enabled = false
-        let barsDemand = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true, isLogging: false,
+        let barsDemand = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true,
             autoHideMode: .off, selection: coresOnly, menuBar: .init())
         precondition(barsDemand.cpuCores && !barsDemand.gpuUsage && !barsDemand.power && !barsDemand.cpuAppUsage,
                      "CPU bars work independently of power, system Use, and Process")
@@ -421,7 +421,7 @@ import AppKit
         gpuOnly.cpuCores.enabled = false; gpuOnly.gpuCores.enabled = true
         for mode in HUDCoreDisplayMode.allCases {
             gpuOnly.gpuCores.mode = mode
-            let ghzDemand = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true, isLogging: false,
+            let ghzDemand = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true,
                 autoHideMode: .off, selection: gpuOnly, menuBar: .init())
             precondition(ghzDemand.power && !ghzDemand.gpuUsage && !ghzDemand.cpuCores
                          && gpuOnly.columns(fanSample: .noFans) == [.gpuFrequency],
@@ -430,7 +430,7 @@ import AppKit
         var cpuOnly = coresOnly
         cpuOnly.gpuCores.enabled = false
         cpuOnly.cpuCores.mode = .value
-        let frequencyOnly = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true, isLogging: false,
+        let frequencyOnly = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true,
             autoHideMode: .off, selection: cpuOnly, menuBar: .init())
         precondition(frequencyOnly.power && !frequencyOnly.cpuCores && !frequencyOnly.gpuUsage,
                      "CPU Value selects GHz without polling per-core usage")
@@ -447,13 +447,13 @@ import AppKit
                          "CPU Cores logs only the selected GHz and/or individual core usage")
             var horizontalCPU = cpuOnly
             horizontalCPU.alignment = .horizontal
-            let horizontalDemand = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true, isLogging: false,
+            let horizontalDemand = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: true,
                 autoHideMode: .off, selection: horizontalCPU, menuBar: .init())
             precondition(horizontalDemand.power == mode.showsValue && horizontalDemand.cpuCores == mode.showsBars
                          && horizontalCPU.columns(fanSample: .noFans) == expected,
                          "Horizontal core sampling and CSV follow the selected mode")
         }
-        let hiddenDemand = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: false, isLogging: false,
+        let hiddenDemand = HUDMonitoringDemand.make(hudEnabled: true, hudVisible: false,
             autoHideMode: .all, selection: coresOnly, menuBar: .init())
         precondition(!hiddenDemand.power && !hiddenDemand.cpuCores && !hiddenDemand.gpuUsage)
         // Core details alone keep their resource title in Horizontal.

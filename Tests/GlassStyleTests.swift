@@ -74,6 +74,18 @@ import AppKit
         let sizeNumber = sizeValue.convert(sizeValue.bounds, to: sizeMenu)
         precondition(sizeTrack.minX == sliderRect.minX && sizeTrack.width == sliderRect.width,
             "Size and glass slider tracks have identical widths and starting positions")
+        let optionRows: [NSView] = [HUDAutoHideMenuView(selected: .fps),
+            HUDAlignmentMenuView(selected: .vertical), HUDBackgroundMenuView(selectedBackground: .system)]
+        for row in optionRows {
+            let window = NSWindow(contentRect: row.frame, styleMask: [], backing: .buffered, defer: false)
+            window.contentView = row
+            row.layoutSubtreeIfNeeded()
+            let control: NSSegmentedControl = member(row, "control")
+            let rect = control.alignmentRect(forFrame: control.frame)
+            precondition(rect.minX == selectorRect.minX && rect.maxX == selectorRect.maxX
+                && rect.minX == sizeTrack.minX && rect.maxX == sizeTrack.maxX,
+                "Auto hide, Size, Layout, Appearance, and Liquid Glass share both control edges")
+        }
         precondition(sizeNumber.midX == value.frame.midX && sizeValue.alignment == value.alignment,
             "Size and glass numbers are centred in the same column")
 

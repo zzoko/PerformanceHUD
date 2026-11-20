@@ -13,14 +13,17 @@ final class HUDCSVLogger {
             }
         }
     }
-    typealias Sample = () -> (snapshot: HUDLogSnapshot, enabled: Set<HUDLogColumn>)
     private(set) var isLogging = false
     private(set) var recoveryURL: URL?
     private(set) var columns: [HUDLogColumn] = []
     var onFailure: ((Error, URL?) -> Void)?
     private var handle: FileHandle?
     private var timer: Timer?
-    private var sample: Sample?
+    private var sample: (() -> HUDLogSnapshot)?
+    private var enabledColumns: (() -> Set<HUDLogColumn>)?
+    var activeColumns: Set<HUDLogColumn> {
+        enabledColumns?().intersection(columns) ?? []
+    }
     private var fileName = ""
     private let timestamp: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
@@ -37,7 +40,8 @@ final class HUDCSVLogger {
     }
 
     func start(columns: [HUDLogColumn], recoveryDirectory: URL, at date: Date = Date(),
-               scheduled: Bool = true, sample: @escaping Sample) throws {
+               scheduled: Bool = true, enabledColumns: @escaping () -> Set<HUDLogColumn>,
+               sample: @escaping () -> HUDLogSnapshot) throws {
         guard !isLogging else { throw Failure.alreadyLogging }
         guard !columns.isEmpty else { throw Failure.noReadings }
         let files = FileManager.default
@@ -59,6 +63,7 @@ final class HUDCSVLogger {
             throw error
         }
         self.columns = columns
+        self.enabledColumns = enabledColumns
         self.sample = sample
         recoveryURL = url
         isLogging = true
@@ -78,7 +83,8 @@ final class HUDCSVLogger {
     func record(at date: Date) throws {
         guard isLogging, let sample, let handle else { return }
         let reading = sample()
-        let cells = columns.map { reading.enabled.contains($0) ? reading.snapshot.values[$0] ?? "" : "" }
+        let active = activeColumns
+        let cells = columns.map { active.contains($0) ? reading.values[$0] ?? "" : "" }
         try handle.write(contentsOf: Data(Self.row([timestamp.string(from: date)] + cells).utf8))
     }
 
@@ -97,6 +103,7 @@ final class HUDCSVLogger {
         timer?.invalidate(); timer = nil
         isLogging = false
         sample = nil
+        enabledColumns = nil
         let writer = handle
         handle = nil
         do { try writer?.synchronize(); try writer?.close() }
@@ -131,6 +138,7 @@ final class HUDCSVLogger {
         timer?.invalidate(); timer = nil
         isLogging = false
         sample = nil
+        enabledColumns = nil
         try? handle?.close()
         handle = nil
     }
