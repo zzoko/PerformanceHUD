@@ -19,7 +19,7 @@ import AppKit
 
     @MainActor static func freeSpaceFormattingAndWidth() {
         let cases: [(Int64?, String)] = [
-            (nil, "—"), (0, "0 B free"), (9, "9 B free"), (999, "999 B free"),
+            (nil, ""), (0, "0 B free"), (9, "9 B free"), (999, "999 B free"),
             (1_000, "1.00 kB free"), (9_820_000, "9.82 MB free"),
             (9_820_000_000, "9.82 GB free"), (9_999_000_000, "10.0 GB free"),
             (48_700_000_000, "48.7 GB free"), (99_999_000_000, "100 GB free"),
@@ -35,9 +35,10 @@ import AppKit
                     let drive = StorageDrive(id: 1, name: "Macintosh HD", internalDrive: true, freeBytes: bytes)
                     precondition(drive.freeText == expected, "Expected \(expected), got \(drive.freeText)")
                     view.configure([drive], options: .init(enabled: true, details: false, freeSpaceHighlighted: true),
-                                   scale: scale, background: .dark)
-                    let width = horizontal ? view.contentSize.width : 257 * CGFloat(scale.rawValue)
-                    view.setFrameSize(NSSize(width: width, height: view.contentSize.height))
+                                   background: .dark)
+                    let size = NSSize(width: horizontal ? view.contentSize.width : 257, height: view.contentSize.height)
+                    view.setFrameSize(NSSize(width: size.width * scale.rawValue, height: size.height * scale.rawValue))
+                    view.setBoundsSize(size)
                     view.layoutSubtreeIfNeeded()
                     let fields = view.subviews[0].subviews.compactMap { $0 as? NSTextField }
                     let field = fields.first { !$0.isHidden && $0.stringValue == expected }!
@@ -77,11 +78,26 @@ import AppKit
         precondition(view.isHidden)
         hud.updateStorage([drives[0]])
         let one = view.contentSize.height
-        precondition(!view.isHidden && one == HUDStyle.rowHeight(scale: .normal) + HUDStyle.ramDetailHeight(scale: .normal))
+        precondition(!view.isHidden && one == 39.5)
         hud.updateStorage(drives)
-        precondition(view.contentSize.height == 2 * one + HUDStyle.rowSpacing(scale: .normal))
+        precondition(view.contentSize.height == 2 * one + HUDStyle.rowSpacing)
+        let panel: HUDPanel = member("panel")
+        for scale in [HUDScale(rawValue: 0.81), .init(rawValue: 1.31), .normal] {
+            hud.setHUDScale(scale)
+            panel.contentView?.layoutSubtreeIfNeeded()
+            let expected = HUDStyle.headingToDetailSpacing(.tight)
+            for row in view.subviews {
+                let fields = row.subviews.compactMap { $0 as? NSTextField }
+                let name = fields.first { field in drives.contains { $0.name == field.stringValue } }!
+                let titleBaseline = name.frame.minY + name.firstBaselineOffsetFromTop
+                for detail in fields where ["Read", "Write"].contains(detail.stringValue) {
+                    let detailBaseline = detail.frame.minY + detail.firstBaselineOffsetFromTop
+                    precondition(abs(detailBaseline - titleBaseline - expected) < 0.001)
+                }
+            }
+        }
         hud.setStorageOptions(.init(enabled: true, location: .external, details: false))
-        precondition(view.contentSize.height == HUDStyle.rowHeight(scale: .normal))
+        precondition(view.contentSize.height == HUDStyle.rowHeight)
         hud.updateStorage([drives[0]])
         precondition(view.isHidden && view.contentSize.height == 0)
         hud.updateStorage(drives)
@@ -92,7 +108,7 @@ import AppKit
         let size: NSSize = member("expandedHUDSize")
         let width = strip.storage.frame.width
         precondition(!strip.storage.isHidden && width > 0 && strip.bounds.contains(strip.storage.frame))
-        precondition(size.height == HUDStyle.rowHeight(scale: .normal) + 2 * HUDStyle.verticalPadding(scale: .normal))
+        precondition(size.height == HUDStyle.rowHeight + 2 * HUDStyle.verticalPadding)
         hud.updateStorage([drives[0]])
         let single: NSSize = member("expandedHUDSize")
         precondition(single.width < size.width && single.height == size.height)
@@ -114,13 +130,30 @@ import AppKit
             for freeBold in [false, true] {
                 for ratesBold in [false, true] {
                     view.configure([drive], options: .init(enabled: true, freeSpaceHighlighted: freeBold,
-                        detailsHighlighted: ratesBold), scale: .normal, background: .dark)
-                    let fields = view.subviews[0].subviews.compactMap { $0 as? NSTextField }
+                        detailsHighlighted: ratesBold), background: .dark)
+                    view.setFrameSize(NSSize(width: horizontal ? view.contentSize.width : 257, height: view.contentSize.height))
+                    view.layoutSubtreeIfNeeded()
+                    let row = view.subviews[0]
+                    let fields = row.subviews.compactMap { $0 as? NSTextField }
+                    if horizontal {
+                        precondition(row.bounds.height == 39)
+                        let title = fields.first { $0.stringValue == drive.name }!
+                        let topInset = title.frame.minY - row.bounds.minY
+                        let titleBaseline = title.frame.minY + title.firstBaselineOffsetFromTop
+                        for field in fields {
+                            let isHeading = field === title || field.stringValue == drive.freeText
+                            let baseline = field.frame.minY + field.firstBaselineOffsetFromTop
+                            precondition(abs(baseline - titleBaseline - (isHeading ? 0 : 20)) < 0.001)
+                            if !isHeading {
+                                precondition(abs(row.bounds.maxY - field.frame.maxY - topInset) < 0.001)
+                            }
+                        }
+                    }
                     func font(_ text: String) -> NSFont? { fields.first { $0.stringValue == text }?.font }
-                    precondition(font(drive.freeText) == HUDStyle.readingFont(scale: .normal, highlighted: freeBold))
-                    let ratesFont = HUDStyle.readingFont(scale: .normal, highlighted: ratesBold)
+                    precondition(font(drive.freeText) == HUDStyle.readingFont(highlighted: freeBold))
+                    let ratesFont = HUDStyle.readingFont(highlighted: ratesBold)
                     precondition(font("84.2 MB/s") == ratesFont && font("3.1 MB/s") == ratesFont)
-                    precondition(font("Read") == HUDStyle.smallLabelFont(scale: .normal))
+                    precondition(font("Read") == HUDStyle.smallLabelFont())
                 }
             }
         }

@@ -17,15 +17,15 @@ import AppKit
         for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
         let dividers: [Int: NSView] = member(hud, "groupDividers")
         let groups: [[HUDMetric]] = member(hud, "verticalMetricGroups")
-        let stack: NSStackView = member(hud, "stackView")
+        let stack: NSView = member(hud, "stackView")
         let rows: [HUDMetric: NSView] = member(hud, "metricRows")
         precondition([HUDMetric.gpu, .cpu, .ram].allSatisfy { rows[$0] == nil }, "APP readings have no independent resource rows")
         for metric in [HUDMetric.ramTotal, .misc, .fans] {
             hud.setMetricEnabled(metric, enabled: true)
             precondition(dividers.values.allSatisfy(\.isHidden),
-                         "A lone \(metric.hudTitle) category has no leading or trailing divider")
-            precondition(stack.arrangedSubviews.first(where: { !$0.isHidden }) === rows[metric],
-                         "A lone \(metric.hudTitle) starts directly with its content")
+                         "A lone \(metric.hudTitle(for: .vertical)) category has no leading or trailing divider")
+            precondition(stack.subviews.first(where: { !$0.isHidden }) === rows[metric],
+                         "A lone \(metric.hudTitle(for: .vertical)) starts directly with its content")
             hud.setMetricEnabled(metric, enabled: false)
         }
         hud.setMetricEnabled(.ramTotal, enabled: true)
@@ -53,8 +53,9 @@ import AppKit
         let withFPSAndFans = HUDMenuBarPresentation.sections(snapshot: .init(), fanSample: .noFans,
             readings: pins.union([.fps, .memoryUsage, .fanUsage]), style: style, background: .dark)
         for scale in [HUDScale.small, .normal, .large] {
-            let factor = CGFloat(scale.rawValue)
-            _ = strip.configure(sections: withMemory, showsBattery: true, scale: scale, background: .dark)
+            strip.setFrameSize(NSSize(width: 400 * scale.rawValue, height: 21 * scale.rawValue))
+            strip.setBoundsSize(NSSize(width: 400, height: 21))
+            _ = strip.configure(sections: withMemory, showsBattery: true, background: .dark)
             let labels: [String: NSTextField] = member(strip, "labels")
             let dividers: [NSView] = member(strip, "dividers")
             let soc = labels["package.title"]!, watts = labels["package.power"]!
@@ -63,20 +64,20 @@ import AppKit
             let memoryTextStart = memory.alignmentRect(forFrame: memory.frame).minX
             let socDivider = dividers[0].frame
             precondition(soc.frame.minX == 0)
-            precondition(watts.alignmentRect(forFrame: watts.frame).minX - soc.alignmentRect(forFrame: soc.frame).maxX == 8 * factor)
-            precondition(memory.frame.minX - watts.frame.maxX == 16 * factor)
+            precondition(watts.alignmentRect(forFrame: watts.frame).minX - soc.alignmentRect(forFrame: soc.frame).maxX == 8)
+            precondition(memory.frame.minX - watts.frame.maxX == 16)
             precondition(socDivider.midX == (watts.frame.maxX + memory.frame.minX) / 2)
-            precondition(strip.battery.frame.minX - usage.frame.maxX == 16 * factor)
+            precondition(strip.battery.frame.minX - usage.frame.maxX == 16)
             precondition(dividers[1].frame.midX == (usage.frame.maxX + strip.battery.frame.minX) / 2)
 
-            let size = strip.configure(sections: withoutMemory, showsBattery: true, scale: scale, background: .dark)
+            let size = strip.configure(sections: withoutMemory, showsBattery: true, background: .dark)
             precondition(dividers.filter { !$0.isHidden }.count == 1 && dividers[0].frame == socDivider,
                          "Hiding MEM must leave the divider after SOC in exactly the same position")
             precondition(strip.battery.frame.minX + strip.battery.sourceTextRect.minX == memoryTextStart,
                          "BAT must start where the MEM title was")
             precondition(strip.battery.frame.maxX == size.width)
 
-            _ = strip.configure(sections: withFPSAndFans, showsBattery: true, scale: scale, background: .dark)
+            _ = strip.configure(sections: withFPSAndFans, showsBattery: true, background: .dark)
             let fields: [String: NSTextField] = member(strip, "labels")
             let fan = fields["fan.status"]!.frame
             let boundaries = [(fields["fps.value"]!.frame.maxX, soc.frame.minX),
@@ -86,7 +87,7 @@ import AppKit
             let visible = lines.filter { !$0.isHidden }
             precondition(visible.count == boundaries.count)
             for (line, (left, right)) in zip(visible, boundaries) {
-                precondition(abs(right - left - 16 * factor) < 0.001)
+                precondition(abs(right - left - 16) < 0.001)
                 precondition(abs(line.frame.midX - (left + right) / 2) < 0.001)
             }
         }
@@ -154,10 +155,16 @@ import AppKit
                                     pressureMode: .text), for: .ram)
                                 let size = panel.frame.size
                                 configurations += 1
+                                var memoryDetailFrames: [NSRect]?
+                                var readings: [(Double?, Double?)] = [(0, 0), (13.71, 0.74), (13.88, 0.74),
+                                                                      (13.88, 123.45), (999.99, 999.99)]
+                                if alignment == .vertical {
+                                    readings += [(nil, nil), (1024.25, nil), (8888.88, 8888.88), (13.71, 0.74)]
+                                }
                                 for state in ["normal", "warning", "critical", ""] {
-                                    for gb in [0.0, 13.71, 999.99] {
-                                        let sample = RAMUsageSample(percentage: gb == 0 ? 0 : 100,
-                                            usedBytes: UInt64(gb * 1_073_741_824), swapUsedBytes: UInt64(gb * 1_073_741_824))
+                                    for (gb, swapGB) in readings {
+                                        let sample = gb.map { RAMUsageSample(percentage: $0 == 0 ? 0 : 100,
+                                            usedBytes: UInt64($0 * 1_073_741_824), swapUsedBytes: swapGB.map { UInt64($0 * 1_073_741_824) }) }
                                         hud.updateRAM(.ramTotal, usage: sample)
                                         hud.updateRAM(.ram, usage: sample)
                                         hud.updateMemoryPressure(state)
@@ -178,42 +185,70 @@ import AppKit
                                         if alignment == .horizontal && details {
                                             let labels: [String: NSTextField] = member(horizontal, "labels")
                                             let prefix = String(HUDMetric.ramTotal.rawValue)
-                                            if let use = labels["\(prefix).value"], !use.isHidden,
-                                               let physical = labels["\(prefix).PHY.title"], !physical.isHidden {
-                                                check(use.frame.maxX <= physical.frame.minX, "Horizontal MEM shows usage before Physical")
+                                            let heading = labels["\(prefix).title"]!
+                                            let swapTitle = labels["\(prefix).SWP.title"]!
+                                            let swapValue = labels["\(prefix).SWP.value"]!
+                                            let physicalTitle = labels["\(prefix).PHY.title"]!
+                                            let physicalValue = labels["\(prefix).PHY.value"]!
+                                            check([heading, swapTitle, physicalTitle].map(\.stringValue) == ["MEM", "SWP", "PHY"],
+                                                  "Horizontal memory uses abbreviated labels")
+                                            check(swapValue.stringValue == swap.stringValue && physicalValue.stringValue == physical[.ramTotal]!.stringValue,
+                                                  "Horizontal memory keeps each reading with its caption")
+                                            for (caption, reading) in [(swapTitle, swapValue), (physicalTitle, physicalValue)] {
+                                                let captionRect = caption.alignmentRect(forFrame: caption.frame)
+                                                let readingRect = reading.alignmentRect(forFrame: reading.frame)
+                                                let gap = readingRect.maxX - reading.intrinsicContentSize.width - captionRect.maxX
+                                                check(abs(gap - HUDStyle.memoryLabelValueSpacing) <= 1,
+                                                      "Horizontal \(caption.stringValue) uses the standard compact reading gap")
                                             }
-                                            for metric in [HUDMetric.ramTotal, .ram] {
-                                                for caption in ["PHY", "SWP"] {
-                                                    guard let title = labels["\(metric.rawValue).\(caption).title"],
-                                                          let value = labels["\(metric.rawValue).\(caption).value"],
-                                                          !title.isHidden && !value.isHidden else { continue }
-                                                    let titleRect = title.alignmentRect(forFrame: title.frame)
-                                                    let valueRect = value.alignmentRect(forFrame: value.frame)
-                                                    let visibleValueStart = valueRect.maxX - value.intrinsicContentSize.width
-                                                    let actualGap = visibleValueStart - titleRect.maxX
-                                                    check(abs(actualGap - HUDStyle.memoryLabelValueSpacing * CGFloat(scale.rawValue)) <= 0.5, "Horizontal memory uses the shared 4 pt gap")
+                                            let pressureField = labels["ram.pressure"]!
+                                            var ordered = [heading]
+                                            if showsUsage { ordered.append(labels["\(prefix).value"]!) }
+                                            ordered += [swapTitle, swapValue, physicalTitle, physicalValue, pressureField]
+                                            let baseline = heading.frame.maxY - heading.firstBaselineOffsetFromTop
+                                            for field in ordered {
+                                                check(abs(field.frame.maxY - field.firstBaselineOffsetFromTop - baseline) <= 1,
+                                                      "Horizontal memory readings share a baseline")
+                                            }
+                                            for (left, right) in zip(ordered, ordered.dropFirst()) {
+                                                let leftRect = left.alignmentRect(forFrame: left.frame)
+                                                let rightRect = right.alignmentRect(forFrame: right.frame)
+                                                if right !== swapValue && right !== physicalValue {
+                                                    check(leftRect.maxX <= rightRect.minX, "Horizontal memory order is MEM, use, SWP, PHY, pressure")
                                                 }
                                             }
                                         }
                                         if alignment == .vertical && details && mode != .app {
+                                            check(titles[.ramTotal]?.stringValue == "Memory", "Vertical HUD uses Memory")
                                             check(captions[.ramTotal]?.stringValue == "Physical" && swapTitle.stringValue == "Swap" && pressureTitle.stringValue == "Pressure", "Vertical uses full memory labels")
                                             func baseline(_ field: NSTextField) -> CGFloat {
-                                                field.convert(field.bounds, to: container).maxY - field.firstBaselineOffsetFromTop
+                                                field.convert(field.bounds, to: field.superview).maxY - field.firstBaselineOffsetFromTop
                                             }
-                                            let rowSpacing = HUDStyle.ramDetailHeight(scale: scale)
-                                            check(abs(baseline(physical[.ramTotal]!) - baseline(swap) - rowSpacing) <= 0.5, "Swap has its own row below Physical")
+                                            let rowSpacing = HUDStyle.ramDetailHeight()
+                                            let physicalTitle = captions[.ramTotal]!, physicalValue = physical[.ramTotal]!
+                                            check(abs(baseline(physicalValue) - baseline(swap)) <= 0.5, "Swap and Physical share a row")
                                             check(abs(baseline(swap) - baseline(pressure) - rowSpacing) <= 0.5, "Pressure has its own row below Swap")
                                             func aligned(_ field: NSTextField) -> NSRect { field.alignmentRect(forFrame: field.frame) }
-                                            let detailGap = aligned(usage[.ramTotal]!).minY - aligned(physical[.ramTotal]!).maxY
-                                            check(abs(detailGap - HUDStyle.rowSpacing(scale: scale)) <= 0.5,
-                                                  "Memory details have their own gap below the MEM heading")
-                                            for (caption, value) in [(captions[.ramTotal]!, physical[.ramTotal]!), (swapTitle, swap), (pressureTitle, pressure)] {
+                                            let firstDetailSpacing = baseline(titles[.ramTotal]!) - baseline(captions[.ramTotal]!)
+                                            check(abs(firstDetailSpacing - HUDStyle.headingToDetailSpacing(.tight)) <= 0.5, "Memory uses tight heading-to-detail spacing")
+                                            for (caption, value) in [(physicalTitle, physicalValue), (swapTitle, swap), (pressureTitle, pressure)] {
                                                 check(abs(baseline(caption) - baseline(value)) <= 0.5, "Memory caption/value baseline matches")
-                                                check(abs(aligned(caption).minX - aligned(titles[.ramTotal]!).minX) <= 0.5, "Memory labels share the left edge")
-                                                check(abs(aligned(value).maxX - aligned(usage[.ramTotal]!).maxX) <= 0.5 && value.alignment == .right, "Memory values share the right edge")
-                                                check(aligned(caption).maxX <= aligned(value).minX, "Memory caption and value do not overlap")
+                                                check(value.alignment == .right && aligned(caption).maxX <= aligned(value).minX, "Memory reading fits after its label")
                                             }
-                                            check(HUDStyle.rowHeight(for: .ramTotal, scale: scale) == HUDStyle.rowHeight(scale: scale) + HUDStyle.rowSpacing(scale: scale) + 3 * rowSpacing, "Total memory reserves a heading gap and three separate detail rows")
+                                            for field in [swapTitle, pressureTitle] {
+                                                check(abs(aligned(field).minX - aligned(titles[.ramTotal]!).minX) <= 0.5, "Swap and Pressure align to Memory")
+                                            }
+                                            for field in [physicalValue, pressure] {
+                                                check(abs(aligned(field).maxX - aligned(usage[.ramTotal]!).maxX) <= 0.5, "Physical and Pressure readings share the right edge")
+                                            }
+                                            let frames = [swapTitle, swap, physicalTitle, physicalValue].map(aligned)
+                                            if let memoryDetailFrames {
+                                                check(frames == memoryDetailFrames, "Vertical memory columns moved as readings changed at \(scale.rawValue)×")
+                                            } else {
+                                                memoryDetailFrames = frames
+                                            }
+                                            check(aligned(swap).maxX <= aligned(physicalTitle).minX, "Memory detail pairs fit side by side")
+                                            check(HUDStyle.rowHeight(for: .ramTotal) == HUDStyle.headingToDetailSpacing(.tight) + 2 * rowSpacing, "Memory reserves one Details row and one Pressure row")
                                         }
                                         if alignment == .vertical {
                                             check(pressure.isHidden == !(details && mode != .app), "Pressure follows its own visibility and source")
@@ -274,7 +309,14 @@ import AppKit
                         if !history.isHidden {
                             let rect = history.convert(history.bounds, to: container)
                             let plot = history.convert(history.plotBounds, to: container)
-                            check(abs(plot.maxX - (container.bounds.maxX - HUDStyle.horizontalPadding(scale: scale))) < 0.5,
+                            let caption = history.convert(pressureTitle.bounds, from: pressureTitle)
+                            let captionBaseline = caption.maxY - pressureTitle.firstBaselineOffsetFromTop
+                            let rowBaseline = history.convert(pressure.bounds, from: pressure).maxY - pressure.firstBaselineOffsetFromTop
+                            check(abs(captionBaseline - rowBaseline) <= 0.5, "Pressure caption stays on the first graph row")
+                            let physicalTitle = captions[.ramTotal]!
+                            let captionX = physicalTitle.superview!.convert(physicalTitle.alignmentRect(forFrame: physicalTitle.frame), to: container).minX
+                            check(abs(captionX - plot.minX) <= 0.5, "Physical starts at the left edge of the pressure graph")
+                            check(abs(plot.maxX - (container.bounds.maxX - HUDStyle.horizontalPadding * scale.rawValue)) < 0.5,
                                   "History reaches the divider's right edge")
                             check(rect.width > 72.6 * CGFloat(scale.rawValue), "History extends beyond the meter towards the power column")
                             check(container.bounds.contains(rect), "History fade fits inside existing HUD bounds")
@@ -282,7 +324,18 @@ import AppKit
                     }
                     options.details = false
                     options.pressureMode = .colorMeter
+                    let stripMeters: [String: HUDMemoryPressureMeterView] = member(horizontal, "pressureMeters")
+                    let detailMeterY = stripMeters["ram.pressure"]?.frame.midY
                     hud.setResourceOptions(options, for: .ram)
+                    if alignment == .horizontal {
+                        let fields: [String: NSTextField] = member(horizontal, "labels")
+                        let heading = fields["\(HUDMetric.ramTotal.rawValue).title"]!
+                        check(heading.stringValue == "MEM", "Horizontal memory abbreviates the heading when Details is off")
+                        if let detailMeterY, let meter = stripMeters["ram.pressure"] {
+                            check(abs(meter.frame.midY - detailMeterY) <= 0.5,
+                                  "Pressure meter stays centered when Details is toggled")
+                        }
+                    }
                     check(meter.isHidden == (alignment == .horizontal), "Details off retains the pressure meter")
                     options.pressure = false
                     hud.setResourceOptions(options, for: .ram)
@@ -328,17 +381,17 @@ import AppKit
         check(meter.currentLevel == nil, "Unavailable pressure remains blank")
         let spacingPreview = HUDHorizontalView(frame: .zero)
         for scale in scales {
-            let regularFont = HUDStyle.readingFont(scale: scale, highlighted: false)
+            let regularFont = HUDStyle.readingFont(highlighted: false)
             var normal = HUDHorizontalView.Reading(id: "pressure", text: "normal", reference: "normal",
                 font: regularFont, color: .white, help: nil, startsMetric: false, pressureMode: .text)
-            _ = spacingPreview.configure(sections: [[normal]], showsBattery: false, scale: scale, background: .dark)
+            _ = spacingPreview.configure(sections: [[normal]], showsBattery: false, background: .dark)
             let labels: [String: NSTextField] = member(spacingPreview, "labels")
             let normalLabel = labels["pressure"]!
             let normalWidth = normalLabel.alignmentRect(forFrame: normalLabel.frame).width
             for mode in [HUDMemoryPressureMode.meter, .colorMeter] {
                 normal.pressureMode = mode
                 let size = spacingPreview.configure(sections: [[normal]], showsBattery: false,
-                                                    scale: scale, background: .dark)
+                                                    background: .dark)
                 let meters: [String: HUDMemoryPressureMeterView] = member(spacingPreview, "pressureMeters")
                 let rect = meters["pressure"]!.frame
                 check(size.width == normalWidth, "Horizontal meters occupy the normal text column without text-edge insets")
@@ -346,10 +399,10 @@ import AppKit
                       "Horizontal meters have equal breathing room on both sides")
                 for state in ["warning", "critical", ""] {
                     let reading = HUDHorizontalView.Reading(id: "pressure", text: state, reference: "warning",
-                        font: HUDStyle.readingFont(scale: scale, highlighted: true), color: .white,
+                        font: HUDStyle.readingFont(highlighted: true), color: .white,
                         help: nil, startsMetric: false, pressureMode: mode)
                     let changed = spacingPreview.configure(sections: [[reading]], showsBattery: false,
-                                                           scale: scale, background: .dark)
+                                                           background: .dark)
                     check(changed == size && meters["pressure"]!.frame == rect,
                           "State and text emphasis cannot move or resize a horizontal meter")
                 }
@@ -380,6 +433,13 @@ import AppKit
                     hud.setResourceOptions(.init(enabled: true, temperature: false, totalUse: true,
                         focusedApp: false, pressureMode: mode), for: .ram)
                     hud.updateMemoryPressure("warning")
+                    if mode.isHistory {
+                        hud.clearMemoryPressureHistory()
+                        for second in 0...30 {
+                            hud.updateMemoryPressureHistory(.init(time: Double(second), level: .medium,
+                                numericValue: 54 + 5 * sin(Double(second) / 5)))
+                        }
+                    }
                     panel.contentView?.layoutSubtreeIfNeeded()
                     let bitmap = container.bitmapImageRepForCachingDisplay(in: container.bounds)!
                     container.cacheDisplay(in: container.bounds, to: bitmap)

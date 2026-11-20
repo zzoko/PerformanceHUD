@@ -4,15 +4,14 @@ import AppKit
 final class HUDMemoryPressureMeterView: NSView {
     private(set) var currentLevel: MemoryPressureMonitor.Level?
     private var mode: HUDMemoryPressureMode = .meter
-    private var scale: CGFloat = 1
     private var background: HUDBackground = .dark
     private var stacked = false
     private static let segmentThickness: CGFloat = 5
 
     var activeSegmentCount: Int { currentLevel.map { $0.rawValue + 1 } ?? 0 }
     override var intrinsicContentSize: NSSize {
-        NSSize(width: (stacked ? 21.78 : 72.6) * scale,
-               height: (stacked ? 3 * Self.segmentThickness + 4 : 12) * scale)
+        NSSize(width: (stacked ? 21.78 : 72.6),
+               height: (stacked ? 3 * Self.segmentThickness + 4 : 12))
     }
 
     init() {
@@ -30,12 +29,11 @@ final class HUDMemoryPressureMeterView: NSView {
 
     required init?(coder: NSCoder) { fatalError("Use init()") }
 
-    func configure(mode: HUDMemoryPressureMode, scale: HUDScale, background: HUDBackground,
+    func configure(mode: HUDMemoryPressureMode, background: HUDBackground,
                    stacked: Bool = false) {
         self.mode = mode
         self.background = background
-        if self.scale != CGFloat(scale.rawValue) || self.stacked != stacked {
-            self.scale = CGFloat(scale.rawValue)
+        if self.stacked != stacked {
             self.stacked = stacked
             invalidateIntrinsicContentSize()
         }
@@ -52,9 +50,9 @@ final class HUDMemoryPressureMeterView: NSView {
         guard mode.display == .meter, let currentLevel else { return }
         let neutral = HUDStyle.readingColor(background: background)
         let active = HUDStyle.pressureColor(for: mode.usesStateColor ? currentLevel : nil, background: background)
-        let gap = (stacked ? 2 : 3) * scale
+        let gap: CGFloat = stacked ? 2 : 3
         let width = stacked ? bounds.width : (bounds.width - 2 * gap) / 3
-        let height = Self.segmentThickness * scale
+        let height = Self.segmentThickness
         for index in 0..<3 {
             let isActive = index < activeSegmentCount
             // Inactive segments progress from lighter grey in the middle to
@@ -65,7 +63,7 @@ final class HUDMemoryPressureMeterView: NSView {
             let rect = NSRect(x: stacked ? 0 : CGFloat(index) * (width + gap),
                               y: stacked ? CGFloat(index) * (height + gap) : (bounds.height - height) / 2,
                               width: width, height: height)
-            NSBezierPath(roundedRect: rect, xRadius: 2 * scale, yRadius: 2 * scale).fill()
+            NSBezierPath(roundedRect: rect, xRadius: 2, yRadius: 2).fill()
         }
     }
 }

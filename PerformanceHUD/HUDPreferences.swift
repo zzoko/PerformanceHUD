@@ -31,7 +31,7 @@ enum HUDPreferences {
                     "hud.battery.heatWarning.enabled", "hud.battery.heatWarning.threshold",
                     "hud.group.ram.details", "hud.group.ram.pressure", "hud.group.ram.pressureMode", "hud.group.ram.pressureGraphStyle", "hud.fan.usage", "hud.fan.mode",
                     "hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted", "hud.misc.readings",
-                    "hud.misc.chipMode", "hud.metric.deviceInfo", "hud.deviceInfo.chipMode", "hud.deviceInfo.os"]
+                    "hud.misc.chipMode", "hud.misc.highlighted", "hud.metric.deviceInfo", "hud.deviceInfo.chipMode", "hud.deviceInfo.os"]
         keys += HUDMetric.allCases.map { metricKey($0) }
         for group in HUDResourceGroup.allCases {
             keys += ["enabled", "temperature", "power", "highlighted", "usageMode", "heatWarning.enabled", "heatWarning.threshold"].map {
@@ -259,7 +259,8 @@ enum HUDPreferences {
         if let mode = store.string(forKey: "hud.misc.chipMode") {
             return HUDMiscOptions(enabled: store.bool(forKey: metricKey(.misc)),
                 readings: selected ?? Set(HUDMiscReading.allCases),
-                chipMode: HUDChipDisplayMode(rawValue: mode) ?? .full)
+                chipMode: HUDChipDisplayMode(rawValue: mode) ?? .full,
+                highlighted: store.bool(forKey: "hud.misc.highlighted"))
         }
         let oldMisc = HUDMiscOptions(enabled: store.bool(forKey: metricKey(.misc)),
             readings: selected ?? Set(HUDMiscReading.liveReadings))
@@ -273,6 +274,7 @@ enum HUDPreferences {
         store.set(options.enabled, forKey: metricKey(.misc))
         store.set(options.readings.map(\.rawValue).sorted(), forKey: "hud.misc.readings")
         store.set(options.chipMode == .tier ? "tier" : "full", forKey: "hud.misc.chipMode")
+        store.set(options.highlighted, forKey: "hud.misc.highlighted")
     }
 
     static func isMetricEnabled(_ metric: HUDMetric, in store: UserDefaults = .standard) -> Bool {
@@ -341,7 +343,6 @@ enum HUDPreferences {
 
     static func fanOptions(in store: UserDefaults) -> HUDFanOptions {
         HUDFanOptions(enabled: isMetricEnabled(.fans, in: store),
-            usage: store.object(forKey: "hud.fan.usage") as? Bool ?? true,
             mode: store.string(forKey: "hud.fan.mode").flatMap(HUDFanMode.init(rawValue:)) ?? .both,
             average: store.object(forKey: "hud.fan.average") as? Bool ?? true,
             averageMode: store.string(forKey: "hud.fan.averageMode").flatMap(HUDFanAverageMode.init(rawValue:)) ?? .horizontal,
@@ -350,7 +351,6 @@ enum HUDPreferences {
 
     static func setFanOptions(_ options: HUDFanOptions, in store: UserDefaults) {
         setMetricEnabled(.fans, enabled: options.enabled, in: store)
-        store.set(options.usage, forKey: "hud.fan.usage")
         store.set(options.mode.rawValue, forKey: "hud.fan.mode")
         store.set(options.average, forKey: "hud.fan.average")
         store.set(options.averageMode.rawValue, forKey: "hud.fan.averageMode")

@@ -1,12 +1,13 @@
 import AppKit
 
 enum HUDStyle {
+    static let stateGreen = NSColor(srgbRed: 0.29, green: 0.90, blue: 0.46, alpha: 1)
     static let pressureRed = NSColor(srgbRed: 1, green: 0.39, blue: 0.36, alpha: 1)
     static let warningYellow = NSColor(srgbRed: 1, green: 0.85, blue: 0.24, alpha: 1)
 
     static func pressureColor(for level: MemoryPressureMonitor.Level?, background: HUDBackground) -> NSColor {
         switch level {
-        case .low: return NSColor(srgbRed: 0.29, green: 0.90, blue: 0.46, alpha: 1)
+        case .low: return stateGreen
         case .medium: return warningYellow
         case .high: return pressureRed
         case nil: return readingColor(background: background)
@@ -47,32 +48,18 @@ enum HUDStyle {
 
     // MARK: - Base Sizes
 
-    private static let baseValueColumnRight: CGFloat = 148
-    private static let baseWidth: CGFloat = 176
+    static let valueColumnRight: CGFloat = 148
+    static let width: CGFloat = 176
 
-    static func valueColumnRight(
-        scale: HUDScale
-    ) -> CGFloat {
-        baseValueColumnRight
-            * CGFloat(scale.rawValue)
-    }
-
-    static func width(
-        scale: HUDScale
-    ) -> CGFloat {
-        baseWidth
-            * CGFloat(scale.rawValue)
-    }
-    
     static let screenEdgeInset: CGFloat = 20
 
-    private static let baseHorizontalPadding: CGFloat = 14
-    private static let baseVerticalPadding: CGFloat = 14
+    static let horizontalPadding: CGFloat = 14
+    static let verticalPadding: CGFloat = 14
 
-    private static let baseRowHeight: CGFloat = 21
-    private static let baseRowSpacing: CGFloat = 6
+    static let rowHeight: CGFloat = 21
+    static let rowSpacing: CGFloat = 6
 
-    private static let baseMetricColumnSpacing: CGFloat = 8
+    static let metricColumnSpacing: CGFloat = 8
     static let horizontalPowerReference = "999.9 W"
     static let horizontalTemperatureReference = "149°C"
     static let horizontalPercentageReference = "100%"
@@ -88,27 +75,43 @@ enum HUDStyle {
         return ceil(max(sizing.intrinsicContentSize.width, value.intrinsicContentSize.width))
     }
 
+    struct StorageRateColumns {
+        let readLabelWidth: CGFloat
+        let valueWidth: CGFloat
+        let readValueTrailing: CGFloat
+
+        @MainActor
+        init() {
+            let label = NSTextField(labelWithString: "Read")
+            label.font = HUDStyle.smallLabelFont()
+            readLabelWidth = label.intrinsicContentSize.width
+            valueWidth = HUDStyle.horizontalColumnWidth(text: "", reference: "999.9 MB/s",
+                                                        font: HUDStyle.readingFont(highlighted: true))
+            readValueTrailing = readLabelWidth + HUDStyle.metricColumnSpacing + valueWidth
+        }
+    }
+
     // Stable full CPU reading area, also shared by history and core details.
     // Live digits and hidden slots do not move the left edge of this reference.
     @MainActor
-    static func verticalReadingClusterWidth(scale: HUDScale, power: NSFont,
+    static func verticalReadingClusterWidth(power: NSFont,
                                             temperature: NSFont, usage: NSFont) -> CGFloat {
         let field = NSTextField(labelWithString: "0.0 W")
         field.font = power
         return field.intrinsicContentSize.width
-            + verticalPowerTrailingInset(scale: scale, temperature: temperature, usage: usage)
+            + verticalPowerTrailingInset(temperature: temperature, usage: usage)
     }
 
     // The complete reading row's watts edge, even if Temperature or Use is
     // hidden. Core GHz stays clear of its bars when other options change.
     @MainActor
-    static func verticalPowerTrailingInset(scale: HUDScale, temperature: NSFont, usage: NSFont) -> CGFloat {
+    static func verticalPowerTrailingInset(temperature: NSFont, usage: NSFont) -> CGFloat {
         let references: [(String, NSFont)] = [("149°C", temperature), ("100%", usage)]
         return references.reduce(CGFloat.zero) { width, reference in
             let field = NSTextField(labelWithString: reference.0)
             field.font = reference.1
             return width + field.intrinsicContentSize.width
-        } + 2 * metricColumnSpacing(scale: scale)
+        } + 2 * metricColumnSpacing
     }
 
     // Anchor the HUD inside a centered 16:9 viewport, including letterboxing.
@@ -123,31 +126,7 @@ enum HUDStyle {
         )
     }
 
-    // MARK: - Scaled Sizes
-
-    static func horizontalPadding(
-        scale: HUDScale
-    ) -> CGFloat {
-
-        baseHorizontalPadding
-        * CGFloat(scale.rawValue)
-    }
-
-    static func verticalPadding(
-        scale: HUDScale
-    ) -> CGFloat {
-
-        baseVerticalPadding
-        * CGFloat(scale.rawValue)
-    }
-
-    static func rowHeight(
-        scale: HUDScale
-    ) -> CGFloat {
-
-        baseRowHeight
-        * CGFloat(scale.rawValue)
-    }
+    // MARK: - Layout
 
     // With the four-digit FPS column, these gaps leave about 30 / 53 pt of visible space at 144 FPS.
     static func horizontalFPSLabelGap(for size: HUDFPSValueSize) -> CGFloat {
@@ -157,81 +136,72 @@ enum HUDStyle {
     static let memoryLabelValueSpacing: CGFloat = 4
     static let fpsHistoryFadeExtension: CGFloat = 16
 
-    static func rowHeight(for metric: HUDMetric, scale: HUDScale) -> CGFloat {
+    enum HeadingSpacing { case tight, regular }
+
+    // Vertical distance from a category heading's baseline to its first detail baseline.
+    static func headingToDetailSpacing(_ spacing: HeadingSpacing = .tight) -> CGFloat {
+        spacing == .regular ? rowHeight + rowSpacing : 20
+    }
+
+    static func rowHeight(for metric: HUDMetric) -> CGFloat {
         // Give the fade its own depth below the stroke, including the former divider gap.
         if metric == .fpsGraph {
-            return (24 + fpsHistoryFadeExtension) * CGFloat(scale.rawValue) + rowSpacing(scale: scale)
+            return (24 + fpsHistoryFadeExtension) + rowSpacing
         }
-        let detailLines = metric == .ramTotal ? 3 : 0
-        let detailGroupSpacing = detailLines > 0 ? rowSpacing(scale: scale) : 0
-        return rowHeight(scale: scale) + detailGroupSpacing + CGFloat(detailLines) * ramDetailHeight(scale: scale)
+        if metric == .ramTotal { return headingToDetailSpacing(.tight) + 2 * ramDetailHeight() }
+        return rowHeight
     }
 
-    static func ramDetailHeight(scale: HUDScale) -> CGFloat {
-        18 * CGFloat(scale.rawValue)
+    static func ramDetailHeight() -> CGFloat {
+        18
     }
 
-    static func pressureHistoryBottomExtension(scale: HUDScale, expanded: Bool = true) -> CGFloat {
+    static func pressureHistoryBottomExtension(expanded: Bool = true) -> CGFloat {
         // Reach the next divider's centre, retaining the endpoint halo padding.
-        let base = rowSpacing(scale: scale) + dividerHeight(scale: scale, afterFPS: false)
-            + (0.25 - 5 + 3.5) * CGFloat(scale.rawValue)
-        let extra = (ramDetailHeight(scale: scale) + base - 7 * CGFloat(scale.rawValue)) * 0.5
+        let base = rowSpacing + dividerHeight(afterFPS: false)
+            + (0.25 - 5 + 3.5)
+        let extra = (ramDetailHeight() + base - 7) * 0.5
         return base + (expanded ? extra : 0)
     }
 
-    static func smallLabelFont(scale: HUDScale) -> NSFont {
-        TextStyle.label.font(ofSize: baseReadingFontSize * CGFloat(scale.rawValue))
+    static func smallLabelFont() -> NSFont {
+        TextStyle.label.font(ofSize: baseReadingFontSize)
     }
 
-    static func ramDetailFont(scale: HUDScale) -> NSFont {
-        TextStyle.reading.font(ofSize: baseReadingFontSize * CGFloat(scale.rawValue))
+    static func ramDetailFont() -> NSFont {
+        TextStyle.reading.font(ofSize: baseReadingFontSize)
     }
 
-    static func readingFont(scale: HUDScale, highlighted: Bool) -> NSFont {
-        (highlighted ? TextStyle.emphasizedReading : .reading).font(ofSize: baseReadingFontSize * CGFloat(scale.rawValue))
-    }
-
-    static func rowSpacing(
-        scale: HUDScale
-    ) -> CGFloat {
-
-        baseRowSpacing
-        * CGFloat(scale.rawValue)
-    }
-
-    static func metricColumnSpacing(
-        scale: HUDScale
-    ) -> CGFloat {
-        baseMetricColumnSpacing
-            * CGFloat(scale.rawValue)
+    static func readingFont(highlighted: Bool) -> NSFont {
+        (highlighted ? TextStyle.emphasizedReading : .reading).font(ofSize: baseReadingFontSize)
     }
 
     // Widen the shared columns by 50% of a standard RAM-to-percentage gap.
     // Keep the temperature-to-usage spacing and the outer padding unchanged.
-    static func expandedValueColumnRight(_ current: CGFloat, scale: HUDScale, gapIncrease: CGFloat = 0.5) -> CGFloat {
+    static func expandedValueColumnRight(_ current: CGFloat, gapIncrease: CGFloat = 0.5) -> CGFloat {
         let titleWidth = ("RAM" as NSString).size(withAttributes: [
-            .font: titleFont(for: .ramTotal, scale: scale)
+            .font: titleFont(for: .ramTotal)
         ]).width
         let valueWidth = ("100%" as NSString).size(withAttributes: [
-            .font: valueFont(for: .ramTotal, scale: scale)
+            .font: valueFont(for: .ramTotal)
         ]).width
-        let gap = max(metricColumnSpacing(scale: scale), current - titleWidth - valueWidth)
+        let gap = max(metricColumnSpacing, current - titleWidth - valueWidth)
         return current + gap * gapIncrease
     }
 
     // A fixed 285pt vertical HUD at 1×, including its two side paddings.
     // Reading visibility, emphasis, and category selection never change it.
-    static func verticalValueColumnRight(scale: HUDScale) -> CGFloat {
-        285 * CGFloat(scale.rawValue) - 2 * horizontalPadding(scale: scale)
+    static func verticalValueColumnRight() -> CGFloat {
+        285 - 2 * horizontalPadding
     }
 
     // A compact Vertical HUD keeps its width when switching between FPS and frame time.
-    static func compactFPSValueColumnRight(scale: HUDScale, valueSize: HUDFPSValueSize = .standard) -> CGFloat {
+    static func compactFPSValueColumnRight(valueSize: HUDFPSValueSize = .standard) -> CGFloat {
         let title = NSTextField(labelWithString: HUDFPSMeasure.frameRate.caption)
-        title.font = titleFont(for: .fps, scale: scale)
+        title.font = titleFont(for: .fps)
         let value = NSTextField(labelWithString: HUDFPSMeasure.frameTime.valueWidthReference)
-        value.font = fpsValueFont(scale: scale, highlighted: true, size: valueSize)
-        let gap = metricColumnSpacing(scale: scale)
+        value.font = fpsValueFont(highlighted: true, size: valueSize)
+        let gap = metricColumnSpacing
         return ceil(title.intrinsicContentSize.width) + ceil(value.intrinsicContentSize.width) + gap
             + title.alignmentRectInsets.left + value.alignmentRectInsets.right
     }
@@ -242,50 +212,50 @@ enum HUDStyle {
     private static let baseFontSize: CGFloat = 12
     private static let baseReadingFontSize: CGFloat = baseFontSize
 
-    static func fpsValueFont(scale: HUDScale, highlighted: Bool, size: HUDFPSValueSize = .standard) -> NSFont {
+    static func fpsValueFont(highlighted: Bool, size: HUDFPSValueSize = .standard) -> NSFont {
         (highlighted ? TextStyle.emphasizedReading : .reading).font(
-            ofSize: baseFontSize * CGFloat(scale.rawValue) * CGFloat(size.rawValue))
+            ofSize: baseFontSize * CGFloat(size.rawValue))
     }
 
-    static func fpsValueHeight(scale: HUDScale, size: HUDFPSValueSize) -> CGFloat {
+    static func fpsValueHeight(size: HUDFPSValueSize) -> CGFloat {
         let value = NSTextField(labelWithString: "9999")
-        value.font = fpsValueFont(scale: scale, highlighted: true, size: size)
+        value.font = fpsValueFont(highlighted: true, size: size)
         return ceil(value.intrinsicContentSize.height)
     }
 
-    static func fpsRowHeight(scale: HUDScale, size: HUDFPSValueSize) -> CGFloat {
-        guard size != .standard else { return rowHeight(scale: scale) }
-        return rowHeight(scale: scale) + fpsValueHeight(scale: scale, size: size)
-            - fpsValueHeight(scale: scale, size: .standard)
+    static func fpsRowHeight(size: HUDFPSValueSize) -> CGFloat {
+        guard size != .standard else { return rowHeight }
+        return rowHeight + fpsValueHeight(size: size)
+            - fpsValueHeight(size: .standard)
     }
 
     // Keep the FPS sizing reference at its widest weight so emphasis does not
     // resize the HUD. Visible FPS uses fpsValueFont instead.
-    static func valueFont(for metric: HUDMetric, scale: HUDScale) -> NSFont {
-        if metric == .fps { return fpsValueFont(scale: scale, highlighted: true) }
-        return TextStyle.reading.font(ofSize: baseFontSize * CGFloat(scale.rawValue))
+    static func valueFont(for metric: HUDMetric) -> NSFont {
+        if metric == .fps { return fpsValueFont(highlighted: true) }
+        return TextStyle.reading.font(ofSize: baseFontSize)
     }
 
-    static func primaryLabelHeight(for metric: HUDMetric, scale: HUDScale) -> CGFloat {
-        guard metric == .fps else { return rowHeight(scale: scale) }
+    static func primaryLabelHeight(for metric: HUDMetric) -> CGFloat {
+        guard metric == .fps else { return rowHeight }
         let label = NSTextField(labelWithString: "FPS")
-        label.font = titleFont(for: .fps, scale: scale)
+        label.font = titleFont(for: .fps)
         return ceil(label.intrinsicContentSize.height)
     }
 
-    static func titleFont(for metric: HUDMetric, scale: HUDScale) -> NSFont {
+    static func titleFont(for metric: HUDMetric) -> NSFont {
         switch metric {
         case .fps, .gpu, .gpuTotal, .cpu, .cpuTotal, .aneTotal, .ram, .ramTotal, .storage, .battery:
             // SOC shares the GPU category style. Detail captions remain regular.
-            return NSFont.systemFont(ofSize: baseFontSize * CGFloat(scale.rawValue), weight: .medium)
+            return NSFont.systemFont(ofSize: baseFontSize, weight: .medium)
         default:
-            return TextStyle.label.font(ofSize: baseFontSize * CGFloat(scale.rawValue))
+            return TextStyle.label.font(ofSize: baseFontSize)
         }
     }
 
     // Together with the 6pt stack spacing, match the sample's section positions.
-    static func dividerHeight(scale: HUDScale, afterFPS: Bool = true) -> CGFloat {
-        (afterFPS ? 7 : 9) * CGFloat(scale.rawValue)
+    static func dividerHeight(afterFPS: Bool = true) -> CGFloat {
+        (afterFPS ? 7 : 9)
     }
 
     // MARK: - Text Colors
@@ -318,4 +288,42 @@ enum HUDStyle {
 
     static let windowLevel:
         NSWindow.Level = .screenSaver
+}
+
+
+/// AppKit rounds a field’s intrinsic size on its window's backing grid, which
+/// includes ancestor transforms. Measure HUD text once in logical coordinates
+/// so that changing the magnification cannot change its typographic metrics.
+@MainActor
+final class HUDReadingLabel: NSTextField {
+    private static let measuringField = NSTextField(labelWithString: "")
+    private var measuredFont: NSFont?
+    private var measuredText: String?
+    private var measuredSize = NSSize.zero
+
+    override func invalidateIntrinsicContentSize() {
+        super.invalidateIntrinsicContentSize()
+        if translatesAutoresizingMaskIntoConstraints { superview?.needsLayout = true }
+    }
+
+    override var intrinsicContentSize: NSSize {
+        guard let font else { return super.intrinsicContentSize }
+        if measuredText != stringValue || measuredFont != font {
+            measuredText = stringValue
+            measuredFont = font
+            Self.measuringField.font = font
+            Self.measuringField.stringValue = stringValue
+            measuredSize = Self.measuringField.intrinsicContentSize
+        }
+        return measuredSize
+    }
+}
+
+extension NSView {
+    /// Deliberate presentation exception: a separator always covers at least
+    /// one device pixel, including on a reduced HUD or a lower-density screen.
+    var hudHairline: CGFloat {
+        guard window != nil else { return 0.5 }
+        return max(0.5, convertFromBacking(NSSize(width: 1, height: 1)).width)
+    }
 }

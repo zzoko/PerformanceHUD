@@ -109,7 +109,7 @@ import AppKit
                     hud.setResourceOptions(options, for: .gpu)
                     hud.setResourceOptions(options, for: .cpu)
                     hud.updateTemperatures(.init(cpu: 90, gpu: 100))
-                    let expectedFont = HUDStyle.readingFont(scale: scale, highlighted: highlighted)
+                    let expectedFont = HUDStyle.readingFont(highlighted: highlighted)
                     func verifyResource(_ metric: HUDMetric, warning expected: Bool, _ context: String) {
                         let expectedColor = expected ? NSColor.systemRed : HUDStyle.readingColor(background: background)
                         check(labels[metric]?.textColor == expectedColor, "Vertical temperature colour: \(context)")

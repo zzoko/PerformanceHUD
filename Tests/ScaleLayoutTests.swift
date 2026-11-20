@@ -3,9 +3,56 @@ import AppKit
  @MainActor static func member<T>(_ object: Any, _ name: String) -> T {
   Mirror(reflecting: object).children.first { $0.label == name }!.value as! T
  }
+    @MainActor static func uniformFrames() {
+        let hud = HUDWindowController()
+        let panel: HUDPanel = member(hud, "panel")
+        panel.alphaValue = 0
+        hud.setHUDEnabled(true)
+        hud.setAutoHideMode(.off)
+        hud.setAlignment(.vertical)
+        hud.setHUDScale(.normal)
+        hud.setResourceOptions(.init(enabled: true, temperature: false, totalUse: true, focusedApp: false, details: true, pressure: true, pressureMode: .colorHistory), for: .ram)
+        hud.setFanOptions(.init(mode: .both, average: false))
+        hud.updateFans(.init(status: .ready, fans: [.init(id: 0, rpm: 2340, maximumRPM: 6000)]))
+        hud.setStorageOptions(.init(enabled: true, details: true))
+        hud.updateStorage([.init(id: 1, name: "Drive", internalDrive: true, freeBytes: 256_000_000_000, readMBps: 84.2, writeMBps: 3.1)])
+        let body: NSView = member(hud, "container")
+        let physical: [HUDMetric: NSTextField] = member(hud, "ramDetailTitleLabels")
+        let swap: NSTextField = member(hud, "ramSwapValueLabel")
+        let graph: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
+        let fans: HUDFanView = member(hud, "fanView")
+        let storage: HUDStorageView = member(hud, "storageView")
+        let read = storage.subviews.flatMap(\.subviews).compactMap { $0 as? NSTextField }.first { $0.stringValue == "84.2 MB/s" }!
+        let dividers: [Int: NSView] = member(hud, "groupDividers")
+        let divider = dividers.sorted { $0.key < $1.key }.first { !$0.value.isHidden }!.value
+        // Use the glass viewport's window-space origin so dragging and shadow
+        // padding cannot hide a scaling error in a content frame.
+        func frames() -> [String: NSRect] {
+            panel.contentView!.layoutSubtreeIfNeeded()
+            func frame(_ view: NSView, _ rect: NSRect? = nil) -> NSRect {
+                view.convert(rect ?? view.bounds, to: body)
+            }
+            return ["Physical": frame(physical[.ramTotal]!), "Pressure": frame(graph), "Swap": frame(swap),
+                    "Fan RPM": frame(fans, fans.frames(forFanAt: 0).rpm!), "Storage Read": frame(read), "Divider": frame(divider)]
+        }
+        let base = frames()
+        func edges(_ rect: NSRect) -> [CGFloat] { [rect.minX, rect.minY, rect.maxX, rect.maxY] }
+        for factor in [0.5, 1.37, 2.0, 1.0] {
+            hud.setHUDScale(.init(rawValue: factor))
+            for (name, rect) in frames() {
+                let expected = edges(base[name]!).map { $0 * factor }
+                let error = zip(edges(rect), expected).map { abs($0 - $1) }.max()! * panel.backingScaleFactor
+                precondition(error <= 0.500001, "\(name) moved \(error) device pixels at \(factor)×")
+            }
+        }
+        print("PASS: Physical, pressure, Swap, fan RPM, storage Read and divider edges scale to within half a device pixel")
+        hud.shutdown()
+    }
  @MainActor static func main() throws {
   _ = NSApplication.shared
   UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "off", "hud.background": "dark", "hud.fps.dynamic": false], forName: UserDefaults.argumentDomain)
+  uniformFrames()
+  if CommandLine.arguments.contains("--frames-only") { return }
   let hud = HUDWindowController()
   let panel: HUDPanel = member(hud, "panel")
   panel.alphaValue = 0

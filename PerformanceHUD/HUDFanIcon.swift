@@ -4,7 +4,11 @@ import CoreText
 /// A soft rounded-square fan badge, drawn as vectors at every HUD size.
 @MainActor
 enum HUDFanIcon {
-    static let side: CGFloat = 21
+    static let side: CGFloat = 20
+    private static let outline = NSRect(x: 6, y: 6, width: 88, height: 88)
+    private static let strokeWidth: CGFloat = 6
+    // Leading inset of the painted outline inside the badge at normal scale.
+    static let inkInset = side * (outline.minX - strokeWidth / 2) / 100
     private static var images: [String: NSImage] = [:]
 
     static func image(marker: String) -> NSImage {
@@ -26,9 +30,8 @@ enum HUDFanIcon {
         placement.concat()
         color.setFill()
         color.setStroke()
-        let badge = NSBezierPath(roundedRect: NSRect(x: 6, y: 6, width: 88, height: 88),
-                                 xRadius: 20, yRadius: 20)
-        badge.lineWidth = 6
+        let badge = NSBezierPath(roundedRect: outline, xRadius: 20, yRadius: 20)
+        badge.lineWidth = strokeWidth
         badge.stroke()
         let font = NSFont.systemFont(ofSize: marker.count > 1 ? 44 : 58, weight: .semibold)
         // Centre the visible glyph outlines, not the font's line box (which

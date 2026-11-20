@@ -53,7 +53,7 @@ import AppKit
         selection.resources[.ane] = .init(enabled: true, temperature: false, totalUse: false, focusedApp: false, power: true)
         selection.package.enabled = true
         selection.resources[.ram] = .init(enabled: true, temperature: false, totalUse: true, focusedApp: true, details: true)
-        selection.fans = .init(enabled: true, usage: true, mode: .both, average: false)
+        selection.fans = .init(enabled: true, mode: .both, average: false)
         selection.battery = .init(enabled: true, temperature: true, charge: true)
         selection.misc = .init(enabled: true, readings: [.chip, .os])
         let fans = FanSample(status: .ready, fans: [.init(id: 1, rpm: 4000, maximumRPM: 8000), .init(id: 0, rpm: 0, maximumRPM: 6000)])

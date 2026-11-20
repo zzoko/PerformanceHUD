@@ -9,7 +9,7 @@ final class HUDGlassMenuView: NSView {
         trackingMode: .selectOne, target: nil, action: nil)
     private let slider = HUDFillSlider()
     private let clearLabel = NSTextField(labelWithString: "Clear")
-    private let frostedLabel = NSTextField(labelWithString: "Frosted")
+    private let tintedLabel = NSTextField(labelWithString: "Tinted")
     private let valueLabel = NSTextField(labelWithString: "")
 
     init(options: HUDGlassOptions, systemStrength: Double) {
@@ -33,15 +33,15 @@ final class HUDGlassMenuView: NSView {
         slider.isContinuous = true
         slider.target = self
         slider.action = #selector(strengthChanged)
-        slider.setAccessibilityLabel("Liquid Glass, Clear to Frosted")
-        for endpoint in [clearLabel, frostedLabel] {
+        slider.setAccessibilityLabel("Liquid Glass, Clear to Tinted")
+        for endpoint in [clearLabel, tintedLabel] {
             endpoint.font = .menuFont(ofSize: 0)
             endpoint.setContentHuggingPriority(.required, for: .horizontal)
             endpoint.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
         valueLabel.font = .monospacedDigitSystemFont(ofSize: NSFont.menuFont(ofSize: 0).pointSize, weight: .regular)
         valueLabel.alignment = .center
-        for view in [label, control, clearLabel, slider, frostedLabel, valueLabel] {
+        for view in [label, control, clearLabel, slider, tintedLabel, valueLabel] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
@@ -61,8 +61,8 @@ final class HUDGlassMenuView: NSView {
             valueLabel.leadingAnchor.constraint(equalTo: slider.trailingAnchor, constant: HUDMenuLayout.sliderValueSpacing),
             valueLabel.centerYAnchor.constraint(equalTo: slider.centerYAnchor),
             valueLabel.widthAnchor.constraint(equalToConstant: 44),
-            frostedLabel.leadingAnchor.constraint(equalTo: slider.trailingAnchor, constant: HUDMenuLayout.spacing),
-            frostedLabel.centerYAnchor.constraint(equalTo: slider.centerYAnchor)
+            tintedLabel.leadingAnchor.constraint(equalTo: slider.trailingAnchor, constant: HUDMenuLayout.spacing),
+            tintedLabel.centerYAnchor.constraint(equalTo: slider.centerYAnchor)
         ])
         refresh()
     }
@@ -98,7 +98,7 @@ final class HUDGlassMenuView: NSView {
         valueLabel.stringValue = percentage
         slider.setAccessibilityValueDescription("\(percentage) strength")
         slider.needsDisplay = true
-        for label in [clearLabel, frostedLabel, valueLabel] {
+        for label in [clearLabel, tintedLabel, valueLabel] {
             label.textColor = slider.isEnabled ? .labelColor : .disabledControlTextColor
         }
     }

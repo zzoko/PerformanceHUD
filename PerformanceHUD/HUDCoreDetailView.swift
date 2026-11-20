@@ -19,19 +19,19 @@ nonisolated enum HUDCoreBarLayout {
 
     // Keep processor order, with longer rows first and every row ending at
     // the same reading edge. The same row calculation also sizes the HUD.
-    static func rects(for count: Int, in bounds: NSRect, scale: CGFloat, singleRow: Bool = false) -> [NSRect] {
+    static func rects(for count: Int, in bounds: NSRect, singleRow: Bool = false) -> [NSRect] {
         guard count > 0 else { return [] }
         let sizes = singleRow ? [count] : rowSizes(for: count)
         guard let columns = sizes.first else { return [] }
-        let gap = columnGap * scale
-        let width = min(barWidth * scale,
+        let gap = columnGap
+        let width = min(barWidth,
             max(0, (bounds.width - gap * CGFloat(columns - 1)) / CGFloat(columns)))
         return sizes.enumerated().flatMap { row, columns in
             let rowWidth = CGFloat(columns) * width + CGFloat(columns - 1) * gap
             return (0..<columns).map { column in
                 NSRect(x: bounds.maxX - rowWidth + CGFloat(column) * (width + gap),
-                    y: bounds.maxY - barHeight * scale - CGFloat(row) * rowStride * scale,
-                    width: width, height: barHeight * scale)
+                    y: bounds.maxY - barHeight - CGFloat(row) * rowStride,
+                    width: width, height: barHeight)
             }
         }
     }
@@ -53,7 +53,6 @@ final class HUDCoreDetailView: NSView {
     }
     private var rows: [Row] = []
     private var options = HUDCoreOptions()
-    private var scale = HUDScale.normal
     private let topology: CPUCoreTopology
     private var sample = CPUCoreSample.unavailable
     private var frequencies = CPUFrequencySample.unavailable
@@ -69,8 +68,8 @@ final class HUDCoreDetailView: NSView {
         self.gpu = gpu
         super.init(frame: frame)
         for type in gpu || types.isEmpty ? [.init(name: "Cores", count: 0)] : types {
-            let label = NSTextField(labelWithString: type.name)
-            let frequency = NSTextField(labelWithString: "—")
+            let label = HUDReadingLabel(labelWithString: type.name)
+            let frequency = HUDReadingLabel(labelWithString: "")
             for field in [label, frequency] {
                 field.maximumNumberOfLines = 1
                 field.lineBreakMode = .byTruncatingTail
@@ -85,20 +84,20 @@ final class HUDCoreDetailView: NSView {
         }
     }
     required init?(coder: NSCoder) { fatalError("Use init(frame:)") }
-    func height(scale: HUDScale) -> CGFloat {
-        HUDStyle.rowSpacing(scale: scale) + rows.reduce(0) { $0 + rowHeight($1, scale: scale) }
+    func height() -> CGFloat {
+        HUDStyle.rowSpacing + rows.reduce(0) { $0 + rowHeight($1) }
     }
-    private func rowHeight(_ row: Row, scale: HUDScale) -> CGFloat {
+    private func rowHeight(_ row: Row) -> CGFloat {
         let lines = !gpu && options.mode.showsBars ? max(1, HUDCoreBarLayout.rowSizes(for: row.type.count).count) : 1
-        return HUDStyle.ramDetailHeight(scale: scale)
-            + CGFloat(lines - 1) * HUDCoreBarLayout.rowStride * CGFloat(scale.rawValue)
+        return HUDStyle.ramDetailHeight()
+            + CGFloat(lines - 1) * HUDCoreBarLayout.rowStride
     }
 
     // Both sections use the same column description when CPU GHz is visible.
     // GPU follows future CPU placement changes without duplicating its geometry.
     var frequencyColumn: FrequencyColumn {
         let rightAligned = FrequencyColumn(trailingInset: 0,
-            width: 60 * CGFloat(scale.rawValue), alignment: .right)
+            width: 60, alignment: .right)
         if gpu {
             return matchingFrequencyColumn ?? rightAligned
         }
@@ -107,22 +106,20 @@ final class HUDCoreDetailView: NSView {
             width: rightAligned.width, alignment: .right)
     }
 
-    func configure(options: HUDCoreOptions, scale: HUDScale, background: HUDBackground,
+    func configure(options: HUDCoreOptions, background: HUDBackground,
                    powerTrailingInset: CGFloat? = nil, matchingFrequencyColumn: FrequencyColumn? = nil) {
-        self.options = options; self.scale = scale
+        self.options = options
         self.matchingFrequencyColumn = matchingFrequencyColumn
-        let referenceFont = HUDStyle.readingFont(scale: scale, highlighted: false)
-        cpuPowerTrailingInset = powerTrailingInset ?? HUDStyle.verticalPowerTrailingInset(scale: scale,
-            temperature: referenceFont, usage: referenceFont)
+        let referenceFont = HUDStyle.readingFont(highlighted: false)
+        cpuPowerTrailingInset = powerTrailingInset ?? HUDStyle.verticalPowerTrailingInset(temperature: referenceFont, usage: referenceFont)
         for row in rows {
-            row.label.font = HUDStyle.smallLabelFont(scale: scale)
+            row.label.font = HUDStyle.smallLabelFont()
             row.label.textColor = HUDStyle.TextStyle.label.color(background: background)
-            row.frequency.font = HUDStyle.readingFont(scale: scale, highlighted: options.highlighted)
+            row.frequency.font = HUDStyle.readingFont(highlighted: options.highlighted)
             row.frequency.textColor = HUDStyle.readingColor(background: background)
             row.frequency.isHidden = !gpu && !options.mode.showsValue
             row.frequency.alignment = frequencyColumn.alignment
             row.bars?.isHidden = !options.mode.showsBars
-            row.bars?.scale = CGFloat(scale.rawValue)
             row.bars?.tint = HUDStyle.readingColor(background: background)
         }
         if gpu { updateGPU(frequency: gpuFrequency) }
@@ -135,7 +132,7 @@ final class HUDCoreDetailView: NSView {
             guard let bars = row.bars else { continue }
             let ids = topology.groups.first { $0.name == row.type.name }?.ids ?? []
             let ghz = frequencies.average(for: ids)
-            row.frequency.stringValue = ghz.map { String(format: "%.1f GHz", $0) } ?? "—"
+            row.frequency.stringValue = ghz.map { String(format: "%.1f GHz", $0) } ?? ""
             row.frequency.setAccessibilityLabel("\(row.type.name) active-time-weighted frequency during sample")
             bars.values = ids.isEmpty ? Array(repeating: nil, count: row.type.count) : ids.map { sample.usage[$0] }
             bars.setAccessibilityValue(bars.values.enumerated().map { index, value in
@@ -146,71 +143,68 @@ final class HUDCoreDetailView: NSView {
     func updateGPU(frequency: Double?) {
         guard gpu, let row = rows.first else { return }
         gpuFrequency = frequency
-        row.frequency.stringValue = frequency.map { String(format: "%.1f GHz", $0) } ?? "—"
+        row.frequency.stringValue = frequency.map { String(format: "%.1f GHz", $0) } ?? ""
         row.frequency.setAccessibilityLabel("GPU average active frequency during sample")
     }
 
     // Horizontal reuses the existing detail-label/value pairs (PHY/SWP), with
     // the same baseline, reserved numeric width, emphasis, and tight pair gap.
     // Bars and Both share a stack with one unwrapped row per core type.
-    func horizontalReadings() -> [HUDHorizontalView.Reading] {
+    func horizontalReadings(background: HUDBackground) -> [HUDHorizontalView.Reading] {
+        let coreRows = rows.map { row in
+            HUDHorizontalView.CoreRow(name: row.type.name,
+                frequency: gpu || options.mode.showsValue ? row.frequency.stringValue : nil,
+                activity: row.bars?.values ?? [])
+        }
+        return Self.horizontalReadings(rows: coreRows, gpu: gpu, options: options, background: background)
+    }
+
+    static func horizontalReadings(rows: [HUDHorizontalView.CoreRow], gpu: Bool, options: HUDCoreOptions,
+                                   background: HUDBackground) -> [HUDHorizontalView.Reading] {
         let metric: HUDMetric = gpu ? .gpuCores : .cpuCores
-        func caption(_ row: Row) -> String {
-            if gpu { return "C" }
-            switch row.type.name {
-            case "Super": return "S"
-            case "Efficiency": return "E"
-            case "Performance": return "P"
-            default: return row.type.name
-            }
+        let font = HUDStyle.readingFont(highlighted: options.highlighted)
+        let color = HUDStyle.readingColor(background: background)
+        if !gpu && options.mode.showsBars {
+            return [.init(id: "cpu.coreBars", text: "", reference: "", font: font, color: color,
+                help: nil, startsMetric: false, metric: metric, leftAligned: true, coreRows: rows)]
         }
-        if !gpu && options.mode.showsBars, let first = rows.first {
-            let stack = rows.map { row in
-                HUDHorizontalView.CoreRow(name: row.type.name, caption: caption(row),
-                    frequency: options.mode.showsValue ? row.frequency.stringValue : nil,
-                    activity: row.bars?.values ?? [])
-            }
-            return [.init(id: "cpu.coreBars", text: "", reference: "", font: first.frequency.font!,
-                color: first.frequency.textColor!, help: nil, startsMetric: false,
-                metric: metric, leftAligned: true, coreRows: stack)]
-        }
-        return rows.flatMap { row in
-            let caption = caption(row)
-            return [("title", row.label), ("value", row.frequency)].map { role, field in
-                HUDHorizontalView.Reading(id: "\(metric.rawValue).\(row.type.name).\(role)",
-                    text: role == "title" ? caption : field.stringValue,
-                    reference: role == "title" ? caption : HUDStyle.horizontalFrequencyReference,
-                    font: field.font!, color: field.textColor!, help: row.frequency.accessibilityLabel(),
-                    startsMetric: false, metric: metric,
-                    leadingGap: role == "value" ? HUDStyle.memoryLabelValueSpacing : nil, leftAligned: true)
-            }
+        return rows.flatMap { row -> [HUDHorizontalView.Reading] in
+            let caption = gpu ? "C" : row.caption
+            let id = "\(metric.rawValue).\(row.name)"
+            let help = gpu ? "GPU average active frequency during sample"
+                : "\(row.name) active-time-weighted frequency during sample"
+            return [.init(id: "\(id).title", text: caption, reference: caption, font: HUDStyle.smallLabelFont(),
+                          color: HUDStyle.TextStyle.label.color(background: background), help: help,
+                          startsMetric: false, metric: metric, leftAligned: true),
+                    .init(id: "\(id).value", text: row.frequency ?? "", reference: HUDStyle.horizontalFrequencyReference,
+                          font: font, color: color, help: help, startsMetric: false, metric: metric,
+                          leadingGap: HUDStyle.memoryLabelValueSpacing, leftAligned: true)]
         }
     }
 
     override func layout() {
         super.layout()
-        let factor = CGFloat(scale.rawValue)
-        let height = HUDStyle.ramDetailHeight(scale: scale)
+        let height = HUDStyle.ramDetailHeight()
         var y: CGFloat = 0
         for row in rows {
-            defer { y += rowHeight(row, scale: scale) }
+            defer { y += rowHeight(row) }
             let h = row.label.intrinsicContentSize.height
             func place(_ field: NSTextField, x: CGFloat, width: CGFloat) {
-                field.frame = field.frame(forAlignmentRect: NSRect(x: x, y: y + (height - h) / 2, width: width, height: h))
+                field.frame = field.frame(forAlignmentRect: NSRect(x: x, y: y, width: width, height: h))
             }
             let right = bounds.width - row.frequency.alignmentRectInsets.right
             let column = frequencyColumn
-            let gap = HUDStyle.metricColumnSpacing(scale: scale)
+            let gap = HUDStyle.metricColumnSpacing
             let frequencyLeft = right - column.trailingInset - column.width
             let labelLeft = row.label.alignmentRectInsets.left
             place(row.label, x: labelLeft, width: max(0, frequencyLeft - gap - labelLeft))
             place(row.frequency, x: frequencyLeft, width: column.width)
             if let bars = row.bars {
-                let graphWidth = HUDCoreBarLayout.width * factor
+                let graphWidth = HUDCoreBarLayout.width
                 let graphLeft = right - graphWidth
-                let barHeight = HUDCoreBarLayout.barHeight * factor
-                bars.frame = NSRect(x: graphLeft, y: y + (height - barHeight) / 2,
-                    width: graphWidth, height: barHeight + rowHeight(row, scale: scale) - height)
+                let barHeight = HUDCoreBarLayout.barHeight
+                bars.frame = NSRect(x: graphLeft, y: y + (h - barHeight) / 2,
+                    width: graphWidth, height: barHeight + rowHeight(row) - height)
             }
         }
     }
@@ -220,12 +214,11 @@ final class HUDCoreDetailView: NSView {
 final class HUDCPUCoreBarsView: NSView {
     var singleRow = false
     var values: [Double?] = [] { didSet { needsDisplay = true } }
-    var scale: CGFloat = 1
     var tint = NSColor.labelColor { didSet { needsDisplay = true } }
     override func draw(_ dirtyRect: NSRect) {
         guard !values.isEmpty else { return }
-        for (rect, value) in zip(HUDCoreBarLayout.rects(for: values.count, in: bounds, scale: scale, singleRow: singleRow), values) {
-            let path = NSBezierPath(roundedRect: rect, xRadius: scale, yRadius: scale)
+        for (rect, value) in zip(HUDCoreBarLayout.rects(for: values.count, in: bounds, singleRow: singleRow), values) {
+            let path = NSBezierPath(roundedRect: rect, xRadius: 1, yRadius: 1)
             tint.withAlphaComponent(0.18).setFill(); path.fill()
             guard let value else { continue }
             NSGraphicsContext.saveGraphicsState(); path.addClip()

@@ -2,6 +2,14 @@
 
 [← Back to README](../README.md)
 
+### v3.7
+
+- The HUD now scales as one layout from **0.5× to 2×**. Text, graphs, and columns keep their proportions as you resize it, and thin dividers stay visible at the smallest size.
+- **Fans** can show up to four individual fans in pairs or one average across all detected fans. Each fan keeps its badge in **Bar**, **RPM**, and **Both**. Menu-bar pins show RPM.
+- CPU and GPU **Cores** can now be pinned. Lines beside menu controls show which formats a pin supports. Visible pins replace the lightning bolt, and pinned memory pressure uses a meter when **Graph** is selected.
+- In Vertical, **Memory** puts Swap and Physical on one row. **Misc** has a single bold control for all its values. Readings stay blank while loading, with a dash reserved for Resolution.
+- FPS history uses shorter colored marks to distinguish consecutive hitches. Battery watts briefly pulse green when charging begins and red when draining begins. Appearance and logging hotkey indicators follow the HUD’s Liquid Glass setting.
+
 ### v3.6
 
 - Added **Storage** below Memory. Each mounted physical drive gets one free-space reading, with optional read and write speeds. Choose **Internal**, **External**, or **Both**. Drives stack in Vertical and sit side by side in Horizontal.

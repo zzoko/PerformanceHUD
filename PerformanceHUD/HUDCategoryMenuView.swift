@@ -23,6 +23,7 @@ enum HUDCategoryLayout {
     static let rowHeight: CGFloat = 28
     static let modeHeight: CGFloat = 24
     static let padding: CGFloat = 6
+    static let pinConnectionHeight: CGFloat = 4
 }
 
 @MainActor
@@ -30,10 +31,13 @@ struct HUDCategoryMenuRow {
     let reading: NSView
     var mode: NSView? = nil
     var emphasis: NSView? = nil
-    var menuBar: NSView? = nil
+    var menuBar: HUDMenuBarButton? = nil
     var fullWidth = false
 
     var emphasisView: NSView? { emphasis ?? (reading as? HUDReadingCheckbox)?.emphasisControl }
+    var height: CGFloat {
+        HUDCategoryLayout.rowHeight + (menuBar != nil && mode is NSSegmentedControl ? HUDCategoryLayout.pinConnectionHeight : 0)
+    }
 }
 
 @MainActor
@@ -56,7 +60,7 @@ class HUDCategoryMenuView: NSView {
 
     func makeMenuBarButton(for reading: HUDMenuBarReading, title: String) -> HUDMenuBarButton {
         if let button = menuBarButtons[reading] { return button }
-        let button = HUDMenuBarButton()
+        let button = HUDMenuBarButton(reading: reading)
         button.setAccessibilityLabel("Show \(title) in menu bar")
         button.state = isMenuBarSelected(reading) ? .on : .off
         button.onChange = { [weak self] selected in
@@ -100,6 +104,10 @@ class HUDCategoryMenuView: NSView {
                 control.controlSize = .regular
                 control.font = .menuFont(ofSize: 0)
                 control.segmentStyle = .rounded
+                if let pin = row.menuBar {
+                    control.segmentDistribution = .fillEqually
+                    pin.modeControl = control
+                }
                 control.sizeToFit()
             }
         }
@@ -110,7 +118,7 @@ class HUDCategoryMenuView: NSView {
             newViews.forEach { addSubview($0) }
         }
         rows = newRows
-        let height = CGFloat(rows.count) * HUDCategoryLayout.rowHeight + 2 * HUDCategoryLayout.padding
+        let height = rows.reduce(2 * HUDCategoryLayout.padding) { $0 + $1.height }
         let changed = frame.height != height
         setFrameSize(NSSize(width: frame.width, height: height))
         needsLayout = true
@@ -123,13 +131,14 @@ class HUDCategoryMenuView: NSView {
         let grid = HUDCategoryLayout.self
         category?.frame = NSRect(x: grid.categoryLeading, y: grid.padding,
                                  width: grid.categoryWidth, height: grid.rowHeight)
-        for (index, row) in rows.enumerated() {
-            let y = grid.padding + CGFloat(index) * grid.rowHeight
+        let fullWidthEnd = rows.contains { $0.emphasisView != nil } ? grid.modeLeading + grid.modeWidth : bounds.width - 14
+        var y = grid.padding
+        for row in rows {
             let label = row.reading as? NSTextField
             let inset: CGFloat = label == nil ? 0 : grid.readingLabelInset
             let height = label?.intrinsicContentSize.height ?? (grid.rowHeight - 4)
             row.reading.frame = NSRect(x: grid.readingLeading + inset, y: y + (grid.rowHeight - height) / 2,
-                width: (row.fullWidth ? bounds.width - grid.readingLeading - 14 : grid.readingWidth) - inset,
+                width: (row.fullWidth ? fullWidthEnd - grid.readingLeading : grid.readingWidth) - inset,
                 height: height)
             if let mode = row.mode {
                 // Apply native alignment insets so every selector's visible bezel shares a column.
@@ -140,19 +149,51 @@ class HUDCategoryMenuView: NSView {
             }
             row.emphasisView?.frame = NSRect(x: grid.emphasisLeading, y: y + 3, width: 22, height: 22)
             row.menuBar?.frame = NSRect(x: grid.menuBarLeading, y: y + 3, width: 22, height: 22)
+            y += row.height
         }
     }
 
     override func draw(_ dirtyRect: NSRect) {
         NSColor.labelColor.withAlphaComponent(0.065).setFill()
         NSRect(x: 30, y: bounds.height - 0.5, width: bounds.width - 44, height: 0.5).fill()
-        if let first = rows.firstIndex(where: { $0.menuBar != nil }),
-           let last = rows.lastIndex(where: { $0.menuBar != nil }) {
+        if let first = rows.first(where: { $0.menuBar != nil })?.menuBar,
+           let last = rows.last(where: { $0.menuBar != nil })?.menuBar {
             let grid = HUDCategoryLayout.self
             let x = (grid.emphasisLeading + 22 + grid.menuBarLeading) / 2 - 0.25
-            let y = grid.padding + CGFloat(first) * grid.rowHeight + 3
-            NSRect(x: x, y: y, width: 0.5,
-                   height: CGFloat(last - first) * grid.rowHeight + 22).fill()
+            NSRect(x: x, y: first.frame.minY, width: 0.5, height: last.frame.maxY - first.frame.minY).fill()
+        }
+        for row in rows {
+            guard let pin = row.menuBar, let mode = pin.modeControl else { continue }
+            drawPinConnection(from: mode, to: pin)
+        }
+    }
+
+    private func drawPinConnection(from mode: NSSegmentedControl, to pin: HUDMenuBarButton) {
+        let supported = Set((0..<mode.segmentCount).compactMap { pin.reading.outputSegment(for: $0) }).sorted()
+        guard let first = supported.first else { return }
+        let rect = mode.alignmentRect(forFrame: mode.frame)
+        func center(_ segment: Int) -> CGFloat {
+            rect.minX + (CGFloat(segment) + 0.5) * rect.width / CGFloat(mode.segmentCount)
+        }
+        // Run below the controls so the line passes the B button without touching it.
+        let railY = rect.maxY + HUDCategoryLayout.pinConnectionHeight + 0.5
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: center(first), y: railY))
+        path.line(to: NSPoint(x: pin.frame.midX, y: railY))
+        path.line(to: NSPoint(x: pin.frame.midX, y: pin.frame.maxY))
+        for segment in supported {
+            path.move(to: NSPoint(x: center(segment), y: railY))
+            path.line(to: NSPoint(x: center(segment), y: rect.maxY - 1))
+        }
+        path.lineWidth = 1
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        NSColor.labelColor.withAlphaComponent(pin.state == .on ? 0.55 : 0.36).setStroke()
+        path.stroke()
+        if let active = pin.reading.outputSegment(for: mode.selectedSegment) {
+            NSColor.labelColor.withAlphaComponent(pin.state == .on ? 0.9 : 0.7).setFill()
+            let dot = NSRect(x: center(active) - 2, y: rect.maxY - 0.5, width: 4, height: 4)
+            NSBezierPath(ovalIn: dot).fill()
         }
     }
 }
@@ -160,12 +201,15 @@ class HUDCategoryMenuView: NSView {
 /// Uses the emphasis button's neutral treatment for the independent menu-bar output.
 @MainActor
 final class HUDMenuBarButton: NSButton {
+    let reading: HUDMenuBarReading
+    weak var modeControl: NSSegmentedControl?
     var onChange: ((Bool) -> Void)?
     override var intrinsicContentSize: NSSize { NSSize(width: 22, height: 22) }
     override var state: NSControl.StateValue { didSet { needsDisplay = true } }
     override var isEnabled: Bool { didSet { needsDisplay = true } }
 
-    init() {
+    init(reading: HUDMenuBarReading) {
+        self.reading = reading
         super.init(frame: .zero)
         title = ""
         setButtonType(.toggle)
@@ -176,6 +220,13 @@ final class HUDMenuBarButton: NSButton {
     }
 
     required init?(coder: NSCoder) { fatalError("Use init()") }
+
+    override func accessibilityHelp() -> String? {
+        guard let mode = modeControl else { return super.accessibilityHelp() }
+        guard let output = reading.outputSegment(for: mode.selectedSegment),
+              let label = mode.label(forSegment: output) else { return "The current setting hides this reading." }
+        return "Menu bar format: \(label)."
+    }
 
     @objc private func changed() { onChange?(state == .on) }
 
@@ -207,6 +258,7 @@ final class HUDMenuBarButton: NSButton {
 final class HUDCategoryListView: NSScrollView {
     private let content = HUDCategoryDocumentView()
     private let categories: [HUDCategoryMenuView]
+    private let bottomFade = CAGradientLayer()
     private var maximumHeight: CGFloat = 440
 
     init(categories: [HUDCategoryMenuView]) {
@@ -219,7 +271,13 @@ final class HUDCategoryListView: NSScrollView {
         scrollerStyle = .overlay
         horizontalScrollElasticity = .none
         verticalScrollElasticity = .none
+        wantsLayer = true
+        bottomFade.colors = [NSColor.black.cgColor, NSColor.black.withAlphaComponent(0.15).cgColor]
+        bottomFade.endPoint = CGPoint(x: 0.5, y: 1)
         documentView = content
+        contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(updateBottomFade),
+            name: NSView.boundsDidChangeNotification, object: contentView)
         for category in categories {
             content.addSubview(category)
             category.onHeightChange = { [weak self] in self?.arrangeCategories() }
@@ -228,6 +286,22 @@ final class HUDCategoryListView: NSScrollView {
     }
 
     required init?(coder: NSCoder) { fatalError("Use init(categories:)") }
+
+    @objc private func updateBottomFade() {
+        guard let layer else { return }
+        let remaining = content.bounds.maxY - documentVisibleRect.maxY
+        guard remaining > 0, bounds.height > 0 else {
+            layer.mask = nil
+            return
+        }
+        let fadeHeight = min(16, remaining)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        bottomFade.frame = layer.bounds
+        bottomFade.startPoint = CGPoint(x: 0.5, y: 1 - fadeHeight / bounds.height)
+        if layer.mask !== bottomFade { layer.mask = bottomFade }
+        CATransaction.commit()
+    }
 
     func fit(availableHeight: CGFloat) {
         maximumHeight = max(160, floor(availableHeight))
@@ -242,6 +316,7 @@ final class HUDCategoryListView: NSScrollView {
         setFrameSize(NSSize(width: HUDCategoryLayout.width, height: min(y, maximumHeight)))
         contentView.scroll(to: contentView.constrainBoundsRect(contentView.bounds).origin)
         reflectScrolledClipView(contentView)
+        updateBottomFade()
     }
 }
 

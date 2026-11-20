@@ -26,7 +26,7 @@ import AppKit
         let fresh = HUDMenuBarOptions.load(in: defaults)
         check(fresh.readings.isEmpty && fresh.activeReadings.isEmpty,
               "Fresh installs and upgrades have no menu-bar readings selected")
-        let selected = Set<HUDMenuBarReading>([.gpuTemperature, .memoryPressure, .fps])
+        let selected = Set<HUDMenuBarReading>([.gpuTemperature, .memoryPressure, .fps, .gpuCores, .cpuCores])
         var options = HUDMenuBarOptions(readings: selected)
         options.save(in: defaults)
         check(HUDMenuBarOptions.load(in: UserDefaults(suiteName: suite)!) == options,
@@ -69,7 +69,7 @@ import AppKit
     static func activeCollectors(_ demand: HUDMonitoringDemand) -> Set<String> {
         let choices: [(String, Bool)] = [
             ("fps", demand.fps), ("gpuUsage", demand.gpuUsage), ("gpuAppUsage", demand.gpuAppUsage),
-            ("cpuUsage", demand.cpuUsage), ("cpuAppUsage", demand.cpuAppUsage),
+            ("cpuCoreLoad", demand.cpuCores), ("cpuUsage", demand.cpuUsage), ("cpuAppUsage", demand.cpuAppUsage),
             ("totalMemory", demand.totalMemory), ("appMemory", demand.appMemory),
             ("pressure", demand.pressure), ("pressureHistory", demand.pressureHistory),
             ("power", demand.power), ("cpuTemperature", demand.cpuTemperature),
@@ -92,8 +92,9 @@ import AppKit
         let expected: [(HUDMenuBarReading, Set<String>)] = [
             (.fps, ["fps"]), (.gpuPower, ["power"]), (.gpuTemperature, ["gpuTemperature"]),
             (.gpuUsage, ["gpuUsage"]), (.cpuPower, ["power"]), (.cpuTemperature, ["cpuTemperature"]),
-            (.cpuUsage, ["cpuUsage"]), (.anePower, ["power"]), (.socPower, ["power"]),
-            (.memoryPressure, ["pressure", "pressureHistory"]), (.memoryDetails, ["totalMemory"]),
+            (.cpuUsage, ["cpuUsage"]), (.cpuCores, ["cpuCoreLoad", "power"]), (.gpuCores, ["power"]),
+            (.anePower, ["power"]), (.socPower, ["power"]),
+            (.memoryPressure, ["pressure"]), (.memoryDetails, ["totalMemory"]),
             (.memoryUsage, ["totalMemory"]), (.fanUsage, ["fans"]),
             (.batteryPower, ["battery", "batteryPower"]),
             (.batteryTemperature, ["battery", "batteryTemperature"]), (.batteryEnergy, ["battery"])]
@@ -106,6 +107,13 @@ import AppKit
             check(activeCollectors(demand([pin], collapsed: true)).isEmpty,
                   "Collapsing a lone \(pin.rawValue) suspends sampling while retaining its selection")
         }
+        var coreSelection = disabled
+        coreSelection.cpuCores.mode = .bars
+        check(activeCollectors(demand([.cpuCores], selection: coreSelection)) == ["cpuCoreLoad"],
+              "Pinning CPU Load alone needs no power helper")
+        coreSelection.cpuCores.mode = .value
+        check(activeCollectors(demand([.cpuCores], selection: coreSelection)) == ["power"],
+              "Pinning CPU GHz alone needs no per-core load sampler")
         for mode in HUDBatteryFlowMode.allCases {
             var batterySelection = disabled
             batterySelection.battery.flowMode = mode
@@ -146,7 +154,7 @@ import AppKit
             let expected = totalOnly
             check(activeCollectors(demand([.gpuUsage, .cpuUsage, .memoryUsage], selection: selection)) == expected,
                   "Pinned Use remains system-wide despite a legacy \(mode.rawValue) setting")
-            check(activeCollectors(demand([.memoryPressure], selection: selection)) == ["pressure", "pressureHistory"],
+            check(activeCollectors(demand([.memoryPressure], selection: selection)) == ["pressure"],
                   "System pressure remains independently pinnable even when memory Use is App-only")
         }
         for mode in HUDMemoryPressureMode.allCases {
@@ -157,13 +165,15 @@ import AppKit
             let overlay = demand([], selection: selection, enabled: true, visible: true)
             check(overlay.pressure && overlay.pressureHistory == mode.isHistory,
                   "Visible vertical overlay alone requests pressure history for B styles")
+            check(demand([.memoryPressure], selection: selection, enabled: true, visible: true).pressureHistory == mode.isHistory,
+                  "Pinning pressure preserves the Vertical HUD's requested history")
             selection.alignment = .horizontal
             check(!demand([], selection: selection, enabled: true, visible: true).pressureHistory,
                   "The Horizontal HUD alone keeps using pressure meters")
-            check(demand([.memoryPressure], selection: selection, enabled: true, visible: true).pressureHistory == mode.isHistory,
-                  "A menu-bar pin requests B history even with a Horizontal HUD")
-            check(demand([.memoryPressure], selection: selection).pressureHistory == mode.isHistory,
-                  "Pinned B history keeps sampling while the HUD is off")
+            check(!demand([.memoryPressure], selection: selection, enabled: true, visible: true).pressureHistory,
+                  "The meter pin only needs the current pressure state in Horizontal")
+            check(activeCollectors(demand([.memoryPressure], selection: selection)) == ["pressure"],
+                  "A pressure pin alone samples only the state")
             check(!demand([.memoryPressure], selection: selection, collapsed: true).pressureHistory,
                   "Collapsed pins do not request history when the HUD is off")
         }
@@ -197,7 +207,7 @@ import AppKit
         let gpu = HUDResourceMenuView(group: .gpu, options: off)
         gpu.layoutSubtreeIfNeeded()
         let pins = gpu.subviews.compactMap { $0 as? HUDMenuBarButton }
-        check(pins.count == 3 && pins.allSatisfy { $0.isEnabled && $0.state == .off },
+        check(pins.count == 4 && pins.allSatisfy { $0.isEnabled && $0.state == .off },
               "GPU pins default off and are available with its entire overlay category disabled")
         let temperature = pins.first { $0.accessibilityLabel() == "Show GPU Temperature in menu bar" }!
         let controls: [Int: NSButton] = member(gpu, "controls")
@@ -270,7 +280,7 @@ import AppKit
 
         let memory = HUDResourceMenuView(group: .ram, options: off)
         let detailsPin = memory.subviews.compactMap { $0 as? HUDMenuBarButton }
-            .first { $0.accessibilityLabel() == "Show MEM Details in menu bar" }!
+            .first { $0.accessibilityLabel() == "Show Memory Details in menu bar" }!
         let memoryControls: [Int: NSButton] = member(memory, "controls")
         let details = memoryControls[5] as! HUDReadingCheckbox
         detailsPin.performClick(nil)
@@ -279,35 +289,63 @@ import AppKit
         check(details.emphasisControl?.isEnabled == false, "Removing the pin restores inactive emphasis")
         memory.update(alignment: .horizontal)
         let pressurePin = memory.subviews.compactMap { $0 as? HUDMenuBarButton }
-            .first { $0.accessibilityLabel() == "Show MEM Pressure in menu bar" }!
+            .first { $0.accessibilityLabel() == "Show Memory Pressure in menu bar" }!
         let modes: NSSegmentedControl = member(memory, "pressureModeControl") as NSSegmentedControl?
             ?? { fatalError("Missing pressure selector") }()
         let color: HUDReadingCheckbox = member(memory, "pressureColorControl") as HUDReadingCheckbox?
             ?? { fatalError("Missing State color checkbox") }()
         check(!modes.isEnabled(forSegment: 2), "Unpinned Horizontal disables Graph")
         pressurePin.performClick(nil)
-        check(modes.isEnabled && modes.isEnabled(forSegment: 2) && modes.selectedSegment == 2 && color.isEnabled,
-              "Pinning exposes the remembered Graph choice independently of HUD layout")
+        check(modes.isEnabled && !modes.isEnabled(forSegment: 2) && modes.selectedSegment == 1 && color.isEnabled,
+              "Pinned pressure uses Meter for a stored Graph in Horizontal")
+        memory.update(alignment: .vertical)
+        check(!modes.isEnabled(forSegment: 2) && modes.selectedSegment == 1,
+              "When the pin is the only output, its controls reflect the meter")
         color.performClick(nil)
         let memoryOptions: HUDResourceOptions = member(memory, "options")
         check(memoryOptions.pressureMode == .history && !memoryOptions.enabled,
               "Changing a pinned graph's color preserves the hidden HUD category")
         check(memoryOptions.pressureMode.resolved(for: .horizontal) == .meter,
               "The Horizontal HUD retains its meter fallback")
+        memory.update(alignment: .horizontal)
         pressurePin.performClick(nil)
         check(!modes.isEnabled(forSegment: 2) && modes.selectedSegment == 1 && !color.isEnabled,
               "Unpinning restores the Horizontal meter indication")
+
+        for group in [HUDResourceGroup.gpu, .cpu] {
+            let menu = HUDResourceMenuView(group: group, options: off)
+            let pin = menu.subviews.compactMap { $0 as? HUDMenuBarButton }.first { $0.accessibilityLabel()?.contains("Cores") == true }!
+            pin.performClick(nil)
+            let controls: [Int: NSButton] = member(menu, "controls")
+            let core = controls[9] as! HUDReadingCheckbox
+            check(!core.isEnabled && HUDPreferences.menuBarOptions.readings.contains(group == .gpu ? .gpuCores : .cpuCores),
+                  "A core pin works with its HUD category disabled")
+            if group == .cpu {
+                let selector: NSSegmentedControl = member(menu, "coreModeControl")
+                check(selector.isEnabled, "A pinned CPU has access to its mode selector")
+                selector.selectedSegment = 2
+                selector.sendAction(selector.action, to: selector.target)
+            }
+            check(core.emphasisControl!.isEnabled, "A pinned frequency can use emphasis independently of the HUD")
+            pin.performClick(nil)
+        }
 
         let noFans = HUDFanMenuView(options: .init(enabled: true), sample: .noFans)
         check(noFans.subviews.compactMap { $0 as? HUDMenuBarButton }.allSatisfy { !$0.isEnabled },
               "A fanless Mac has no actionable fan pin")
         let ready = FanSample(status: .ready, fans: [.init(id: 0, rpm: 2200, maximumRPM: 5000)])
-        let fan = HUDFanMenuView(options: .init(enabled: false), sample: ready)
+        let fan = HUDFanMenuView(options: .init(enabled: false, mode: .bar), sample: ready)
         let fanPin = fan.subviews.compactMap { $0 as? HUDMenuBarButton }.first!
         check(fanPin.isEnabled, "Detected fans can be pinned while the overlay fan category is off")
         fanPin.performClick(nil)
         let mode: NSSegmentedControl = member(fan, "mode")
-        check(mode.isEnabled, "Pinned fans retain access to the shared Bar/RPM/Both choice")
+        let rpmHighlight: NSButton = member(fan, "rpmHighlight")
+        check(!mode.isEnabled && mode.selectedSegment == 0 && rpmHighlight.isEnabled,
+              "Pinning enables RPM emphasis and preserves the disabled overlay's Bar selection")
+        fan.update(sample: ready, options: .init(mode: .bar))
+        check(mode.isEnabled && rpmHighlight.isEnabled, "An active Bar overlay can emphasize the pinned RPM")
+        fanPin.performClick(nil)
+        check(mode.isEnabled && !rpmHighlight.isEnabled, "Bar alone has no RPM to emphasize")
     }
 
     @MainActor static func presentation() {
@@ -325,7 +363,74 @@ import AppKit
                 readings: pins, style: style, background: .dark)
         }
         check(sections([]).isEmpty, "No pins produce no reading content")
+        let fanSample = FanSample(status: .ready, fans: [
+            FanReading(id: 0, rpm: 0, maximumRPM: 6000), FanReading(id: 1, rpm: 1000, maximumRPM: 6000)])
+        for mode in HUDFanMode.allCases {
+            var fanStyle = style
+            for average in [false, true] {
+                fanStyle.fans = .init(enabled: false, mode: mode, average: average)
+                let sections = HUDMenuBarPresentation.sections(snapshot: snapshot, fanSample: fanSample,
+                    readings: [.fanUsage], style: fanStyle, background: .dark)
+                let items = sections.flatMap { $0 }
+                check(items.compactMap(\.fanMarker) == (average ? ["A"] : ["1", "2"])
+                      && items.compactMap(\.barWidth).isEmpty
+                      && items.filter { $0.id.hasSuffix(".rpm") }.map(\.text) == (average ? ["500 RPM"] : ["0 RPM", "1000 RPM"]),
+                      "Pinned fans always show the badge and RPM for individual or averaged readings")
+                let strip = HUDHorizontalView(frame: .zero)
+                _ = strip.configure(sections: sections, showsBattery: false, background: .dark, inMenuBar: true)
+                let badges = strip.subviews.compactMap { $0 as? NSImageView }.map(\.frame)
+                check(badges.count == (average ? 1 : 2) && Set(badges.map(\.midY)).count == 1
+                      && Set(badges.map(\.minX)).count == badges.count, "Pinned fans occupy one horizontal line")
+            }
+        }
         for group in HUDResourceGroup.allCases { style.resources[group]?.enabled = false }
+        snapshot.set(.memorySwap, 1.25)
+        snapshot.set(.memoryPhysical, 16.75)
+        snapshot.set(.memoryUsage, 68)
+        check(sections([.memoryDetails]).flatMap { $0 }.map(\.text) == ["MEM", "SWP", "1.25 GB", "PHY", "16.75 GB"],
+              "Pinned Memory details show Swap before Physical with the corresponding values")
+        check(sections([.memoryDetails, .memoryUsage, .memoryPressure]).flatMap { $0 }.map(\.text)
+              == ["MEM", "68%", "SWP", "1.25 GB", "PHY", "16.75 GB", "warning"],
+              "Pinned Memory usage comes first, followed by Swap, Physical, and pressure")
+        let types = [HUDCPUCoreType(name: "Super", count: 2), .init(name: "Performance", count: 1),
+                     .init(name: "Efficiency", count: 1)]
+        let topology = CPUCoreTopology(groups: [.init(name: "Super", ids: [2, 3]),
+            .init(name: "Performance", ids: [1]), .init(name: "Efficiency", ids: [0])])
+        var coreSnapshot = HUDLogSnapshot()
+        coreSnapshot.set(.gpuFrequency, 0.9)
+        coreSnapshot.set(.cpuTypeFrequency("Super"), 3.7)
+        coreSnapshot.set(.cpuCoreUsage(3), 0)
+        for mode in HUDCoreDisplayMode.allCases {
+            style.cpuCores.mode = mode
+            func coreSections(_ sample: HUDLogSnapshot) -> [[HUDHorizontalView.Reading]] {
+                HUDMenuBarPresentation.sections(snapshot: sample, fanSample: .noFans,
+                    readings: [.gpuCores, .cpuCores], style: style, background: .dark,
+                    coreTypes: types, topology: topology)
+            }
+            let sections = coreSections(coreSnapshot)
+            let readings = sections.flatMap { $0 }
+            check(Array(readings.prefix(4)).map(\.text) == ["GPU", "C", "0.9 GHz", "CPU"],
+                  "Core-only pins retain GPU and CPU headings in HUD order")
+            if mode.showsBars {
+                let rows = readings.last!.coreRows!
+                check(rows.map(\.caption) == ["S", "P", "E"] && rows[0].activity == [nil, 0],
+                      "Pinned CPU load respects physical core IDs and distinguishes zero from missing data")
+                check(rows[0].frequency == (mode.showsValue ? "3.7 GHz" : nil), "Both adds the core frequency to Load")
+            } else {
+                check(readings.suffix(6).map(\.text) == ["S", "3.7 GHz", "P", "", "E", ""], "GHz-only pins use short captions and leave missing frequencies blank")
+            }
+            let view = HUDHorizontalView(frame: .zero)
+            func size(_ sections: [[HUDHorizontalView.Reading]]) -> NSSize {
+                view.configure(sections: sections, showsBattery: false, background: .dark, inMenuBar: true)
+            }
+            let pending = size(coreSections(.init()))
+            let measured = size(sections)
+            check(measured == pending, "Core pins reserve their full size before the first sample")
+            let bars = view.subviews.compactMap { $0 as? HUDCPUCoreBarsView }
+            check(bars.count == (mode.showsBars ? 3 : 0) && bars.allSatisfy { $0.frame.minY >= 0 && $0.frame.maxY <= measured.height }
+                  && Set(bars.map { $0.frame.minX }).count == bars.count,
+                  "Three core types fit at native height in separate menu-bar columns")
+        }
         let pins: Set<HUDMenuBarReading> = [.fps, .gpuPower, .gpuTemperature, .gpuUsage]
         let readings = sections(pins).flatMap { $0 }
         check(readings.map(\.text) == ["FPS", "120", "GPU", "9.9 W", "96°C", "98%"],
@@ -342,18 +447,18 @@ import AppKit
         check(readings.filter { $0.metric == .fpsGraph }.isEmpty,
               "The FPS pin always produces a value, never a history graph")
         let view = HUDHorizontalView(frame: .zero)
-        let nativeSize = view.configure(sections: sections(pins), showsBattery: false, scale: .normal, background: .dark)
+        let nativeSize = view.configure(sections: sections(pins), showsBattery: false, background: .dark)
         style.fpsMeasure = .frameTime
-        let frameTimeSize = view.configure(sections: sections(pins), showsBattery: false, scale: .normal, background: .dark)
+        let frameTimeSize = view.configure(sections: sections(pins), showsBattery: false, background: .dark)
         check(frameTimeSize == nativeSize, "Switching between FPS and FT keeps neighboring pins in place")
         style.fpsMeasure = .frameRate
-        _ = view.configure(sections: sections(pins), showsBattery: false, scale: .normal, background: .dark)
+        _ = view.configure(sections: sections(pins), showsBattery: false, background: .dark)
         let labels: [String: NSTextField] = member(view, "labels")
-        check(labels["fps.value"]?.font == HUDStyle.fpsValueFont(scale: .normal, highlighted: true),
+        check(labels["fps.value"]?.font == HUDStyle.fpsValueFont(highlighted: true),
               "FPS keeps the original horizontal HUD emphasis and font size before the uniform transform")
         let gpuID = String(HUDMetric.gpuTotal.rawValue)
         for role in ["power", "temperature", "value"] {
-            check(labels["\(gpuID).\(role)"]?.font == HUDStyle.readingFont(scale: .normal, highlighted: false),
+            check(labels["\(gpuID).\(role)"]?.font == HUDStyle.readingFont(highlighted: false),
                   "GPU reading fonts remain unchanged before the single size transform")
         }
         for barHeight: CGFloat in [18, 22, 24, 32] {
@@ -369,20 +474,20 @@ import AppKit
             changed.set(.fps, value)
             changed.set(.gpuPower, value / 10)
             let newSize = view.configure(sections: sections(pins, snapshot: changed), showsBattery: false,
-                                         scale: .normal, background: .dark)
+                                         background: .dark)
             check(newSize == nativeSize, "Ordinary digit changes never move the status item's neighboring icons")
         }
         let missing = sections(pins, snapshot: HUDLogSnapshot()).flatMap { $0 }
-        check(missing.filter { !$0.startsMetric }.allSatisfy { $0.text == "—" },
-              "Unavailable readings clear to a dash instead of reusing a previous value")
+        check(missing.filter { !$0.startsMetric }.allSatisfy { $0.text == "" },
+              "Missing menu-bar readings keep an empty value slot")
         for mode in HUDMemoryPressureMode.allCases {
             style.resources[.ram]?.pressureMode = mode
             style.resources[.ram]?.usageMode = .app
             let pressure = sections([.memoryPressure]).flatMap { $0 }
             check(pressure.map(\.text) == ["MEM", "warning"],
                   "Pressure pin retains system context while the overlay's memory source is App")
-            check(pressure.last?.pressureMode == mode,
-                  "The menu-bar pressure pin retains the selected display and color")
+            check(pressure.last?.pressureMode == mode.resolved(for: .horizontal),
+                  "The menu-bar pressure pin uses the Horizontal display and selected color")
             if mode.display == .text {
                 check(pressure.last?.color == (mode.usesStateColor ? HUDStyle.warningYellow : HUDStyle.readingColor(background: .dark)),
                       "Pinned text uses the selected state color")
@@ -420,30 +525,30 @@ import AppKit
         // Native status-item sizing normally happens on the AppKit run loop.
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
         let chevron = button.subviews.compactMap { $0 as? NSButton }.first!
-        check(chevron.frame.width > 0 && !chevron.isHidden && item.menu === menu,
-              "Expanded readings retain the existing settings menu and a separate collapse control")
-        let insideChevron = NSPoint(x: chevron.frame.midX, y: chevron.frame.midY)
-        check(button.hitTest(insideChevron) === chevron,
-              "The collapse control receives its own mouse clicks instead of opening the settings menu")
-        let insideBolt = NSPoint(x: item.length - 11, y: button.bounds.midY)
-        check(button.hitTest(insideBolt) === button,
-              "The app icon keeps native menu-opening behavior: hit \(String(describing: button.hitTest(insideBolt))) button \(button.frame) bounds \(button.bounds)")
-        let insideReading = NSPoint(x: chevron.frame.minX / 2, y: button.bounds.midY)
-        check(button.hitTest(insideReading) === button,
-              "Readings leave the native status-button click target available for settings")
-        chevron.performClick(nil)
-        check(collapsedClicks == 1 && item.menu === menu,
-              "Clicking the chevron invokes only the global collapse action and retains the settings menu")
+        let bolt: NSImageView = member(controller, "bolt")
+        let content: NSView = member(controller, "content")
+        check(chevron.isHidden && bolt.isHidden && button.image == nil && !content.isHidden,
+              "Expanded pins show just the selected readings")
+        check(abs(item.length - content.frame.width - 2 * content.frame.minX) < 0.01,
+              "The native item reserves only the reading width and its two existing margins")
+        let insideReading = NSPoint(x: content.frame.midX, y: button.bounds.midY)
+        check(button.hitTest(insideReading) === button && item.menu === menu,
+              "Clicking a reading opens the settings menu")
         var collapsed = options
         collapsed.isCollapsed = true
         controller.refresh(snapshot: HUDLogSnapshot(), fanSample: .noFans, batterySample: nil, options: collapsed)
-        check(item.length == 40 && item.menu === menu && chevron.accessibilityLabel() == "Show menu-bar readings",
-              "Collapsed state keeps the bolt and an accessible expand action without readings")
-        check(chevron.frame.minX == item.length - 40,
-              "The collapse control remains fixed beside the app icon at the status item's anchored right edge")
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
+        check(item.length == 40 && content.isHidden && !bolt.isHidden && !chevron.isHidden
+              && button.image == nil && chevron.accessibilityLabel() == "Show menu-bar readings",
+              "Unchecking Show menu-bar readings keeps the expand arrow and bolt")
+        check(button.hitTest(NSPoint(x: chevron.frame.midX, y: chevron.frame.midY)) === chevron
+              && button.hitTest(NSPoint(x: bolt.frame.midX, y: bolt.frame.midY)) === button,
+              "The left arrow expands while the bolt opens settings")
+        chevron.performClick(nil)
+        check(collapsedClicks == 1 && item.menu === menu, "The expand arrow invokes the global action")
         controller.refresh(snapshot: HUDLogSnapshot(), fanSample: .noFans, batterySample: nil, options: options)
-        check(item.length > 40 && chevron.accessibilityLabel() == "Hide menu-bar readings",
-              "Expanding restores the selected reading without recreating its menu")
+        check(!content.isHidden && bolt.isHidden && chevron.isHidden && button.image == nil,
+              "Expanding shows just the readings again")
         controller.refresh(snapshot: HUDLogSnapshot(), fanSample: .noFans, batterySample: nil, options: .init())
         check(item.length == NSStatusItem.squareLength && button.image != nil && item.menu === menu,
               "Removing the last pin restores the original bolt-only status item")
@@ -501,7 +606,7 @@ import AppKit
         let ordinaryFrame = content.frame
         let ordinaryBounds = content.bounds
         check(measured > 40 && measured < widthBudget && abs(item.length - measured) < 0.01,
-              "Selection preflight measures the actual horizontal rendering plus its native controls and padding")
+              "Selection preflight measures the readings and their padding")
         for allowedWidth in [measured + 0.5, measured] {
             widthBudget = allowedWidth
             refresh()
@@ -625,8 +730,8 @@ import AppKit
         check(item.length == fullWidth && arrow.isHidden && labels["fps.value"]!.alphaValue == 1,
               "A returning FPS sample restores the full category and hides its arrow")
         refresh(.fps, available: false, selected: .init(readings: [.fps]))
-        check(item.length == 40 && arrow.isHidden && content.isHidden,
-              "FPS alone waits with just the existing controls, without a second arrow or unused spacing")
+        check(item.length == NSStatusItem.squareLength && item.button?.image != nil && arrow.isHidden && content.isHidden,
+              "FPS alone waits with the regular bolt and resumes automatically")
         let waiting: HUDMenuBarOptions = member(controller, "latestOptions")
         check(!waiting.isCollapsed && waiting.readings == [.fps],
               "Hiding the redundant FPS arrow keeps automatic return enabled and retains its selection")
@@ -693,15 +798,15 @@ import AppKit
         }
         for mode in [HUDBatteryFlowMode.auto, .off] {
             refresh([.batteryPower], mode: mode)
-            check(item.length == 40 && content.isHidden && horizontal.battery.isHidden && arrow.isHidden,
-                  "A lone idle or Off Charge selection leaves only the existing controls, without source or an extra arrow")
+            check(item.length == NSStatusItem.squareLength && item.button?.image != nil && content.isHidden && horizontal.battery.isHidden && arrow.isHidden,
+                  "A lone idle or Off Charge selection leaves just the regular bolt")
             if mode == .off {
-                check(controller.expandedWidth(for: [.batteryPower]) == 40,
+                check(controller.expandedWidth(for: [.batteryPower]) == NSStatusBar.system.thickness,
                       "Charge Off does not reserve unused reading padding")
             }
         }
         refresh([.batteryPower], power: nil, samplePresent: false)
-        check(item.length == 40 && content.isHidden && horizontal.battery.isHidden,
+        check(item.length == NSStatusItem.squareLength && item.button?.image != nil && content.isHidden && horizontal.battery.isHidden,
               "Auto Charge with no battery sample does not leave a source-only or placeholder category")
         let autoReservation = controller.expandedWidth(for: [.batteryPower])
         check(autoReservation > 40, "Auto Charge reserves its returning active width even while entirely hidden")
@@ -714,12 +819,12 @@ import AppKit
         check(activeWidth <= autoReservation, "Returning Charge stays within its previously reserved width")
         refresh([.batteryPower], power: 0.1)
         check(item.length == activeWidth && !content.isHidden,
-              "Low flow retains the established three-second grace period instead of immediately removing Charge")
+              "Low flow keeps Charge visible at its measured width throughout the grace period")
         horizontal.battery.update(percentage: 80, source: .powerAdapter, temperature: 34, power: 0.2)
         horizontal.battery.update(percentage: 80, source: .powerAdapter, temperature: 34, power: 0.1,
                                   now: ProcessInfo.processInfo.systemUptime - 3.1)
         refresh([.batteryPower], power: 0.1)
-        check(item.length == 40 && content.isHidden && horizontal.battery.isHidden,
+        check(item.length == NSStatusItem.squareLength && item.button?.image != nil && content.isHidden && horizontal.battery.isHidden,
               "Charge and its source disappear together after the existing idle grace period expires")
         refresh([.batteryPower], mode: .always)
         check(!content.isHidden && !horizontal.battery.isHidden && horizontal.battery.powerText == "0.0 W",
@@ -727,7 +832,7 @@ import AppKit
         check(controller.expandedWidth(for: [.batteryPower]) == autoReservation,
               "Idle Auto reserves the same width as an Always Charge category")
         refresh([.batteryPower], mode: .off, power: 12)
-        check(item.length == 40 && content.isHidden && !horizontal.battery.hasVisiblePowerFlow,
+        check(item.length == NSStatusItem.squareLength && item.button?.image != nil && content.isHidden && !horizontal.battery.hasVisiblePowerFlow,
               "Off remains hidden even when a cached battery sample contains active flow")
         for reading in [HUDMenuBarReading.batteryTemperature, .batteryEnergy] {
             refresh([reading], mode: .off)
@@ -741,8 +846,8 @@ import AppKit
         }
         for mode in [HUDBatteryFlowMode.auto, .off] {
             refresh([.fps, .batteryPower], mode: mode, fpsAvailable: false, autoHide: .fps)
-            check(item.length == 40 && content.isHidden && arrow.isHidden,
-                  "Waiting FPS plus an empty Charge category share only the existing controls")
+            check(item.length == NSStatusItem.squareLength && item.button?.image != nil && content.isHidden && arrow.isHidden,
+                  "Waiting FPS plus an empty Charge category leave just the regular bolt")
             let fullReservation = controller.expandedWidth(for: [.fps, .batteryPower])
             refresh([.fps, .batteryPower], mode: mode, power: 12, autoHide: .fps)
             check(!content.isHidden && item.length > 40
@@ -800,79 +905,31 @@ import AppKit
         hud.onFPSAvailabilityChange = nil
     }
 
-    @MainActor static func pressureHistoryPresentation() {
+    @MainActor static func pressureMeterPresentation() {
         let configuration = HUDPresetConfiguration.builtIn(.balanced)
         var style = HUDMenuBarPresentation.Style(resources: configuration.resources,
             fpsHighlighted: true, packageHighlighted: false, fans: configuration.fans, battery: configuration.battery)
-        var snapshot = HUDLogSnapshot()
-        snapshot.setText(.memoryPressure, "warning")
-        var history = HUDMemoryPressureHistory()
-        for second in 0...30 {
-            let level: MemoryPressureMonitor.Level = second < 10 ? .low : second < 20 ? .high : .medium
-            let value = second < 10 ? 25.0 : second < 20 ? 80.0 : 45.0
-            history.append(.init(time: Double(second), level: level, numericValue: value + Double(second % 3)))
-        }
         for background in [HUDBackground.light, .dark] {
             let view = HUDHorizontalView(frame: .zero)
-            view.isHidden = false
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 150, height: 21),
-                styleMask: [], backing: .buffered, defer: false)
-            window.contentView = view
-            view.wantsLayer = true
-            view.layer?.backgroundColor = NSColor(white: background == .light ? 0.9 : 0.14, alpha: 1).cgColor
-            var originalSize: NSSize?
-            for mode in [HUDMemoryPressureMode.history, .colorHistory] {
+            var meterSize: NSSize?
+            for mode in [HUDMemoryPressureMode.meter, .colorMeter, .history, .colorHistory] {
                 style.resources[.ram]?.pressureMode = mode
-                func configure(_ samples: HUDMemoryPressureHistory) -> NSSize {
+                for (state, segments) in [("normal", 1), ("warning", 2), ("critical", 3), ("", 0)] {
+                    var snapshot = HUDLogSnapshot()
+                    snapshot.setText(.memoryPressure, state)
                     let sections = HUDMenuBarPresentation.sections(snapshot: snapshot, fanSample: .noFans,
-                        readings: [.memoryPressure], style: style, background: background, pressureHistory: samples)
-                    let size = view.configure(sections: sections, showsBattery: false, scale: .normal, background: background)
-                    view.setFrameSize(size)
-                    return size
+                        readings: [.memoryPressure], style: style, background: background)
+                    let size = view.configure(sections: sections, showsBattery: false, background: background)
+                    let meters: [String: HUDMemoryPressureMeterView] = member(view, "pressureMeters")
+                    let meter = meters["ram.pressure"]!
+                    let display: HUDMemoryPressureMode = member(meter, "mode")
+                    check(display == (mode.usesStateColor ? .colorMeter : .meter) && !meter.isHidden,
+                          "Pinned Meter and Graph render the same meter and respect State color")
+                    check(meter.activeSegmentCount == segments, "Pinned meter follows the current pressure state")
+                    if let meterSize { check(size == meterSize, "Meter width is stable across styles and states") }
+                    meterSize = size
                 }
-                let size = configure(history)
-                if let originalSize { check(size == originalSize, "B1 and B2 reserve identical menu-bar space") }
-                originalSize = size
-                let graphs: [String: HUDMemoryPressureHistoryView] = member(view, "pressureHistories")
-                let graph = graphs["ram.pressure"]!
-                let meters: [String: HUDMemoryPressureMeterView] = member(view, "pressureMeters")
-                check(!graph.isHidden && meters.values.allSatisfy(\.isHidden), "B styles draw the real history view, not a meter")
-                check(graph.history.samples.count == 31 && graph.history.samples.last!.numericValue == 45,
-                      "The complete sampled 30-second history reaches the renderer")
-                check(size.height == 21 && graph.frame.height == 21 && view.bounds.contains(graph.frame),
-                      "The compact graph fits the existing menu-bar row")
-                check(abs(graph.frame.width / graph.bounds.width - graph.frame.height / graph.bounds.height) < 0.000001,
-                      "The existing Vertical graph scales uniformly, preserving its proportions")
-                check(graph.showsBaseline && graph.toolTip == nil, "The compact graph keeps its bottom edge without hover tooltips")
-                let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
-                view.cacheDisplay(in: view.bounds, to: bitmap)
-                var coloredPixels = 0
-                for y in 0..<bitmap.pixelsHigh {
-                    for x in 0..<bitmap.pixelsWide {
-                        let color = bitmap.colorAt(x: x, y: y)!.usingColorSpace(.deviceRGB)!
-                        if max(color.redComponent, color.greenComponent, color.blueComponent)
-                            - min(color.redComponent, color.greenComponent, color.blueComponent) > 0.1 { coloredPixels += 1 }
-                    }
-                }
-                check(mode == .history ? coloredPixels == 0 : coloredPixels > 5,
-                      "B1 stays neutral while B2 retains the history's pressure-state colours")
-                try! bitmap.representation(using: .png, properties: [:])!.write(to:
-                    URL(fileURLWithPath: "/tmp/phud-menubar-pressure-\(mode.rawValue)-\(background.rawValue).png"))
-                var unavailable = history
-                unavailable.append(.init(time: 31, level: nil, numericValue: nil))
-                check(configure(unavailable) == size && graph.history.samples.last!.numericValue == nil,
-                      "Unavailable pressure reaches the graph without moving neighboring icons")
-                check(configure(.init()) == size && graph.history.samples.isEmpty,
-                      "Clearing history removes old samples without changing the reserved width")
             }
-            style.resources[.ram]?.pressureMode = .colorMeter
-            let sections = HUDMenuBarPresentation.sections(snapshot: snapshot, fanSample: .noFans,
-                readings: [.memoryPressure], style: style, background: background)
-            _ = view.configure(sections: sections, showsBattery: false, scale: .normal, background: background)
-            let graphs: [String: HUDMemoryPressureHistoryView] = member(view, "pressureHistories")
-            let meters: [String: HUDMemoryPressureMeterView] = member(view, "pressureMeters")
-            check(graphs.values.allSatisfy(\.isHidden) && meters["ram.pressure"]?.isHidden == false,
-                  "Returning to A2 restores the existing meter")
         }
     }
 
@@ -882,7 +939,7 @@ import AppKit
         monitoring()
         categoryControls()
         presentation()
-        pressureHistoryPresentation()
+        pressureMeterPresentation()
         nativeStatusControl()
         widthSafety()
         fpsMenuAutoHide()

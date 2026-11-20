@@ -37,10 +37,12 @@ struct HUDMonitoringDemand {
         demand.gpuAppUsage = process && selection.process.readings.contains(.gpu)
         demand.cpuAppUsage = process && selection.process.readings.contains(.cpu)
         demand.appMemory = process && selection.process.readings.contains(.memory)
-        let cpuCoresShown = overlay && selection.resources[.cpu]?.enabled == true && selection.cpuCores.enabled
+        let cpuCoresShown = pins.contains(.cpuCores)
+            || (overlay && selection.resources[.cpu]?.enabled == true && selection.cpuCores.enabled)
         let cpuCoreMode = selection.cpuCores.mode
         demand.cpuCores = cpuCoresShown && cpuCoreMode.showsBars
-        demand.gpuCores = overlay && selection.resources[.gpu]?.enabled == true && selection.gpuCores.enabled
+        demand.gpuCores = pins.contains(.gpuCores)
+            || (overlay && selection.resources[.gpu]?.enabled == true && selection.gpuCores.enabled)
         for group in HUDResourceGroup.allCases {
             guard let options = selection.resources[group] else { continue }
             let shown = overlay && options.enabled
@@ -62,14 +64,12 @@ struct HUDMonitoringDemand {
                 let memoryPinned = !pins.isDisjoint(with: [.memoryUsage, .memoryDetails])
                 demand.totalMemory = (shown && (options.totalUse || options.showsDetails)) || memoryPinned
                 demand.pressure = (shown && options.showsPressure) || pins.contains(.memoryPressure)
-                demand.pressureHistory = options.pressureMode.isHistory
-                    && ((shown && options.showsPressure && selection.alignment == .vertical)
-                        || pins.contains(.memoryPressure))
+                demand.pressureHistory = shown && options.showsPressure && options.pressureMode.resolved(for: selection.alignment).isHistory
             }
         }
         demand.power = demand.power || demand.gpuCores || (cpuCoresShown && cpuCoreMode.showsValue) || (overlay && selection.package.enabled) || pins.contains(.socPower)
         if overlay { demand.storage = selection.storage.monitoringOptions }
-        demand.fans = (overlay && selection.fans.enabled && selection.fans.usage) || pins.contains(.fanUsage)
+        demand.fans = (overlay && selection.fans.enabled) || pins.contains(.fanUsage)
         let batteryShown = overlay && selection.battery.enabled
         // Auto keeps sampling to detect returning flow; Off has no menu-bar
         // power demand, even though its selection is retained for later use.

@@ -189,17 +189,17 @@ import AppKit
                 let panel: HUDPanel = member(hud, "panel")
                 let body: NSView = member(hud, "container")
                 let arrow: NSImageView = member(hud, "collapsedFPSIndicator")
-                let top: NSLayoutConstraint? = member(hud, "stackTopConstraint")
+                let stack: NSView = member(hud, "stackView")
                 let horizontal: HUDHorizontalView = member(hud, "horizontalView")
                 let before = panel.frame
-                let offset = alignment == .horizontal ? horizontal.frame.minX : top!.constant
+                let offset = alignment == .horizontal ? horizontal.frame.minX : stack.frame.minY
                 let rows: [HUDMetric: NSView] = member(hud, "metricRows")
                 precondition(!arrow.isHidden)
                 hud.setAutoHideMode(.all)
                 if !reduceMotion {
                     precondition(panel.frame == before && !arrow.isHidden && rows[.fps]!.alphaValue == 0,
                                  "Collapsed FPS must not flash open when switching to All options")
-                    precondition((alignment == .horizontal ? horizontal.frame.minX : top!.constant) == offset,
+                    precondition((alignment == .horizontal ? horizontal.frame.minX : stack.frame.minY) == offset,
                                  "Existing content must retain its compact offset")
                     var previous = alignment == .horizontal ? body.frame.width : body.frame.height
                     for _ in 0..<25 where panel.isVisible {
@@ -209,7 +209,7 @@ import AppKit
                         precondition(panel.frame.minX == before.minX && panel.frame.maxY == before.maxY)
                         if panel.isVisible {
                             precondition(!arrow.isHidden && rows[.fps]!.alphaValue == 0)
-                            precondition((alignment == .horizontal ? horizontal.frame.minX : top!.constant) == offset)
+                            precondition((alignment == .horizontal ? horizontal.frame.minX : stack.frame.minY) == offset)
                         }
                         previous = current
                     }

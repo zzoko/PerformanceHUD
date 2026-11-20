@@ -172,7 +172,7 @@ struct HUDLogSelection {
                 }
             }
         }
-        if fans.enabled && fans.usage {
+        if fans.enabled {
             if fans.averages(in: alignment) && fanSample.canAverage {
                 if fans.mode.showsBar { result.append(.fanAverageUsage) }
                 if fans.mode.showsRPM { result.append(.fanAverageRPM) }

@@ -60,7 +60,6 @@ final class AppDelegate:
 
     private var memoryPressureMonitor:
         MemoryPressureMonitor?
-    private var memoryPressureHistory = HUDMemoryPressureHistory()
 
     // MARK: - Battery
 
@@ -536,10 +535,7 @@ final class AppDelegate:
             self?.hudWindow?.updateMemoryPressure(level?.displayText ?? "")
         }
         monitor.onHistoryUpdate = { [weak self] sample in
-            guard let self else { return }
-            memoryPressureHistory.append(sample)
-            hudWindow?.updateMemoryPressureHistory(sample)
-            scheduleMenuBarRefresh()
+            self?.hudWindow?.updateMemoryPressureHistory(sample)
         }
 
         self.memoryPressureMonitor =
@@ -793,7 +789,8 @@ final class AppDelegate:
                 }
                 enabledMetrics = HUDPreferences.visibleMetrics
                 reconcileMonitoring()
-                if options.enabled && (group == .gpu || options.mode.showsValue)
+                let corePinned = HUDPreferences.menuBarOptions.activeReadings.contains(group == .gpu ? .gpuCores : .cpuCores)
+                if (options.enabled || corePinned) && (group == .gpu || options.mode.showsValue)
                     && !powerMonitor.helper.availability.allowsPowerToggle {
                     self.statusItem?.menu?.cancelTracking()
                     Task { @MainActor [weak self] in
@@ -1004,8 +1001,7 @@ final class AppDelegate:
         menuBarController?.refresh(snapshot: logSnapshot, fanSample: fanMonitor.sample,
                                    batterySample: latestBatterySample, options: options,
                                    fpsExpanded: hudWindow?.hasRecentFPSReading ?? false,
-                                   autoHideMode: HUDPreferences.autoHideMode,
-                                   pressureHistory: memoryPressureHistory)
+                                   autoHideMode: HUDPreferences.autoHideMode)
     }
 
     private func menuBarSelectionChanged() {
@@ -1092,7 +1088,8 @@ final class AppDelegate:
     }
 
     private func offerMenuBarPowerSetup(for readings: Set<HUDMenuBarReading>) {
-        if !readings.isDisjoint(with: [.gpuPower, .cpuPower, .anePower, .socPower]),
+        let needsFrequency = readings.contains(.cpuCores) && HUDPreferences.cpuCoreOptions.mode.showsValue
+        if needsFrequency || !readings.isDisjoint(with: [.gpuPower, .cpuPower, .anePower, .socPower, .gpuCores]),
            !powerMonitor.helper.availability.allowsPowerToggle {
             statusItem?.menu?.cancelTracking()
             Task { @MainActor [weak self] in
@@ -1734,7 +1731,6 @@ final class AppDelegate:
         if demand.totalMemory { totalRAMUsageMonitor?.start() }
         else { logSnapshot.updateMemory(nil, app: false); totalRAMUsageMonitor?.stop(); hudWindow?.updateRAM(.ramTotal, usage: nil) }
         if !demand.pressureHistory {
-            memoryPressureHistory.clear()
             hudWindow?.clearMemoryPressureHistory()
         }
         if demand.pressure {

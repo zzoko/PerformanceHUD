@@ -131,7 +131,7 @@ import AppKit
                 precondition(animation.progress > 0 && animation.progress < 1)
                 precondition(container.layer?.masksToBounds == true && container.layer?.cornerCurve == .continuous)
                 precondition(glass.bodyFrame.size == container.bounds.size)
-                precondition(alignment == .vertical ? container.bounds.height < fullSize.height : container.bounds.width < fullSize.width)
+                precondition(alignment == .vertical ? container.bounds.height < fullSize.height * scale.rawValue : container.bounds.width < fullSize.width * scale.rawValue)
                 let native: NSGlassEffectView = member(glass, "glass")
                 precondition(native.cornerRadius == min(16 * CGFloat(scale.rawValue), min(container.bounds.width, container.bounds.height) / 2))
                 precondition(panel.frame.minX == anchor.x && panel.frame.maxY == anchor.y,
@@ -148,22 +148,24 @@ import AppKit
                     try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/phud-rounded-hide-\(alignment.rawValue).png"))
                 }
                 animation.transition(visible: true, animated: false)
-                precondition(glass.bodyFrame.size == fullSize, "Full native body mismatch: layout=\(alignment), scale=\(scale), expected=\(fullSize), actual=\(glass.bodyFrame.size), progress=\(animation.progress), window=\(panel.frame)")
+                let backing = panel.backingScaleFactor
+                let scaledFull = NSSize(width: (fullSize.width * scale.rawValue * backing).rounded() / backing,
+                                        height: (fullSize.height * scale.rawValue * backing).rounded() / backing)
+                precondition(glass.bodyFrame.size == scaledFull, "Full native body mismatch: layout=\(alignment), scale=\(scale), expected=\(fullSize), actual=\(glass.bodyFrame.size), progress=\(animation.progress), window=\(panel.frame)")
                 if alignment == .horizontal {
                     animation.transition(visible: false, animated: false)
                     precondition(container.bounds.width == 0)
                     // Appearance changes must preserve a collapsed horizontal layout.
                     for appearance in [HUDBackground.light, .dark] {
                         rounded.setBackground(appearance)
-                        let trailing: NSLayoutConstraint? = member(rounded, "stackTrailingConstraint")
-                        precondition(trailing?.isActive == false,
+                        let stack: NSView = member(rounded, "stackView")
+                        precondition(stack.isHidden,
                                      "Hidden vertical rows must not be constrained to the zero-width viewport")
                     }
                     rounded.setAlignment(.vertical)
-                    let stack: NSStackView = member(rounded, "stackView")
-                    let trailing: NSLayoutConstraint? = member(rounded, "stackTrailingConstraint")
-                    precondition(trailing?.isActive == true && !stack.isHidden)
-                    precondition(abs(stack.frame.width - (container.bounds.width - 2 * HUDStyle.horizontalPadding(scale: scale))) <= 1,
+                    let stack: NSView = member(rounded, "stackView")
+                    precondition(!stack.isHidden)
+                    precondition(abs(stack.frame.width - (stack.superview!.bounds.width - 2 * HUDStyle.horizontalPadding)) <= 1,
                                  "Returning to Vertical must restore the full label/value layout width")
                 }
                 rounded.shutdown()

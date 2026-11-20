@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-3.6.svg" alt="App version 3.6 — view changelog" width="56" height="30" align="top"></a>
+## ↓ Download options &nbsp;<a href="docs/CHANGELOG.md"><img src="docs/images/app-version-3.7.svg" alt="App version 3.7 — view changelog" width="56" height="30" align="top"></a>
 
 Get the ready-built app for **$3.99**, or build it yourself for free. Both have exactly the same features: no subscription, nothing to unlock.
 
@@ -16,12 +16,6 @@ Get the ready-built app for **$3.99**, or build it yourself for free. Both have 
 </p>
 
 Buying the app helps keep PerformanceHUD maintained, and lets you use it personally or commercially, including in monetized videos and streams. Free source builds and modifications are for **personal, non-commercial use**. Resale and external redistribution are not permitted. See the [license](LICENSE) for details.
-
-Whichever version you use, you can also support ongoing development through **[GitHub Sponsors](https://github.com/sponsors/zzoko)**.
-
-<p>
-  <a href="https://github.com/sponsors/zzoko"><img src="docs/images/github-sponsors.svg" alt="Support through GitHub Sponsors" width="250" height="64"></a>
-</p>
 
 ![Repository activity: daily Git clones over the last 14 days](https://raw.githubusercontent.com/zzoko/PerformanceHUD/stats/repository-activity.svg)
 
@@ -33,6 +27,7 @@ Whichever version you use, you can also support ongoing development through **[G
 
 <details>
 <summary><strong>Features, screenshots &amp; controls</strong>
+<!-- Remove these comment markers to restore the YouTube preview.
 <div align="center">
   <a href="https://www.youtube.com/watch?v=NwkdeJpFmBQ" title="Watch PerformanceHUD in action on YouTube">
     <picture>
@@ -42,6 +37,7 @@ Whichever version you use, you can also support ongoing development through **[G
     </picture>
   </a>
 </div>
+-->
 <!-- Invisible full-width spacer: keeps this box full width while collapsed, so the preview stays centred when it opens. -->
 <img src="docs/images/layout-spacer.svg" alt="" width="2000" height="0" align="right">
 </summary>

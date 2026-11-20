@@ -6,6 +6,7 @@ final class HUDMiscMenuView: HUDCategoryMenuView {
     private var options: HUDMiscOptions
     private var alignment: HUDAlignment
     private let master = HUDResourceMasterButton(title: "Misc", target: nil, action: nil)
+    private let highlight = HUDEmphasisButton()
     private var choices: [HUDMiscPillButton] = []
     private let chip = HUDMiscPillButton(title: "Chip", target: nil, action: nil)
     private let os = HUDMiscPillButton(title: "OS", target: nil, action: nil)
@@ -21,14 +22,18 @@ final class HUDMiscMenuView: HUDCategoryMenuView {
         master.target = self; master.action = #selector(toggleCategory)
         master.setAccessibilityLabel("Show Misc")
         setCategory(master)
-        let pills = HUDMiscPillRow()
+        highlight.target = self
+        highlight.action = #selector(toggleHighlight)
+        highlight.setAccessibilityLabel("Emphasize all Misc readings")
+        let firstRow = HUDMiscPillRow()
+        let secondRow = HUDMiscPillRow()
         for (index, reading) in HUDMiscReading.liveReadings.enumerated() {
             let button = HUDMiscPillButton(title: reading.title, target: self, action: #selector(toggleReading(_:)))
             button.tag = index
             button.setAccessibilityRole(.checkBox)
             button.setAccessibilityLabel("Show \(reading.title)")
             choices.append(button)
-            pills.addSubview(button)
+            (reading == .thermal ? secondRow : firstRow).addSubview(button)
         }
         chip.target = self; chip.action = #selector(toggleChip)
         chip.setAccessibilityRole(.checkBox)
@@ -42,12 +47,10 @@ final class HUDMiscMenuView: HUDCategoryMenuView {
             button.setAccessibilityRole(.radioButton)
             button.setAccessibilityLabel("Chip display mode: \(button.title)")
         }
-        let systemPills = HUDMiscPillRow()
-        systemPills.stretchesToFill = false
-        systemPills.addSubview(os)
-        systemPills.addSubview(HUDMiscChipPill(chip: chip, modes: chipModes))
-        setRows([.init(reading: pills, fullWidth: true),
-                 .init(reading: systemPills, fullWidth: true)])
+        secondRow.addSubview(os)
+        secondRow.addSubview(HUDMiscChipPill(chip: chip, modes: chipModes))
+        setRows([.init(reading: firstRow, emphasis: highlight, fullWidth: true),
+                 .init(reading: secondRow, fullWidth: true)])
         refresh()
     }
 
@@ -62,6 +65,8 @@ final class HUDMiscMenuView: HUDCategoryMenuView {
         let allowed = alignment.allows(.misc)
         master.isEnabled = allowed
         master.state = options.enabled && allowed ? .on : .off
+        highlight.state = options.highlighted ? .on : .off
+        highlight.isEnabled = allowed && !options.visibleReadings.isEmpty
         for (index, reading) in HUDMiscReading.liveReadings.enumerated() {
             choices[index].isEnabled = options.enabled && allowed
             choices[index].state = options.readings.contains(reading) ? .on : .off
@@ -105,6 +110,11 @@ final class HUDMiscMenuView: HUDCategoryMenuView {
         refresh(); onChange?(options)
     }
 
+    @objc private func toggleHighlight() {
+        options.highlighted = highlight.state == .on
+        refresh(); onChange?(options)
+    }
+
     @objc private func toggleReading(_ sender: NSButton) {
         guard alignment.allows(.misc), options.enabled,
               HUDMiscReading.liveReadings.indices.contains(sender.tag) else { return }
@@ -117,17 +127,14 @@ final class HUDMiscMenuView: HUDCategoryMenuView {
 
 @MainActor
 private final class HUDMiscPillRow: NSView {
-    var stretchesToFill = true
-
     override func layout() {
         super.layout()
+        guard !subviews.isEmpty else { return }
         let spacing: CGFloat = 5
-        let available = max(0, bounds.width - CGFloat(max(0, subviews.count - 1)) * spacing)
-        let total = subviews.reduce(CGFloat(0)) { $0 + $1.intrinsicContentSize.width }
-        guard total > 0 else { return }
+        let available = max(0, bounds.width - CGFloat(subviews.count - 1) * spacing)
+        let width = available / CGFloat(subviews.count)
         var x: CGFloat = 0
         for pill in subviews {
-            let width = (stretchesToFill ? available / total : 1) * pill.intrinsicContentSize.width
             let rect = NSRect(x: x, y: (bounds.height - 22) / 2, width: width, height: 22)
             pill.frame = rect
             x += width + spacing
@@ -167,8 +174,8 @@ private final class HUDMiscChipPill: NSView {
         let chipWidth = chip.intrinsicContentSize.width
         chip.frame = NSRect(x: 0, y: 0, width: chipWidth, height: bounds.height)
         var x = chipWidth + 7
+        let width = (bounds.width - x - 2) / CGFloat(modes.count)
         for button in modes {
-            let width = button.intrinsicContentSize.width
             button.frame = NSRect(x: x, y: 2, width: width, height: bounds.height - 4)
             x += width
         }

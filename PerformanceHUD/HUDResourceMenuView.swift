@@ -137,14 +137,15 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                 coreOptions.highlighted.toggle(); refresh(); onCoresChange?(coreOptions)
             }
             controls[9] = check
+            let pin = menuBarReading(for: 9).map { makeMenuBarButton(for: $0, title: "\(title) Cores") }
             if group == .cpu {
                 let modes = NSSegmentedControl(labels: HUDCoreDisplayMode.allCases.map(\.title), trackingMode: .selectOne,
                                                target: self, action: #selector(coreModeChanged(_:)))
                 modes.setAccessibilityLabel("\(title) core display mode")
                 coreModeControl = modes
-                rows.append(.init(reading: check, mode: modes))
+                rows.append(.init(reading: check, mode: modes, menuBar: pin))
             } else {
-                rows.append(.init(reading: check))
+                rows.append(.init(reading: check, menuBar: pin))
             }
         }
         readingRows = rows
@@ -319,6 +320,8 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         case (.cpu, 4): return .cpuPower
         case (.cpu, 1): return .cpuTemperature
         case (.cpu, 7): return .cpuUsage
+        case (.gpu, 9): return .gpuCores
+        case (.cpu, 9): return .cpuCores
         case (.ane, 4): return .anePower
         case (.ram, 8): return .memoryPressure
         case (.ram, 5): return .memoryDetails
@@ -335,13 +338,15 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     }
 
     private func refresh() {
+        needsDisplay = true
         let coreMode = coreOptions.mode
         controls[9]?.state = coreOptions.enabled ? .on : .off
         controls[9]?.isEnabled = options.enabled
+        (controls[9] as? HUDReadingCheckbox)?.menuBarSelected = isPinned(9)
         (controls[9] as? HUDReadingCheckbox)?.emphasized = coreOptions.highlighted
         (controls[9] as? HUDReadingCheckbox)?.highlightAvailable = group == .gpu || coreMode.showsValue
         coreModeControl?.selectedSegment = HUDCoreDisplayMode.allCases.firstIndex(of: coreMode) ?? 2
-        coreModeControl?.isEnabled = options.enabled && coreOptions.enabled
+        coreModeControl?.isEnabled = (options.enabled && coreOptions.enabled) || isPinned(9)
         if group == nil {
             let available = batteryAvailability != .unavailable
             master.isEnabled = available
@@ -363,9 +368,10 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
         if let control = pressureModeControl {
             let pinned = isPinned(8)
             let mode = options.pressureMode
+            let pressureLayout: HUDAlignment = pinned && !options.showsPressure ? .horizontal : alignment
             control.isEnabled = options.showsPressure || pinned
-            control.setEnabled(alignment != .horizontal || pinned, forSegment: HUDMemoryPressureMode.Display.graph.rawValue)
-            control.selectedSegment = (pinned ? mode : mode.resolved(for: alignment)).display.rawValue
+            control.setEnabled(pressureLayout == .vertical, forSegment: HUDMemoryPressureMode.Display.graph.rawValue)
+            control.selectedSegment = mode.resolved(for: pressureLayout).display.rawValue
             pressureColorControl?.isEnabled = control.isEnabled
             pressureColorControl?.state = mode.usesStateColor ? .on : .off
         }

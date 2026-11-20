@@ -200,11 +200,56 @@ import IOKit.ps
         for metric in HUDMetric.allCases where metric != .battery { hud.setMetricEnabled(metric, enabled: false) }
         defer { hud.shutdown() }
         let verticalBattery: HUDBatteryIndicatorView = member(hud, "batteryIndicator")
+        for background in [HUDBackground.dark, .light] {
+            for horizontal in [false, true] {
+                let indicator = HUDBatteryIndicatorView(frame: .zero)
+                indicator.applyStyle(background: background)
+                indicator.setHorizontal(horizontal)
+                indicator.setOptions(.init(enabled: true, temperature: false, charge: false, flowMode: .auto))
+                let normal = HUDStyle.readingColor(background: background)
+                func sample(_ time: TimeInterval, _ source: BatterySample.Source?, _ watts: Double?) -> NSColor {
+                    indicator.update(percentage: 60, source: source, power: watts, now: time)
+                    return indicator.powerColor(at: time)
+                }
+                func checkPulse(at start: TimeInterval, source: BatterySample.Source, watts: Double, color: NSColor) {
+                    func tint(_ color: NSColor) -> CGFloat {
+                        let rgb = color.usingColorSpace(.sRGB)!
+                        return rgb.greenComponent - rgb.redComponent
+                    }
+                    check(sample(start, source, watts) == normal, "The pulse starts at the usual reading color")
+                    let target = tint(color)
+                    let rising = tint(indicator.powerColor(at: start + 0.12)) / target
+                    let peak = tint(indicator.powerColor(at: start + 0.25)) / target
+                    let falling = tint(sample(start + 0.60, source, watts)) / target
+                    let tail = tint(indicator.powerColor(at: start + 0.90)) / target
+                    check(rising > 0 && rising < peak && abs(peak - 1) < 0.02,
+                          "Charging and draining ease into their respective colors in 0.25 seconds")
+                    check(peak > falling && falling > tail && tail > 0 && indicator.powerColor(at: start + 1) == normal,
+                          "Both colors ease out over 0.75 seconds without restarting on a repeated sample")
+                }
+                check(sample(10, .powerAdapter, 15) == normal && indicator.powerColor(at: 10.25) == normal,
+                      "Starting on a charging adapter uses the normal reading color")
+                check(sample(11, .powerAdapter, 0) == normal && sample(12, .battery, nil) == normal,
+                      "Unplugging waits for a confirmed discharge")
+                checkPulse(at: 13, source: .battery, watts: -7, color: HUDStyle.pressureRed)
+                check(sample(15, nil, nil) == normal && sample(16, .powerAdapter, 0) == normal,
+                      "Missing and idle samples stay neutral while connecting the adapter")
+                checkPulse(at: 17, source: .powerAdapter, watts: 15, color: HUDStyle.stateGreen)
+                check(sample(19, .powerAdapter, -0.1) == normal && sample(20, .powerAdapter, 20) == normal
+                      && indicator.powerColor(at: 20.25) == normal, "Near-zero noise cannot rearm either pulse")
+                indicator.setOptions(.init(enabled: true, temperature: false, charge: false, flowMode: .off))
+                check(sample(21, .battery, -7) == normal && indicator.powerColor(at: 21.25) == normal
+                      && indicator.powerText.isEmpty, "Charge Off suppresses the discharge pulse")
+                _ = sample(22, .powerAdapter, 0)
+                indicator.setOptions(.init(enabled: true, temperature: false, charge: false, flowMode: .always))
+                checkPulse(at: 23, source: .battery, watts: -7, color: HUDStyle.pressureRed)
+            }
+        }
         let view = HUDBatteryIndicatorView(frame: .zero)
         for horizontal in [false, true] {
             view.setHorizontal(horizontal)
             view.setOptions(.init(enabled: true, temperature: true, charge: true, flowMode: .auto))
-            view.frame = NSRect(x: 0, y: 0, width: 232, height: HUDStyle.rowHeight(for: .battery, scale: .normal))
+            view.frame = NSRect(x: 0, y: 0, width: 232, height: HUDStyle.rowHeight(for: .battery))
             view.update(percentage: 80, source: .powerAdapter, temperature: 33, power: 12, now: 100)
             let reservedWidth = view.minimumRowWidth
             let temperatureRect = view.temperatureTextRect
@@ -235,7 +280,7 @@ import IOKit.ps
             view.update(percentage: 80, source: .powerAdapter, temperature: 33, power: 0, now: 107)
             check(view.powerText == "0.0 W", "Always includes idle zeros")
             view.update(percentage: 80, source: .powerAdapter, temperature: 33, power: nil, now: 108)
-            check(view.powerText == "—", "Always shows a dash for unavailable watts in both layouts")
+            check(view.powerText == "", "Always reserves a blank slot for unavailable watts in both layouts")
         }
 
         // Exercise actual window resizing with only Battery enabled. No CPU/FPS
@@ -279,7 +324,7 @@ import IOKit.ps
             view.setHorizontal(horizontal)
             for factor in scales {
                 let scale = HUDScale(rawValue: factor)
-                view.applyStyle(scale: scale, background: .dark)
+                view.applyStyle(background: .dark)
                 for mask in 0..<8 {
                     for emphasized in [false, true] {
                         let options = HUDBatteryOptions(enabled: true, temperature: mask & 2 != 0,
@@ -310,7 +355,7 @@ import IOKit.ps
                                 temperatureTrailingInset: member(verticalBattery, "sharedVerticalTemperatureTrailingInset"))
                         }
                         view.frame = NSRect(x: 0, y: 0, width: width,
-                            height: horizontal ? 21 * factor : HUDStyle.rowHeight(for: .battery, scale: scale))
+                            height: horizontal ? HUDStyle.rowHeight : HUDStyle.rowHeight(for: .battery))
                         var stableSourceText: String?
                         for reading: Double? in [-1000, -99.9, -24.3, -5.3, 0, 24.3, 99.9, 1000, nil] {
                             view.update(percentage: 80, source: .powerAdapter, temperature: 99.9, power: reading)
@@ -334,17 +379,17 @@ import IOKit.ps
                                 // exceed that budget; still check their bounds and caption stability.
                                 let compactStressValue = !horizontal && factor < 1 && mask == 7 && abs(reading!) >= 1000
                                 if !compactStressValue {
-                                    let minimumGap = (horizontal ? 7.9 : 0.5) * factor
+                                    let minimumGap: CGFloat = horizontal ? 7.9 : 0.5
                                     check(rect.minX >= labelRight + minimumGap, "Power does not collide with its label: horizontal=\(horizontal), scale=\(factor), mask=\(mask), watts=\(String(describing: reading)), width=\(width), labelRight=\(labelRight), powerLeft=\(rect.minX)")
                                 }
                             } else if options.power {
-                                check(view.powerText == "—", "Enabled unavailable power shows a dash")
+                                check(view.powerText == "", "Enabled unavailable power stays blank")
                             } else { check(view.powerText.isEmpty, "Disabled power does not draw") }
                             if options.temperature {
                                 let temperatureRect = view.temperatureTextRect
                                 check(view.bounds.insetBy(dx: -0.1, dy: -0.1).contains(temperatureRect), "Temperature fits its row")
                                 if options.power, reading != nil {
-                                    check(view.powerTextRect.maxX + 7.9 * factor <= temperatureRect.minX,
+                                    check(view.powerTextRect.maxX + 7.9 <= temperatureRect.minX,
                                           "Charge precedes Temperature in both layouts")
                                     check(abs(temperatureRect.minY - view.powerTextRect.minY) < 0.01,
                                           "Battery readings share one baseline")
@@ -352,11 +397,11 @@ import IOKit.ps
                             } else { check(view.temperatureText.isEmpty, "Disabled temperature does not draw") }
                             if !horizontal {
                                 if options.power, !options.temperature, !options.charge, reading != nil {
-                                    check(abs(view.powerTextRect.maxX - (width - 2 * factor)) < 0.01,
+                                    check(abs(view.powerTextRect.maxX - (width - 2)) < 0.01,
                                           "Flow alone reaches the rightmost column")
                                 }
                                 if options.temperature, !options.charge {
-                                    check(abs(view.temperatureTextRect.maxX - (width - 2 * factor)) < 0.01,
+                                    check(abs(view.temperatureTextRect.maxX - (width - 2)) < 0.01,
                                           "Temperature reaches the rightmost column when Energy is off")
                                 }
                             }
@@ -369,9 +414,9 @@ import IOKit.ps
         // against a second set of battery-specific spacing constants.
         for emphasized in [false, true] {
             let comparison = HUDHorizontalView(frame: .zero)
-            let readingFont = HUDStyle.readingFont(scale: .normal, highlighted: emphasized)
-            let usageFont = HUDStyle.readingFont(scale: .normal, highlighted: false)
-            let titleFont = HUDStyle.titleFont(for: .battery, scale: .normal)
+            let readingFont = HUDStyle.readingFont(highlighted: emphasized)
+            let usageFont = HUDStyle.readingFont(highlighted: false)
+            let titleFont = HUDStyle.titleFont(for: .battery)
             for watts in [0.0, -24.3, 100.0] {
                 let power = BatteryPowerRate.text(watts)
                 let fields = [("title", "ADP", "ADP", titleFont),
@@ -382,10 +427,10 @@ import IOKit.ps
                     .init(id: role, text: text, reference: reference, font: font, color: .white,
                           help: nil, startsMetric: role == "title", metric: .gpuTotal)
                 }
-                let size = comparison.configure(sections: [readings], showsBattery: false, scale: .normal, background: .dark)
+                let size = comparison.configure(sections: [readings], showsBattery: false, background: .dark)
                 let labels: [String: NSTextField] = member(comparison, "labels")
                 view.setHorizontal(true)
-                view.applyStyle(scale: .normal, background: .dark)
+                view.applyStyle(background: .dark)
                 view.setOptions(.init(enabled: true, temperature: true, charge: true,
                     temperatureHighlighted: emphasized, power: true, powerHighlighted: emphasized))
                 view.update(percentage: 80, source: .powerAdapter, temperature: 36, power: watts)
@@ -462,7 +507,7 @@ import IOKit.ps
             check(verticalBattery.powerTextRect.maxX > allReadingsFlowRight, "Flow moves right when Temperature is off")
             hud.setBatteryOptions(.init(enabled: true, temperature: false, charge: false))
             hud.updateBattery(.init(percentage: 80, source: .powerAdapter, power: -24.3))
-            check(abs(verticalBattery.powerTextRect.maxX - (verticalBattery.bounds.maxX - 2 * factor)) < 0.01,
+            check(abs(verticalBattery.powerTextRect.maxX - (verticalBattery.bounds.maxX - 2)) < 0.01,
                   "Disabling Temperature and Energy moves Flow two positions right")
             check(panel.frame.width == fixedWidth, "Repacking battery readings preserves fixed HUD width")
         }
@@ -502,11 +547,11 @@ import IOKit.ps
                 ("use", "80%", HUDStyle.horizontalPercentageReference)
             ].map { role, text, sizing in
                 .init(id: role, text: text, reference: sizing,
-                    font: role == "title" ? HUDStyle.titleFont(for: .battery, scale: .normal)
-                        : HUDStyle.readingFont(scale: .normal, highlighted: false),
+                    font: role == "title" ? HUDStyle.titleFont(for: .battery)
+                        : HUDStyle.readingFont(highlighted: false),
                     color: .white, help: nil, startsMetric: role == "title", metric: .gpuTotal)
             }
-            let size = reference.configure(sections: [readings], showsBattery: false, scale: .normal, background: .dark)
+            let size = reference.configure(sections: [readings], showsBattery: false, background: .dark)
             reference.isHidden = false
             reference.frame = NSRect(origin: NSPoint(x: 22, y: 105), size: size)
             canvas.addSubview(reference)
@@ -514,7 +559,7 @@ import IOKit.ps
                 let preview = HUDBatteryIndicatorView(frame: .zero)
                 preview.setHorizontal(true)
                 preview.setOptions(.init(enabled: true, temperature: true, charge: true, power: true))
-                preview.applyStyle(scale: .normal, background: .dark)
+                preview.applyStyle(background: .dark)
                 preview.update(percentage: 80, source: .powerAdapter, temperature: 36, power: watts)
                 preview.frame = NSRect(x: 20, y: CGFloat(75 - index * 30), width: ceil(preview.minimumRowWidth), height: 21)
                 canvas.addSubview(preview)
@@ -522,7 +567,7 @@ import IOKit.ps
             for (index, level) in ["normal", "warning", "critical"].enumerated() {
                 let meter = HUDMemoryPressureMeterView()
                 meter.translatesAutoresizingMaskIntoConstraints = true
-                meter.configure(mode: .colorMeter, scale: .normal, background: .dark)
+                meter.configure(mode: .colorMeter, background: .dark)
                 meter.update(level)
                 meter.frame = NSRect(origin: NSPoint(x: CGFloat(20 + index * 100), y: 15), size: meter.intrinsicContentSize)
                 canvas.addSubview(meter)

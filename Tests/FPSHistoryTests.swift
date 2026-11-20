@@ -98,7 +98,7 @@ import AppKit
         check(pinned() == ["FT", "16.8 ms"], "The pin uses the selected measure and average")
         check(snapshot.numbers[.frameTimeWorst] == 142, "CSV uses the measured, unclipped worst frame")
         snapshot.setFPS(59)
-        check(pinned() == ["FT", "—"] && snapshot.numbers[.frameTimeWorst] == nil, "Missing timing clears both readings")
+        check(pinned() == ["FT", ""] && snapshot.numbers[.frameTimeWorst] == nil, "Missing timing clears both readings")
 
         let name = "FPSOverhaul.tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
@@ -168,7 +168,7 @@ import AppKit
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 46),
                               styleMask: [], backing: .buffered, defer: false)
         window.contentView = graph
-        graph.applyStyle(scale: .normal, background: .dark)
+        graph.applyStyle(background: .dark)
         let hitches: Set<Int> = [20, 21, 26, 32]
         func render(worstMS: Double) -> NSBitmapImageRep {
             graph.reset()
@@ -189,8 +189,12 @@ import AppKit
             }.count
         }
         let bitmap = render(worstMS: 120)
-        check([19.7, 20.5, 21.3].allSatisfy { markedRows(in: bitmap, at: $0) > 0 },
-              "Consecutive hitches colour one continuous stretch of the FPS curve")
+        check([19.87, 20.13, 20.87, 21.13].allSatisfy { markedRows(in: bitmap, at: $0) > 0 },
+              "Each consecutive hitch tints the curve on both sides of its sample")
+        check([19.65, 20.35, 20.5, 20.65, 21.35].allSatisfy { markedRows(in: bitmap, at: $0) == 0 },
+              "Short hitch tints leave the intervening FPS curve neutral")
+        check([26.03, 31.97].allSatisfy { markedRows(in: bitmap, at: $0) > 0 },
+              "Hitches at either end of a segment tint the line cap")
         check(markedRows(in: bitmap, at: 22) == 0 && markedRows(in: bitmap, at: 29) == 0,
               "Hitch colour ends at normal readings and real gaps")
         let depths = [50.0, 85, 100, 150, 200].map { markedRows(in: render(worstMS: $0), at: 20) }
@@ -207,7 +211,7 @@ import AppKit
         window.contentView = graph
         populateHistory(graph)
         for background in [HUDBackground.dark, .light] {
-            graph.applyStyle(scale: .normal, background: background)
+            graph.applyStyle(background: background)
             for measure in HUDFPSMeasure.allCases {
                 for enabled in [true, false] {
                     graph.configure(measure: measure, hitchMarks: enabled)
@@ -289,7 +293,7 @@ import AppKit
                               "History alone displays the abbreviated measure heading")
                     }
                     hud.updateFPS(59)
-                    check(values[.fps]?.stringValue == "—", "FPS-only telemetry cannot create displayed-frame timings")
+                    check(values[.fps]?.stringValue == "", "FPS-only telemetry cannot create displayed-frame timings")
                 }
             }
         }
@@ -306,7 +310,7 @@ import AppKit
         let rowHeight = HUDCategoryLayout.rowHeight
         check(selectorRects.allSatisfy { $0.minX == HUDCategoryLayout.modeLeading && $0.size == selectorRects[0].size },
               "All three FPS selectors use the category mode column")
-        check(selectorRects[1].midY == selectorRects[0].midY + rowHeight &&
+        check(selectorRects[1].midY == selectorRects[0].midY + rowHeight + HUDCategoryLayout.pinConnectionHeight &&
               selectorRects[2].midY == selectorRects[1].midY + rowHeight &&
               hitch.frame.midY == selectorRects[2].midY + rowHeight && hitch.frame.minX == HUDCategoryLayout.modeLeading,
               "Display, Measure, Number size, and Hitch marks sit on consecutive aligned rows")

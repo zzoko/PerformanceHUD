@@ -1,5 +1,4 @@
 import AppKit
-import QuartzCore
 
 enum HUDShortcutFeedback {
     case appearance(HUDBackground)
@@ -34,7 +33,7 @@ enum HUDShortcutFeedback {
 final class HUDShortcutFeedbackController {
     private let panel = HUDShortcutFeedbackPanel(contentRect: .zero,
         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-    private let background = NSVisualEffectView()
+    private let background = NativeGlassHUDBackground(frame: .zero)
     private let icon = NSImageView()
     private let label = NSTextField(labelWithString: "")
     private var timer: Timer?
@@ -47,7 +46,7 @@ final class HUDShortcutFeedbackController {
         panel.isReleasedWhenClosed = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.ignoresMouseEvents = true
@@ -55,13 +54,7 @@ final class HUDShortcutFeedbackController {
         panel.level = .screenSaver // Same fullscreen-capable level as the HUD.
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
 
-        background.material = .hudWindow
-        background.blendingMode = .behindWindow
-        background.state = .active
-        background.wantsLayer = true
-        background.layer?.cornerRadius = 14
-        background.layer?.cornerCurve = .continuous
-        background.layer?.masksToBounds = true
+        background.cornerRadius = 14
         panel.contentView = background
 
         label.font = .systemFont(ofSize: 13, weight: .medium)
@@ -71,8 +64,8 @@ final class HUDShortcutFeedbackController {
         label.isSelectable = false
         icon.contentTintColor = .labelColor
         icon.imageScaling = .scaleProportionallyDown
-        background.addSubview(icon)
-        background.addSubview(label)
+        background.contentView.addSubview(icon)
+        background.contentView.addSubview(label)
     }
 
     func show(_ feedback: HUDShortcutFeedback, on screen: NSScreen? = nil,
@@ -82,6 +75,7 @@ final class HUDShortcutFeedbackController {
         timer?.invalidate()
         let isDark = appearance.resolved(isDark: NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua) == .dark
         panel.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
+        background.isDark = isDark
         label.stringValue = feedback.text
         panel.setAccessibilityLabel(feedback.text)
         icon.image = NSImage(systemSymbolName: feedback.symbol, accessibilityDescription: nil)?
@@ -89,8 +83,11 @@ final class HUDShortcutFeedbackController {
 
         let area = screen.visibleFrame
         let size = NSSize(width: min(max(180, ceil(label.intrinsicContentSize.width) + 64), area.width - 24), height: 44)
-        panel.setFrame(NSRect(x: area.midX - size.width / 2, y: area.maxY - size.height - 28,
-                              width: size.width, height: size.height), display: false)
+        let body = NSRect(x: area.midX - size.width / 2, y: area.maxY - size.height - 28,
+                          width: size.width, height: size.height)
+        let padding = NativeGlassHUDBackground.shadowPadding
+        panel.setFrame(body.insetBy(dx: -padding, dy: -padding), display: false)
+        background.layoutSubtreeIfNeeded()
         icon.frame = NSRect(x: 16, y: 14, width: 16, height: 16)
         label.frame = label.frame(forAlignmentRect: NSRect(x: 42, y: (size.height - label.intrinsicContentSize.height) / 2,
             width: size.width - 58, height: label.intrinsicContentSize.height))

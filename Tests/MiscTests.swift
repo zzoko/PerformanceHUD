@@ -16,7 +16,8 @@ import Darwin
         defer { store.removePersistentDomain(forName: suite) }
         check(!HUDPreferences.miscOptions(in: store).enabled, "Misc must default off")
         check(HUDPreferences.miscOptions(in: store).readings.count == 6, "All six choices start selected")
-        HUDPreferences.setMiscOptions(.init(enabled: true, readings: [.thermal]), in: store)
+        HUDPreferences.setMiscOptions(.init(enabled: true, readings: [.thermal], highlighted: true), in: store)
+        check(HUDPreferences.miscOptions(in: store).highlighted, "Remember category-wide emphasis")
         check(HUDPreferences.miscOptions(in: store).visibleReadings == [.thermal], "Remember individual choice")
         HUDPreferences.setMiscOptions(.init(enabled: false, readings: []), in: store)
         check(HUDPreferences.miscOptions(in: store).readings.isEmpty, "An empty selection must survive relaunch")
@@ -98,16 +99,28 @@ import Darwin
         var changed = HUDMiscOptions()
         menu.onChange = { changed = $0 }
         master.performClick(nil)
+        let highlight: HUDEmphasisButton = member(menu, "highlight")
+        highlight.performClick(nil)
+        check(changed.highlighted && changed.readings == Set(HUDMiscReading.allCases), "B emphasizes all selected readings")
         choices[0].performClick(nil)
         check(changed.enabled && changed.readings == [.refreshRate, .gameMode, .thermal, .chip, .os], "Pills toggle independently")
         master.performClick(nil); master.performClick(nil)
         check(choices[0].state == .off, "Master remembers individual readings")
         menu.update(alignment: .horizontal)
+        check(!highlight.isEnabled && highlight.state == .on, "Horizontal retains the disabled Misc emphasis choice")
         check(!master.isEnabled && master.state == .off && choices.allSatisfy { !$0.isEnabled }, "Horizontal forces Misc off")
         menu.update(alignment: .vertical)
         check(master.isEnabled && master.state == .on && choices.allSatisfy { $0.isEnabled }, "Vertical restores Misc")
         check(choices[0].state == .off && choices[3].state == .on, "Layout switch remembers each choice")
         menu.layoutSubtreeIfNeeded()
+        let chip: NSButton = member(menu, "chip")
+        let os: NSButton = member(menu, "os")
+        let firstRow = choices[0].superview!, secondRow = os.superview!
+        check(firstRow.frame.minX == secondRow.frame.minX && firstRow.frame.width == secondRow.frame.width
+              && firstRow.frame.maxX < highlight.frame.minX, "Both rows fill the same space before B")
+        for (upper, lower) in zip(choices.prefix(3), [choices[3], os, chip.superview!]) {
+            check(upper.frame == lower.frame, "Misc uses three aligned cells on each row")
+        }
         for button in choices {
             check(menu.bounds.contains(button.convert(button.bounds, to: menu)), "All five pills fit the menu")
         }
@@ -119,12 +132,18 @@ import Darwin
         let misc: HUDMiscView = member(hud, "miscView")
         let fields: [HUDMiscReading: (NSTextField, NSTextField)] = member(misc, "fields")
         for background in [HUDBackground.light, .dark] {
-            misc.configure(options: .init(enabled: true), scale: .normal, background: background)
+            misc.configure(options: .init(enabled: true), background: background)
             for (title, value) in fields.values {
                 check(title.textColor == HUDStyle.TextStyle.label.color(background: background), "Names keep Label style")
                 check(value.textColor == HUDStyle.TextStyle.reading.color(background: background), "Values use Reading style")
-                check(value.font == HUDStyle.readingFont(scale: .normal, highlighted: false), "Regular reading font")
+                check(value.font == HUDStyle.readingFont(highlighted: false), "Regular reading font")
                 check(title.font?.pointSize == value.font?.pointSize, "Text size is unchanged")
+            }
+            misc.configure(options: .init(enabled: true, highlighted: true), background: background)
+            let coreFields: [(NSTextField, NSTextField)] = member(misc, "coreFields")
+            for (title, value) in Array(fields.values) + coreFields {
+                check(title.font == HUDStyle.smallLabelFont(), "B preserves the Misc labels")
+                check(value.font == HUDStyle.readingFont(highlighted: true), "B emphasizes all Misc values, including core counts")
             }
         }
         let container: NSView = member(hud, "container")

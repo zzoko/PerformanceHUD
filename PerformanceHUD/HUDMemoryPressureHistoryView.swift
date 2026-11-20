@@ -64,21 +64,8 @@ nonisolated struct HUDMemoryPressureHistory {
 
 @MainActor
 final class HUDMemoryPressureHistoryView: NSView {
-    // The regular Vertical graph, uniformly scaled into the menu-bar row.
-    // A stable reference keeps neighboring readings fixed through emphasis changes.
-    static let menuBarReferenceSize: NSSize = {
-        let scale = HUDScale.normal
-        let font = HUDStyle.readingFont(scale: scale, highlighted: false)
-        let field = NSTextField(labelWithString: "")
-        let width = HUDStyle.verticalReadingClusterWidth(scale: scale, power: font, temperature: font, usage: font)
-            + field.alignmentRectInsets.right + 4
-        let height = HUDStyle.ramDetailHeight(scale: scale) + HUDStyle.pressureHistoryBottomExtension(scale: scale)
-        return NSSize(width: width, height: height)
-    }()
-
     private(set) var history = HUDMemoryPressureHistory()
     private var colored = false
-    private var scale: CGFloat = 1
     private var width: CGFloat = 72.6
     private var background: HUDBackground = .dark
 
@@ -106,11 +93,10 @@ final class HUDMemoryPressureHistoryView: NSView {
 
     required init?(coder: NSCoder) { fatalError("Use init()") }
 
-    func configure(mode: HUDMemoryPressureMode, scale: HUDScale, background: HUDBackground, width: CGFloat) {
+    func configure(mode: HUDMemoryPressureMode, background: HUDBackground, width: CGFloat) {
         colored = mode == .colorHistory
         self.background = background
-        if self.scale != CGFloat(scale.rawValue) || self.width != width {
-            self.scale = CGFloat(scale.rawValue)
+        if self.width != width {
             self.width = width
             invalidateIntrinsicContentSize()
         }
@@ -119,12 +105,6 @@ final class HUDMemoryPressureHistoryView: NSView {
 
     func append(_ sample: MemoryPressureMonitor.Sample) {
         history.append(sample)
-        updateAccessibilityValue()
-        needsDisplay = true
-    }
-
-    func setHistory(_ history: HUDMemoryPressureHistory) {
-        self.history = history
         updateAccessibilityValue()
         needsDisplay = true
     }
@@ -148,9 +128,9 @@ final class HUDMemoryPressureHistoryView: NSView {
     // Zero is the bottom of the filled plot, with room for the endpoint halo
     // above and below. The fade changes opacity, never the numeric baseline.
     var plotBounds: NSRect {
-        NSRect(x: 0.5 * scale, y: 3.5 * scale,
-               width: max(0, bounds.width - 4 * scale),
-               height: max(0, bounds.height - 7 * scale))
+        NSRect(x: 0.5, y: 3.5,
+               width: max(0, bounds.width - 4),
+               height: max(0, bounds.height - 7))
     }
 
     func point(for sample: MemoryPressureMonitor.Sample, latestTime: TimeInterval) -> NSPoint {
@@ -174,7 +154,7 @@ final class HUDMemoryPressureHistoryView: NSView {
             let outline = NSBezierPath()
             outline.move(to: points[0])
             for point in points.dropFirst() { outline.line(to: point) }
-            outline.lineWidth = scale
+            outline.lineWidth = 1
             outline.lineJoinStyle = .round
             outline.lineCapStyle = .butt
             let area = outline.copy() as! NSBezierPath
@@ -217,15 +197,15 @@ final class HUDMemoryPressureHistoryView: NSView {
                                           width: radius * 2, height: radius * 2))
             }
             tint.withAlphaComponent(0.22).setFill()
-            circle(radius: 3 * scale).fill()
+            circle(radius: 3).fill()
             tint.setFill()
-            circle(radius: 1.6 * scale).fill()
+            circle(radius: 1.6).fill()
         }
         if showsBaseline {
             let plot = plotBounds
             HUDStyle.separatorColor(background: background).setFill()
-            NSRect(x: plot.minX, y: plot.minY - 0.25 * scale,
-                   width: plot.width, height: 0.5 * scale).fill()
+            NSRect(x: plot.minX, y: plot.minY - hudHairline / 2,
+                   width: plot.width, height: hudHairline).fill()
         }
     }
 
@@ -237,15 +217,15 @@ final class HUDMemoryPressureHistoryView: NSView {
             ends.move(to: NSPoint(x: x, y: plot.minY))
             ends.line(to: NSPoint(x: x, y: plot.maxY))
         }
-        ends.lineWidth = 0.5 * scale
+        ends.lineWidth = hudHairline
         tint.withAlphaComponent(0.16).setStroke()
         ends.stroke()
 
         let maximum = NSBezierPath()
         maximum.move(to: NSPoint(x: plot.minX, y: plot.maxY))
         maximum.line(to: NSPoint(x: plot.maxX, y: plot.maxY))
-        maximum.lineWidth = 0.6 * scale
-        maximum.setLineDash([1 * scale, 1.7 * scale], count: 2, phase: 0)
+        maximum.lineWidth = max(0.6, hudHairline)
+        maximum.setLineDash([1, 1.7], count: 2, phase: 0)
         tint.withAlphaComponent(0.35).setStroke()
         maximum.stroke()
     }

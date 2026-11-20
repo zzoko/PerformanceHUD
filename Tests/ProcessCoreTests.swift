@@ -12,7 +12,7 @@ import AppKit
             precondition(HUDCoreBarLayout.rowSizes(for: count) == expected,
                          "Wrap at twelve, evenly distributed with longer rows first")
             let bounds = NSRect(x: 5, y: 7, width: 70, height: CGFloat(max(0, expected.count - 1) * 14 + 10))
-            let rects = HUDCoreBarLayout.rects(for: count, in: bounds, scale: 1)
+            let rects = HUDCoreBarLayout.rects(for: count, in: bounds)
             precondition(rects.count == count)
             var offset = 0
             for (row, size) in expected.enumerated() {
@@ -116,7 +116,7 @@ import AppKit
             var savedFrames: [NSRect]?
             for emphasized in [false, true] {
                 view.configure(options: .init(enabled: true, readings: selected,
-                    highlighted: emphasized ? selected : []), scale: .normal, background: .dark)
+                    highlighted: emphasized ? selected : []), background: .dark)
                 for usage in [nil, 0.0, 9.0, precise, 100.0] {
                     view.setValue(usage.map { "\(Int($0.rounded()))%" }, for: .cpu)
                     view.setValue(usage.map { "\(Int($0.rounded()))%" }, for: .gpu)
@@ -124,10 +124,10 @@ import AppKit
                     view.layoutSubtreeIfNeeded()
                     let visible = HUDProcessReading.allCases.filter { selected.contains($0) }.map { fields[$0]! }
                     let frames = [rect(name)] + visible.map(rect)
-                    if let savedFrames { precondition(frames == savedFrames, "Digits, dashes and B keep Process columns stable") }
+                    if let savedFrames { precondition(frames == savedFrames, "Digits, blank readings and B keep Process columns stable") }
                     else { savedFrames = frames }
                     for (left, right) in zip(frames, frames.dropFirst()) {
-                        precondition(abs(right.minX - left.maxX - HUDStyle.metricColumnSpacing(scale: .normal)) < 0.01,
+                        precondition(abs(right.minX - left.maxX - HUDStyle.metricColumnSpacing) < 0.01,
                                      "Process preserves the shared 8 pt gaps between enabled columns")
                     }
                     precondition(rect(name).width > 30, "Bounded percentages leave room for the process name")
@@ -155,13 +155,13 @@ import AppKit
             hud.updatePower(.unavailable)
             hud.setPackagePowerOptions(.init(enabled: true))
             precondition([HUDMetric.gpuTotal, .cpuTotal, .aneTotal].allSatisfy {
-                powers[$0]?.stringValue == "—"
-            } && package.stringValue == "—", "Enabled watts use the same unavailable dash as GHz")
+                powers[$0]?.stringValue == ""
+            } && package.stringValue == "", "Missing watts and GHz keep empty values")
             if alignment == .horizontal {
                 let labels: [String: NSTextField] = member(horizontal, "labels")
                 let ids = [HUDMetric.gpuTotal, .cpuTotal, .aneTotal].map { "\($0.rawValue).power" } + ["package.power"]
-                precondition(ids.allSatisfy { labels[$0]?.stringValue == "—" && labels[$0]?.isHidden == false },
-                             "Horizontal power slots also show unavailable dashes")
+                precondition(ids.allSatisfy { labels[$0]?.stringValue == "" && labels[$0]?.isHidden == false },
+                             "Horizontal power slots stay visible and blank while unavailable")
             }
             hud.updatePower(.init(cpu: 1, gpu: 0, package: 1, ane: 0))
             precondition(powers[.gpuTotal]?.stringValue == "0.0 W" && powers[.aneTotal]?.stringValue == "0.0 W",
@@ -170,7 +170,7 @@ import AppKit
                 focusedApp: false, power: false), for: .gpu)
             hud.setPackagePowerOptions(.init(enabled: false))
             precondition(powers[.gpuTotal]?.stringValue.isEmpty == true && powers[.gpuTotal]?.isHidden == true
-                         && package.stringValue.isEmpty, "Disabled power stays hidden rather than becoming a dash")
+                         && package.stringValue.isEmpty, "Disabled power stays hidden")
         }
     }
     @MainActor static func horizontalCores() throws {
@@ -193,10 +193,10 @@ import AppKit
             topology.groups.flatMap { group in group.ids.map { ($0, group.name == "Efficiency" ? 2.1 : 3.7) } }))
         for count in 1...3 {
             let view = HUDCoreDetailView(frame: .zero, types: Array(types.prefix(count)), topology: topology)
-            view.configure(options: .init(enabled: true, mode: .bars), scale: .normal, background: .dark)
+            view.configure(options: .init(enabled: true, mode: .bars), background: .dark)
             let strip = HUDHorizontalView(frame: .zero)
-            let size = strip.configure(sections: [view.horizontalReadings()], showsBattery: false,
-                                       scale: .normal, background: .dark)
+            let size = strip.configure(sections: [view.horizontalReadings(background: .dark)], showsBattery: false,
+                                       background: .dark)
             let bars: [String: HUDCPUCoreBarsView] = member(strip, "coreBars")
             let ordered = types.prefix(count).map { bars["\(HUDMetric.cpuCores.rawValue).\($0.name)"]!.frame }
             precondition(size.height == 21 && (ordered.first!.midY + ordered.last!.midY) / 2 == size.height / 2)
@@ -268,8 +268,8 @@ import AppKit
                 let size = panel.frame.size
                 hud.updatePower(.unavailable)
                 let visibleIDs = mode.showsValue ? ids : [ids[0]]
-                precondition(visibleIDs.allSatisfy { labels["\($0).value"]?.stringValue == "—" }
-                             && panel.frame.size == size, "Missing clocks use stable-width dash placeholders")
+                precondition(visibleIDs.allSatisfy { labels["\($0).value"]?.stringValue == "" }
+                             && panel.frame.size == size, "Missing clocks retain their column width")
                 hud.updatePower(.init(cpu: 1.7, gpu: 3.5, package: 5.2, cpuFrequencies: frequencies, gpuFrequency: 1.2))
             }
         }
@@ -521,6 +521,7 @@ import AppKit
         let enabled: Set<HUDMetric> = member(hud, "enabledMetrics")
         precondition(enabled.contains(.process) && enabled.contains(.cpuCores) && !enabled.contains(.cpu))
         let coreView: HUDCoreDetailView = member(hud, "cpuCoreView")
+        let headings: [HUDMetric: NSTextField] = member(hud, "titleLabels")
         let frequencyFields = coreView.subviews.compactMap { $0 as? NSTextField }.filter {
             $0.accessibilityLabel()?.contains("active-time-weighted frequency") == true
         }
@@ -545,6 +546,14 @@ import AppKit
         for mode in [HUDCoreDisplayMode.both, .bars, .value, .both] {
             hud.setCPUCoreOptions(.init(enabled: true, mode: mode))
             panel.contentView?.layoutSubtreeIfNeeded()
+            for (metric, details) in [(HUDMetric.gpuTotal, gpuCoreView), (.cpuTotal, coreView)] {
+                let heading = headings[metric]!
+                let detail = details.subviews.compactMap { $0 as? NSTextField }.first!
+                let headingBaseline = readingRect(heading).maxY - heading.firstBaselineOffsetFromTop
+                let detailBaseline = readingRect(detail).maxY - detail.firstBaselineOffsetFromTop
+                precondition(abs(headingBaseline - detailBaseline - HUDStyle.headingToDetailSpacing(.regular)) <= 0.5,
+                             "CPU and GPU use regular heading-to-detail spacing")
+            }
             if mode.showsValue { checkMatchingFrequencyColumns() }
             else {
                 precondition(gpuFrequency.alignment == .right
@@ -619,15 +628,15 @@ import AppKit
             let types = [HUDCPUCoreType(name: "Super", count: count), .init(name: "Efficiency", count: 6)]
             let big = HUDCoreDetailView(frame: NSRect(x: 0, y: 0, width: 257, height: 250), types: types,
                 topology: .init(groups: [.init(name: "Super", ids: Array(0..<count)), .init(name: "Efficiency", ids: Array(count..<(count + 6)))]))
-            big.configure(options: .init(enabled: true), scale: .normal, background: .dark)
-            let expected = HUDStyle.rowSpacing(scale: .normal) + 2 * HUDStyle.ramDetailHeight(scale: .normal)
+            big.configure(options: .init(enabled: true), background: .dark)
+            let expected = HUDStyle.rowSpacing + 2 * HUDStyle.ramDetailHeight()
                 + CGFloat((count - 1) / 12) * 14
-            precondition(big.height(scale: .normal) == expected, "One extra bar line per twelve cores")
+            precondition(big.height() == expected, "One extra bar line per twelve cores")
             big.layoutSubtreeIfNeeded()
             let bars = big.subviews.filter { String(describing: type(of: $0)).contains("BarsView") }
             precondition(bars.count == 2 && bars[0].frame.maxX == bars[1].frame.maxX, "Graph right edges align")
-            big.configure(options: .init(enabled: true, mode: .value), scale: .normal, background: .dark)
-            precondition(big.height(scale: .normal) == HUDStyle.rowSpacing(scale: .normal) + 2 * HUDStyle.ramDetailHeight(scale: .normal))
+            big.configure(options: .init(enabled: true, mode: .value), background: .dark)
+            precondition(big.height() == HUDStyle.rowSpacing + 2 * HUDStyle.ramDetailHeight())
         }
         if let index = CommandLine.arguments.firstIndex(of: "--frequency-sample"),
            CommandLine.arguments.indices.contains(index + 1) {

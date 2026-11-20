@@ -2,10 +2,9 @@ import AppKit
 
 @MainActor
 final class HUDProcessView: NSView {
-    private let name = NSTextField(labelWithString: "APP")
+    private let name = HUDReadingLabel(labelWithString: "APP")
     private var values: [HUDProcessReading: NSTextField] = [:]
     private var options = HUDProcessOptions()
-    private var scale = HUDScale.normal
     private var background = HUDBackground.dark
 
     override init(frame: NSRect) {
@@ -14,16 +13,16 @@ final class HUDProcessView: NSView {
         name.maximumNumberOfLines = 1
         addSubview(name)
         for reading in HUDProcessReading.allCases {
-            let field = NSTextField(labelWithString: reading == .memory ? "—" : "\(reading.title) —")
+            let field = HUDReadingLabel(labelWithString: reading == .memory ? "" : reading.title)
             field.alignment = .right; field.maximumNumberOfLines = 1
             field.setAccessibilityLabel("APP \(reading.title)")
             values[reading] = field; addSubview(field)
         }
     }
     required init?(coder: NSCoder) { fatalError("Use init(frame:)") }
-    func configure(options: HUDProcessOptions, scale: HUDScale, background: HUDBackground) {
-        self.options = options; self.scale = scale; self.background = background
-        name.font = HUDStyle.titleFont(for: .cpuTotal, scale: scale)
+    func configure(options: HUDProcessOptions, background: HUDBackground) {
+        self.options = options; self.background = background
+        name.font = HUDStyle.titleFont(for: .cpuTotal)
         name.textColor = HUDStyle.TextStyle.label.color(background: background)
         for (reading, field) in values {
             field.isHidden = !options.readings.contains(reading)
@@ -37,14 +36,17 @@ final class HUDProcessView: NSView {
     }
     func setValue(_ text: String?, for reading: HUDProcessReading) {
         guard let field = values[reading] else { return }
-        let value = text.flatMap { $0.isEmpty ? nil : $0 } ?? "—"
-        field.stringValue = reading == .memory ? value : "\(reading.title) \(value)"
+        if reading == .memory {
+            field.stringValue = text ?? ""
+        } else {
+            field.stringValue = [reading.title, text ?? ""].filter { !$0.isEmpty }.joined(separator: " ")
+        }
         applyReadingStyle(to: field, for: reading)
         needsLayout = true
     }
 
     private func applyReadingStyle(to field: NSTextField, for reading: HUDProcessReading) {
-        let font = HUDStyle.readingFont(scale: scale, highlighted: options.highlighted.contains(reading))
+        let font = HUDStyle.readingFont(highlighted: options.highlighted.contains(reading))
         let color = HUDStyle.readingColor(background: background)
         field.font = font
         field.textColor = color
@@ -57,7 +59,7 @@ final class HUDProcessView: NSView {
         paragraph.lineBreakMode = field.lineBreakMode
         let text = NSMutableAttributedString(string: field.stringValue,
             attributes: [.font: font, .foregroundColor: color, .paragraphStyle: paragraph])
-        text.addAttributes([.font: HUDStyle.smallLabelFont(scale: scale),
+        text.addAttributes([.font: HUDStyle.smallLabelFont(),
                             .foregroundColor: HUDStyle.TextStyle.label.color(background: background)],
             range: NSRange(location: 0, length: reading.title.utf16.count))
         field.attributedStringValue = text
@@ -65,8 +67,8 @@ final class HUDProcessView: NSView {
 
     override func layout() {
         super.layout()
-        let gap = HUDStyle.metricColumnSpacing(scale: scale)
-        let sizingFont = HUDStyle.readingFont(scale: scale, highlighted: true)
+        let gap = HUDStyle.metricColumnSpacing
+        let sizingFont = HUDStyle.readingFont(highlighted: true)
         // CPU and GPU now share a bounded percentage range. Equal, fixed slots
         // keep the name and gaps stable through digit and emphasis changes.
         let percentageWidth = ["GPU 100%", "CPU 100%"].map {

@@ -5,6 +5,7 @@ final class HUDStorageMenuView: HUDCategoryMenuView {
     private var options: HUDStorageOptions
     var onChange: ((HUDStorageOptions) -> Void)?
     private let master = HUDResourceMasterButton(title: "Storage", target: nil, action: nil)
+    private let diskLabel = NSTextField(labelWithString: "Disk")
     private let location = NSSegmentedControl(labels: HUDStorageLocation.allCases.map { $0.rawValue.capitalized },
         trackingMode: .selectOne, target: nil, action: nil)
     private let freeSpaceHighlight = HUDEmphasisButton()
@@ -16,9 +17,10 @@ final class HUDStorageMenuView: HUDCategoryMenuView {
         master.target = self
         master.action = #selector(toggleCategory)
         master.setAccessibilityLabel("Show Storage")
+        diskLabel.font = .menuFont(ofSize: 0)
         location.target = self
         location.action = #selector(selectLocation)
-        location.setAccessibilityLabel("Storage drives")
+        location.setAccessibilityLabel("Storage disk")
         freeSpaceHighlight.target = self
         freeSpaceHighlight.action = #selector(toggleFreeSpaceHighlight)
         freeSpaceHighlight.setAccessibilityLabel("Emphasize Storage free space")
@@ -31,7 +33,7 @@ final class HUDStorageMenuView: HUDCategoryMenuView {
             changed()
         }
         setCategory(master)
-        setRows([.init(reading: NSView(), mode: location, emphasis: freeSpaceHighlight),
+        setRows([.init(reading: diskLabel, mode: location, emphasis: freeSpaceHighlight),
                  .init(reading: NSView(), mode: details, emphasis: details.emphasisControl)])
         refresh()
     }
@@ -54,6 +56,7 @@ final class HUDStorageMenuView: HUDCategoryMenuView {
 
     private func refresh() {
         master.state = options.enabled ? .on : .off
+        diskLabel.textColor = options.enabled ? .labelColor : .disabledControlTextColor
         location.selectedSegment = HUDStorageLocation.allCases.firstIndex(of: options.location)!
         location.isEnabled = options.enabled
         freeSpaceHighlight.isEnabled = options.enabled

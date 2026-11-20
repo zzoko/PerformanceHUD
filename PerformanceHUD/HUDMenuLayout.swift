@@ -15,7 +15,7 @@ enum HUDMenuLayout {
 
     // Reserve the glass endpoint label before the shared slider value column.
     static var sliderValueSpacing: CGFloat {
-        let label = NSTextField(labelWithString: "Frosted")
+        let label = NSTextField(labelWithString: "Tinted")
         label.font = .menuFont(ofSize: 0)
         return spacing + ceil(label.intrinsicContentSize.width) + spacing
     }

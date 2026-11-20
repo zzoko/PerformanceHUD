@@ -3,6 +3,7 @@ import Foundation
 /// Presentation only: preserve real readings for logging, including idle zeros.
 /// Separate show/hide thresholds and a short idle delay avoid flicker near zero.
 nonisolated struct BatteryFlowVisibility {
+    static let activeWatts = 0.2
     private(set) var isVisible = false
     private var idleSince: TimeInterval?
 
@@ -12,7 +13,7 @@ nonisolated struct BatteryFlowVisibility {
             return
         }
         let magnitude = abs(valid)
-        if magnitude >= 0.2 {
+        if magnitude >= Self.activeWatts {
             isVisible = true
             idleSince = nil
         } else if magnitude <= 0.1, isVisible {

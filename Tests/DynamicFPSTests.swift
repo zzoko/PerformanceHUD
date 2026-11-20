@@ -149,7 +149,7 @@ import AppKit
                                   "The 2× reading fits within the horizontal padding")
                         } else {
                             func capTop(_ field: NSTextField) -> CGFloat {
-                                field.convert(field.bounds, to: container).maxY - field.firstBaselineOffsetFromTop + field.font!.capHeight
+                                field.convert(field.bounds, to: container).maxY - (field.firstBaselineOffsetFromTop - field.font!.capHeight) * scale.rawValue
                             }
                             let titleTop = capTop(titles[.fps]!)
                             let valueTop = capTop(values[.fps]!)
@@ -197,9 +197,9 @@ import AppKit
         let pinned = HUDMenuBarPresentation.sections(snapshot: .init(), fanSample: .noFans,
             readings: [.fps], style: .current, background: .dark)
         let menuBar = HUDHorizontalView(frame: .zero)
-        let size = menuBar.configure(sections: pinned, showsBattery: false, scale: .normal, background: .dark)
+        let size = menuBar.configure(sections: pinned, showsBattery: false, background: .dark)
         let pinnedFields: [String: NSTextField] = member(menuBar, "labels")
-        check(pinnedFields["fps.value"]!.font!.pointSize == 12 && size.height == HUDStyle.rowHeight(scale: .normal),
+        check(pinnedFields["fps.value"]!.font!.pointSize == 12 && size.height == HUDStyle.rowHeight,
               "Pinned menu-bar FPS retains 1× even when the HUD preference is 2×")
     }
     @MainActor static func main() async {
@@ -351,13 +351,13 @@ import AppKit
                         let horizontalLabels: [String: NSTextField] = member(styledHorizontal, "labels")
                         let valueLabel = alignment == .horizontal ? horizontalLabels["0.value"]! : values[.fps]!
                         let expected = highlighted ? HUDStyle.TextStyle.emphasizedReading : .reading
-                        check(valueLabel.font == expected.font(ofSize: 12 * CGFloat(scale.rawValue)), "FPS uses the selected style at its label size")
+                        check(valueLabel.font == expected.font(ofSize: 12), "FPS uses the selected style at its label size")
                         check(valueLabel.textColor == expected.color(background: .dark), "FPS color follows Reading or Emphasized Reading")
                         styledPanel.contentView?.layoutSubtreeIfNeeded()
                         let fpsTitle = alignment == .horizontal ? horizontalLabels["0.title"]! : titles[.fps]!
                         for (role, field) in [("title", fpsTitle), ("value", valueLabel)] {
                             let box = field.convert(field.bounds, to: styledContainer)
-                            let topToBaseline = styledContainer.bounds.maxY - box.maxY + field.firstBaselineOffsetFromTop
+                            let topToBaseline = styledContainer.bounds.maxY - box.maxY + field.firstBaselineOffsetFromTop * scale.rawValue
                             let key = "\(scale.rawValue).\(highlighted).\(role)"
                             if alignment == .vertical { verticalFPSBaselines[key] = topToBaseline }
                             else {
@@ -384,7 +384,7 @@ import AppKit
                         check(styledPanel.frame == frame && styledGlass.bodyFrame == bodyFrame,
                               "FPS emphasis and changing digits must not resize the window or glass")
                     }
-                    check(titles[.fps]?.font == HUDStyle.titleFont(for: .fps, scale: scale), "Emphasis affects only the FPS number")
+                    check(titles[.fps]?.font == HUDStyle.titleFont(for: .fps), "Emphasis affects only the FPS number")
                 }
                 if alignment == .vertical {
                     let dividers: [Int: NSView] = member(styledHUD, "groupDividers")
@@ -419,7 +419,7 @@ import AppKit
                 compactHUD.setHUDScale(scale)
                 compactHUD.setAutoHideMode(.fps)
                 let panel: HUDPanel = member(compactHUD, "panel")
-                let host: NSView = member(compactHUD, "backgroundContentView")
+                let host: NSView = member(compactHUD, "container")
                 let arrow: NSImageView = member(compactHUD, "collapsedFPSIndicator")
                 let dividers: [Int: NSView] = member(compactHUD, "groupDividers")
                 var reference: [CGFloat]?
@@ -430,7 +430,7 @@ import AppKit
                         guard !divider.isHidden, let line = divider.subviews.first else { return nil }
                         return host.bounds.maxY - line.convert(line.bounds, to: host).maxY
                     }
-                    let geometry = [host.bounds.height, panel.frame.maxY, host.bounds.maxY - arrow.frame.maxY]
+                    let geometry = [host.bounds.height, panel.frame.maxY, host.bounds.maxY - arrow.convert(arrow.bounds, to: host).maxY]
                         + Array(visibleLines.prefix(1))
                     if let reference {
                         check(reference.count == geometry.count && zip(reference, geometry).allSatisfy { abs($0 - $1) < 0.01 },
@@ -468,25 +468,26 @@ import AppKit
                     let header: NSImageView = member(hud, "collapsedFPSIndicator")
                     check(!header.isHidden && header.alphaValue == 1 && header.image != nil,
                           "Collapsed FPS keeps a visible reminder, including History-only")
-                    check(abs(header.frame.midX - container.bounds.midX) < 0.1,
+                    let headerFrame = header.convert(header.bounds, to: container)
+                    check(abs(headerFrame.midX - container.bounds.midX) <= 0.5 / panel.backingScaleFactor,
                           "Rolled-up arrow is centered")
                     let dividers: [Int: NSView] = member(hud, "groupDividers")
                     for divider in dividers.values where !divider.isHidden {
                         check(divider.alphaValue == 1, "Section dividers remain visible while rolled up")
                     }
-                    check(header.frame.minY >= 0 && header.frame.maxY <= container.frame.height,
+                    check(headerFrame.minY >= 0 && headerFrame.maxY <= container.bounds.height,
                           "Reminder stays inside the compact panel")
                     if body.isEmpty {
                         check(container.alphaValue == 1 && container.frame.height > 0, "FPS-only retains the compact header")
                     } else {
                         check(container.alphaValue == 1 && container.frame.height > 0, "Other metrics remain visible")
                         let rows: [HUDMetric: NSView] = member(hud, "metricRows")
-                        let host: NSView = member(hud, "backgroundContentView")
+                        let host = container
                         for metric in body {
                             let row = rows[metric]!
                             let rect = row.convert(row.bounds, to: host)
                             check(rect.minY >= -0.1 && rect.maxY <= host.bounds.height + 0.1, "Body rows must stay inside the visible crop: \(metric)")
-                            check(rect.maxY <= header.frame.minY, "Compact header must not overlap other metrics")
+                            check(rect.maxY <= headerFrame.minY, "Compact header must not overlap other metrics")
                         }
                     }
                     if CommandLine.arguments.contains("--preview"), scale == .normal,
@@ -547,7 +548,7 @@ import AppKit
                     let collapsedSize = container.frame.size
                     check(collapsedSize.width < expandedSize.width && collapsedSize.height == expandedSize.height,
                           "Horizontal collapses width only")
-                    check(!arrow.isHidden && arrow.alphaValue == 1 && container.bounds.contains(arrow.frame),
+                    check(!arrow.isHidden && arrow.alphaValue == 1 && container.bounds.contains(arrow.convert(arrow.bounds, to: container)),
                           "Sideways reminder fits inside the compact HUD")
                     check(panel.frame.width < expandedFrame.width && windowAnchor() == originalAnchor, "Horizontal native window shrinks at its existing anchor")
                     hud.updateMetric(.cpuTotal, value: "24%")
@@ -565,7 +566,7 @@ import AppKit
                     }
                     hud.updateFPS(60)
                     check(container.frame.size == expandedSize && arrow.isHidden, "Horizontal FPS recovery restores full width")
-                    check(horizontal.frame.minX == HUDStyle.horizontalPadding(scale: scale), "Expanded FPS keeps its original alignment")
+                    check(horizontal.frame.minX == HUDStyle.horizontalPadding, "Expanded FPS keeps its original alignment")
                     check(panel.frame == expandedFrame && windowAnchor() == originalAnchor, "Recovery restores full geometry")
                     hud.setAutoHideMode(.off)
                     check(glass.bodyFrame.size == expandedSize && container.frame.size == expandedSize, "Static restores horizontal geometry")

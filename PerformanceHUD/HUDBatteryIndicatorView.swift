@@ -3,11 +3,8 @@ import AppKit
 /// A custom battery drawing with a continuous fill, rather than a system menu control.
 @MainActor
 final class HUDBatteryIndicatorView: NSView {
-    // Menu-bar pins retain an explicit placeholder until their first sample.
-    // The overlay keeps its established empty-state presentation.
-    var showsUnavailableReadings = false {
-        didSet { needsDisplay = true }
-    }
+    // Keep the pinned charge column wide enough for its first sample.
+    var reservesMissingPowerSpace = false
     private static let horizontalTextInsets = NSTextField(labelWithString: "").alignmentRectInsets
     private var horizontal = false
     private var percentage: Double?
@@ -15,9 +12,14 @@ final class HUDBatteryIndicatorView: NSView {
     private var temperature: Double?
     private var power: Double?
     private var flowVisibility = BatteryFlowVisibility()
+    private enum ChargeState { case draining, charging, idleOnAdapter }
+    private var lastChargeState: ChargeState?
+    private var chargeFlashStart: TimeInterval?
+    private var chargeRedrawPending = false
+    private static let chargeFlashRise: TimeInterval = 0.25
+    private static let chargeFlashDuration: TimeInterval = 1
     private var options = HUDPreferences.batteryOptions
     private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
-    private var scale: CGFloat = 1
     private var background: HUDBackground = .dark
     private var powerObserver: NSObjectProtocol?
 
@@ -41,8 +43,7 @@ final class HUDBatteryIndicatorView: NSView {
         if let powerObserver { NotificationCenter.default.removeObserver(powerObserver) }
     }
 
-    func applyStyle(scale: HUDScale, background: HUDBackground) {
-        self.scale = CGFloat(scale.rawValue)
+    func applyStyle(background: HUDBackground) {
         self.background = background
         needsDisplay = true
     }
@@ -68,6 +69,7 @@ final class HUDBatteryIndicatorView: NSView {
         self.temperature = temperature.flatMap { SMCTemperatureReader.validBatteryTemperature($0) }
         self.power = power.flatMap { BatteryPowerRate.valid($0) }
         flowVisibility.update(power: options.enabled && options.power ? self.power : nil, now: now)
+        updateChargeFlash(now: now)
         self.percentage = percentage.flatMap { $0.isFinite ? min(100, max(0, $0)) : nil }
         lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
         let description = self.percentage.map { "Battery: \(Int($0.rounded()))%" } ?? "Battery unavailable"
@@ -83,27 +85,26 @@ final class HUDBatteryIndicatorView: NSView {
     }
 
     private var sourceFont: NSFont {
-        let hudScale = HUDScale(rawValue: Double(scale))
-        return horizontal ? HUDStyle.titleFont(for: .battery, scale: hudScale)
-            : HUDStyle.smallLabelFont(scale: hudScale)
+        return horizontal ? HUDStyle.titleFont(for: .battery)
+            : HUDStyle.smallLabelFont()
     }
-    private var valueFont: NSFont { HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: false) }
+    private var valueFont: NSFont { HUDStyle.readingFont(highlighted: false) }
     private var detailFont: NSFont { sourceFont }
     private var sourceLabelFont: NSFont { horizontal ? sourceFont : detailFont }
     private var temperatureFont: NSFont {
-        HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: options.temperatureHighlighted)
+        HUDStyle.readingFont(highlighted: options.temperatureHighlighted)
     }
     var temperatureColor: NSColor {
         HUDStyle.temperatureColor(options.enabled && options.temperature ? temperature : nil,
                                   warning: options.heatWarning, background: background)
     }
     private var powerFont: NSFont {
-        HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: options.powerHighlighted)
+        HUDStyle.readingFont(highlighted: options.powerHighlighted)
     }
     private var powerReferenceWidth: CGFloat {
         // Vertical sizing keeps room for the full supported reading range.
         ("+1000.0 W" as NSString).size(withAttributes: [
-            .font: HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: true)
+            .font: HUDStyle.readingFont(highlighted: true)
         ]).width
     }
     private var horizontalPowerWidth: CGFloat {
@@ -115,21 +116,15 @@ final class HUDBatteryIndicatorView: NSView {
     }
     private var horizontalIconWidth: CGFloat {
         max(iconWidth, HUDStyle.horizontalColumnWidth(text: "", reference: HUDStyle.horizontalPercentageReference,
-            font: HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: false)))
+            font: HUDStyle.readingFont(highlighted: false)))
     }
-    private var horizontalGap: CGFloat { HUDStyle.metricColumnSpacing(scale: HUDScale(rawValue: Double(scale))) }
-    private var iconWidth: CGFloat { (34 * 0.85 + 0.5) * scale }
+    private var horizontalGap: CGFloat { HUDStyle.metricColumnSpacing }
+    private var iconWidth: CGFloat { (34 * 0.85 + 0.5) }
 
     var sourceText: String {
-        let value: String
-        if let source {
-            value = horizontal ? (source == .powerAdapter ? "ADP" : "BAT")
-                : (source == .powerAdapter ? "Adapter" : "Battery")
-        } else {
-            value = !horizontal || showsUnavailableReadings ? "—" : ""
-        }
-        guard !horizontal else { return value }
-        return "Source · \(value)"
+        guard let source else { return horizontal ? "" : "Source" }
+        if horizontal { return source == .powerAdapter ? "ADP" : "BAT" }
+        return source == .powerAdapter ? "Source · Adapter" : "Source · Battery"
     }
 
     var sourceTextRect: NSRect {
@@ -137,8 +132,8 @@ final class HUDBatteryIndicatorView: NSView {
         guard !text.isEmpty else { return .zero }
         let size = (text as NSString).size(withAttributes: [.font: sourceLabelFont])
         let sourceHeight = ("Adapter" as NSString).size(withAttributes: [.font: sourceFont]).height
-        let midY = horizontal ? bounds.midY : bounds.minY + 10.5 * scale
-        let leading = horizontal ? Self.horizontalTextInsets.left : 2 * scale
+        let midY = horizontal ? bounds.midY : bounds.minY + 10.5
+        let leading = horizontal ? Self.horizontalTextInsets.left : 2
         let rect = NSRect(x: bounds.minX + leading,
                       y: midY - sourceHeight / 2 + sourceLabelFont.descender - sourceFont.descender,
                       width: size.width, height: size.height)
@@ -146,9 +141,58 @@ final class HUDBatteryIndicatorView: NSView {
     }
 
     var powerText: String {
-        if options.power, power == nil, showsUnavailableReadings || options.flowMode == .always { return "—" }
         guard options.power, options.flowMode != .auto || flowVisibility.isVisible else { return "" }
         return BatteryPowerRate.text(power)
+    }
+
+    private func updateChargeFlash(now: TimeInterval) {
+        guard options.enabled, options.power else {
+            lastChargeState = nil
+            chargeFlashStart = nil
+            return
+        }
+        let state: ChargeState
+        if let power, power <= -BatteryFlowVisibility.activeWatts {
+            state = .draining
+        } else if let power, power >= BatteryFlowVisibility.activeWatts, source == .powerAdapter {
+            state = .charging
+        } else {
+            // Remember the last direction through idle or missing samples. A Mac
+            // first seen holding charge on its adapter can still pulse when unplugged.
+            if lastChargeState == nil, source == .powerAdapter, let power, abs(power) < BatteryFlowVisibility.activeWatts {
+                lastChargeState = .idleOnAdapter
+            }
+            chargeFlashStart = nil
+            return
+        }
+        switch (lastChargeState, state) {
+        case (.draining, .charging), (.charging, .draining), (.idleOnAdapter, .draining):
+            chargeFlashStart = now
+        default: break
+        }
+        lastChargeState = state
+    }
+
+    func powerColor(at now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> NSColor {
+        let normal = HUDStyle.readingColor(background: background)
+        guard let start = chargeFlashStart else { return normal }
+        let elapsed = now - start
+        guard elapsed > 0, elapsed < Self.chargeFlashDuration else { return normal }
+        let progress = elapsed < Self.chargeFlashRise ? elapsed / Self.chargeFlashRise
+            : (Self.chargeFlashDuration - elapsed) / (Self.chargeFlashDuration - Self.chargeFlashRise)
+        let tint = progress * progress * (3 - 2 * progress)
+        let color = lastChargeState == .draining ? HUDStyle.pressureRed : HUDStyle.stateGreen
+        return normal.blended(withFraction: tint, of: color) ?? normal
+    }
+
+    private func scheduleChargeRedraw(at now: TimeInterval) {
+        guard let start = chargeFlashStart, now < start + Self.chargeFlashDuration, !chargeRedrawPending else { return }
+        chargeRedrawPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 60) { [weak self] in
+            guard let self else { return }
+            chargeRedrawPending = false
+            setNeedsDisplay(powerTextRect)
+        }
     }
 
     /// Whether Charge has content to show according to its display mode. Auto
@@ -161,7 +205,7 @@ final class HUDBatteryIndicatorView: NSView {
         // Vertical keeps fixed columns. Horizontal also reclaims Auto's slot
         // when Charge is temporarily hidden.
         options.power && (!horizontal || options.flowMode != .auto || flowVisibility.isVisible
-            || (showsUnavailableReadings && power == nil))
+            || (reservesMissingPowerSpace && power == nil))
     }
 
     var powerTextRect: NSRect {
@@ -175,8 +219,7 @@ final class HUDBatteryIndicatorView: NSView {
     }
 
     var temperatureText: String {
-        guard options.temperature else { return "" }
-        guard let temperature else { return showsUnavailableReadings ? "—" : "" }
+        guard options.temperature, let temperature else { return "" }
         return "\(Int(temperature.rounded()))°C"
     }
 
@@ -191,7 +234,7 @@ final class HUDBatteryIndicatorView: NSView {
     private func inlineTextRect(_ text: String, font: NSFont, trailing: CGFloat) -> NSRect {
         let size = (text as NSString).size(withAttributes: [.font: font])
         let sourceHeight = ("Adapter" as NSString).size(withAttributes: [.font: sourceFont]).height
-        let midY = horizontal ? bounds.midY : bounds.minY + 10.5 * scale
+        let midY = horizontal ? bounds.midY : bounds.minY + 10.5
         let rect = NSRect(x: bounds.maxX - trailing - size.width,
                       y: midY - sourceHeight / 2 + font.descender - sourceFont.descender,
                       width: size.width, height: size.height)
@@ -212,27 +255,27 @@ final class HUDBatteryIndicatorView: NSView {
     }
 
     private var verticalTemperatureTrailingInset: CGFloat {
-        options.charge ? verticalMiddleTrailingInset : 2 * scale
+        options.charge ? verticalMiddleTrailingInset : 2
     }
 
     private var verticalMiddleTrailingInset: CGFloat {
         if let sharedVerticalTemperatureTrailingInset { return sharedVerticalTemperatureTrailingInset }
         let usage = NSTextField(labelWithString: "100%")
         usage.font = valueFont
-        return usage.intrinsicContentSize.width + 8 * scale + usage.alignmentRectInsets.right
+        return usage.intrinsicContentSize.width + 8 + usage.alignmentRectInsets.right
     }
 
     private var verticalPowerTrailingInset: CGFloat {
         // Pack enabled readings from the right. Auto keeps its slot reserved
         // while temporarily blank; only an explicit Off selection removes it.
         let readingsToRight = (options.temperature ? 1 : 0) + (options.charge ? 1 : 0)
-        if readingsToRight == 0 { return 2 * scale }
+        if readingsToRight == 0 { return 2 }
         if readingsToRight == 1, options.charge { return verticalMiddleTrailingInset }
         if readingsToRight == 2, let sharedVerticalPowerTrailingInset { return sharedVerticalPowerTrailingInset }
         let temperatureWidth = ("149°C" as NSString).size(withAttributes: [
-            .font: HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: true)
+            .font: HUDStyle.readingFont(highlighted: true)
         ]).width
-        return verticalTemperatureTrailingInset + temperatureWidth + 8 * scale
+        return verticalTemperatureTrailingInset + temperatureWidth + 8
     }
 
     private var horizontalReadingTrailingInset: CGFloat {
@@ -242,7 +285,7 @@ final class HUDBatteryIndicatorView: NSView {
     // Useful for standalone previews; the HUD itself has a fixed vertical width.
     var minimumAlignedRowWidth: CGFloat {
         let titleWidth = ("Source · Adapter" as NSString).size(withAttributes: [.font: detailFont]).width
-        return 2 * scale + titleWidth + 8 * scale + powerReferenceWidth + verticalPowerTrailingInset
+        return 2 + titleWidth + 8 + powerReferenceWidth + verticalPowerTrailingInset
     }
 
     var minimumRowWidth: CGFloat {
@@ -261,18 +304,20 @@ final class HUDBatteryIndicatorView: NSView {
         let titleWidth = ("Source · Adapter" as NSString).size(withAttributes: [.font: detailFont]).width
         let usage = NSTextField(labelWithString: "100%")
         usage.font = valueFont
-        let sizingInset = usage.intrinsicContentSize.width + 8 * scale + usage.alignmentRectInsets.right
-        let sizingFont = HUDStyle.readingFont(scale: HUDScale(rawValue: Double(scale)), highlighted: true)
+        let sizingInset = usage.intrinsicContentSize.width + 8 + usage.alignmentRectInsets.right
+        let sizingFont = HUDStyle.readingFont(highlighted: true)
         let valueWidth = ("99°C" as NSString).size(withAttributes: [.font: sizingFont]).width + sizingInset
-        return titleWidth + 10 * scale + valueWidth
+        return titleWidth + 10 + valueWidth
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let rowMidY = horizontal ? bounds.midY : bounds.minY + 10.5 * scale
+        let rowMidY = horizontal ? bounds.midY : bounds.minY + 10.5
         if !powerText.isEmpty {
+            let now = ProcessInfo.processInfo.systemUptime
             (powerText as NSString).draw(at: powerTextRect.origin, withAttributes: [
-                .font: powerFont, .foregroundColor: HUDStyle.readingColor(background: background)
+                .font: powerFont, .foregroundColor: powerColor(at: now)
             ])
+            scheduleChargeRedraw(at: now)
         }
         if !sourceText.isEmpty {
             (sourceText as NSString).draw(at: sourceTextRect.origin, withAttributes: [
@@ -286,25 +331,14 @@ final class HUDBatteryIndicatorView: NSView {
                 .foregroundColor: temperatureColor
             ])
         }
-        guard options.charge else { return }
-        guard let percentage else {
-            if showsUnavailableReadings {
-                let attributes: [NSAttributedString.Key: Any] = [
-                    .font: temperatureFont, .foregroundColor: HUDStyle.readingColor(background: background)
-                ]
-                let size = ("—" as NSString).size(withAttributes: attributes)
-                ("—" as NSString).draw(at: NSPoint(x: bounds.maxX - (iconWidth + size.width) / 2,
-                                                  y: rowMidY - size.height / 2), withAttributes: attributes)
-            }
-            return
-        }
-        let iconScale = scale * 0.85
+        guard options.charge, let percentage else { return }
+        let iconScale = CGFloat(0.85)
         let foreground = HUDStyle.valueColor(background: background)
         let lowBattery = percentage <= 10
         let fillColor: NSColor = lowPower ? HUDStyle.warningYellow : lowBattery ? .systemRed : foreground
         let filledTextColor = lowBattery || lowPower || background != .light
             ? NSColor(white: 0.12, alpha: 1) : NSColor(white: 0.98, alpha: 1)
-        let body = NSRect(x: bounds.maxX - 34 * iconScale - 0.5 * scale, y: rowMidY - 8.5 * iconScale,
+        let body = NSRect(x: bounds.maxX - 34 * iconScale - 0.5, y: rowMidY - 8.5 * iconScale,
                           width: 31 * iconScale, height: 17 * iconScale)
         let shape = NSBezierPath(roundedRect: body, xRadius: 6 * iconScale, yRadius: 6 * iconScale)
         foreground.withAlphaComponent(0.18).setFill()

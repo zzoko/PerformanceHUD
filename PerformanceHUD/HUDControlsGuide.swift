@@ -13,8 +13,8 @@ final class HUDControlsGuide: NSWindowController {
         .init(title: "Enable / Disable", rows: [
             ("", "Show or hide the HUD. Visible menu-bar readings keep updating either way.")]),
         .init(title: "Show menu-bar readings", rows: [
-            ("Pin a reading", "Click the icon to the right of B, then confirm your first pin. Pins start off. Click the readings or the bolt to open the menu."),
-            ("Collapse / expand", "Click the chevron beside the bolt to hide or show all pins. At the width limit, remove a pin or choose a narrower mode.")]),
+            ("Pin a reading", "Click the icon beside B. A line connects the formats a pin supports. Its dot marks the format the pin will show."),
+            ("Collapse / expand", "Uncheck Show menu-bar readings to hide all pins. Click the chevron beside the bolt to show them again.")]),
         .init(title: "Reset", rows: [
             ("Position / Size", "Position restores the HUD’s starting point. Option-drag moves it. Size restores 1×."),
             ("All", "Enables the HUD, restores Balanced and the default layout settings, and clears pins. Saved presets, hotkeys, and app settings are kept.")]),
@@ -25,7 +25,7 @@ final class HUDControlsGuide: NSWindowController {
         .init(title: "Layout", rows: [("", "Vertical stacks categories. Horizontal arranges them in a strip. APP and Misc are Vertical-only. Switching back restores your Vertical selections.")]),
         .init(title: "Appearance", rows: [("Light / Dark / Follow macOS", "Choose a HUD appearance. Follow macOS is the default. Pins always follow macOS.")]),
         .init(title: "Liquid Glass", rows: [
-            ("Custom / Follow macOS", "Adjust the HUD from Clear (0%) to Frosted (100%), or follow the system setting (default)."),
+            ("Custom / Follow macOS", "Adjust the HUD from Clear (0%) to Tinted (100%), or follow the system setting (default)."),
             ("Retry Glass Compatibility", "Appears if glass compatibility needs attention. Retry if a game seems capped at 60 FPS.")]),
         .init(title: "Preset", rows: [
             ("FPS / Balanced / Detailed", "FPS shows frame rate alone. Balanced includes CPU core bars. Detailed adds CPU and GPU GHz, APP, and Misc. Built-in presets clear all pins."),
@@ -45,34 +45,34 @@ final class HUDControlsGuide: NSWindowController {
             ("Power", "Estimated GPU watts."),
             ("Temperature / Heat warning", "Average GPU sensor temperature. The number turns red at the threshold, 95°C by default. Enter a whole degree from 1 to 149."),
             ("Use", "System-wide GPU usage, from 0–100%."),
-            ("Cores", "GPU frequency in GHz. Horizontal labels it C.")]),
+            ("Cores", "GPU frequency in GHz. Horizontal and the menu bar label it C.")]),
         .init(title: "CPU", rows: [
             ("Power", "Estimated CPU watts."),
             ("Temperature / Heat warning", "Average CPU sensor temperature. Its warning defaults to 95°C."),
             ("Use", "Total CPU usage across all cores, from 0–100%."),
-            ("Cores · GHz / Load / Both", "GHz shows frequency per core type. Load shows one usage bar per core. Horizontal stacks one line per type. Vertical splits bars evenly into rows of up to 12."),
+            ("Cores · GHz / Load / Both", "GHz shows frequency per core type. Load shows one usage bar per core. Vertical wraps at 12 bars. Horizontal stacks core types. The menu-bar pin shows them side by side."),
             ("GHz", "Average speed while cores are active. Clusters of the same type share one reading, weighted by active time. B emphasizes GHz.")]),
         .init(title: "ANE", rows: [("Power", "Estimated Apple Neural Engine watts.")]),
         .init(title: "SOC", rows: [("Combined power", "Adds CPU, GPU, and Neural Engine watts, even if their individual readings are hidden.")]),
-        .init(title: "MEM", rows: [
+        .init(title: "Memory", rows: [
             ("Use / Details", "Use shows the percentage of memory in use. Physical is memory in use (GB). Swap is disk space used for swap (GB)."),
-            ("Pressure · Text / Meter / Graph", "Text names the state. Meter shows one to three segments. Graph shows the past 30 seconds. Its dotted line marks 100 and its dot marks now. Horizontal uses Meter. Pins can show Graph."),
+            ("Pressure · Text / Meter / Graph", "Text names the state. Meter shows one to three segments. Graph shows 30 seconds of history in Vertical. The dotted line marks 100 and the dot marks now. Horizontal and the menu bar display Graph as Meter."),
             ("State color", "Green means normal, yellow warning, and red critical. Turn off for neutral readings. B emphasizes Text.")]),
         .init(title: "Storage", rows: [
-            ("Internal / External / Both", "Shows free space per mounted drive. B emphasizes free space. Detailed enables Storage."),
+            ("Disk · Internal / External / Both", "Shows free space per mounted drive. B emphasizes free space. Detailed enables Storage."),
             ("Details", "Shows read and write rates. B emphasizes both rates. Horizontal places drives side by side.")]),
         .init(title: HUDMetric.fans.menuTitle, rows: [
-            ("Average", "Combine two or more fans in Vertical, Horizontal (default), or Both. A marks the average. Numbers identify individual fans."),
-            ("Use · Bar / RPM / Both", "Bar shows speed as a fraction of maximum. RPM shows the number. Both is the default. Fanless Macs show Not available.")]),
+            ("Use · Bar / RPM / Both", "Each fan has a numbered badge. Show speed as a bar relative to maximum, an RPM value, or both. Menu bar pins show RPM. Fanless Macs show Not available."),
+            ("Average", "Show up to four individual fans or one A badge for the average of all detected fans. Choose Vertical, Horizontal (default), or Both.")]),
         .init(title: "Battery", rows: [
-            ("Charge · Always / Auto / Off", "Positive watts mean charging, negative watts mean discharging. Always includes zero. Auto (default) hides near-zero flow after three seconds, including the battery section if Charge is its only pin."),
+            ("Charge · Always / Auto / Off", "Watts pulse green when switching to charging (+) and red when switching to draining (−). Always shows zero. Auto (default) hides near-zero watts after three seconds and collapses a Charge-only pin."),
             ("Temperature / Heat warning", "Battery temperature in °C. Its warning defaults to 45°C."),
             ("Energy", "Charge level turns red at 10% or below. Low Power Mode takes priority and uses yellow. A bolt means external power. BAT and ADP identify battery and adapter in Horizontal."),
             ("Availability", "Macs without an internal battery show Not available.")]),
         .init(title: "Misc", rows: [
             ("Resolution / Refresh rate", "Metal output dimensions and the display’s configured refresh rate or range. A dash means resolution is unavailable."),
             ("Game Mode / Thermal", "Game Mode shows macOS’s reported on/off state (experimental). Thermal shows system thermal pressure from nominal to critical."),
-            ("OS / Chip", "OS shows the macOS version. Chip Tier shows the chip name. Full adds CPU core counts by type and the GPU core count.")]),
+            ("OS / Chip", "OS shows the macOS version. Chip Tier shows the chip name. Full adds CPU and GPU core counts. B emphasizes all Misc values.")]),
         .init(title: "Start / Stop logging", rows: [
             ("Recording", "With the HUD enabled, record selected readings to CSV once per second. Columns are fixed at Start. Missing readings stay blank. Frame time adds average and worst frame times alongside FPS."),
             ("Saving", "Stop logging, disable the HUD, or quit to save to Desktop. Auto hide keeps recording. If saving fails, the alert identifies the recovery file.")]),

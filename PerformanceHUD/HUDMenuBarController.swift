@@ -13,18 +13,21 @@ enum HUDMenuBarPresentation {
         var battery: HUDBatteryOptions
 
         var fpsMeasure: HUDFPSMeasure = .frameRate
+        var cpuCores = HUDCoreOptions.cpuDefault
+        var gpuCores = HUDCoreOptions.gpuDefault
 
         static var current: Self {
             Self(resources: Dictionary(uniqueKeysWithValues: HUDResourceGroup.allCases.map {
                 ($0, HUDPreferences.resourceOptions(for: $0))
             }), fpsHighlighted: HUDPreferences.fpsOptions.valueHighlighted,
                  packageHighlighted: HUDPreferences.packagePowerOptions.highlighted,
-                 fans: HUDPreferences.fanOptions, battery: HUDPreferences.batteryOptions, fpsMeasure: HUDPreferences.fpsOptions.measure)
+                 fans: HUDPreferences.fanOptions, battery: HUDPreferences.batteryOptions, fpsMeasure: HUDPreferences.fpsOptions.measure,
+                 cpuCores: HUDPreferences.cpuCoreOptions, gpuCores: HUDPreferences.gpuCoreOptions)
         }
     }
 
     static func scaleFactor(menuBarHeight: CGFloat) -> CGFloat {
-        min(1, max(1, menuBarHeight - 4) / HUDStyle.rowHeight(scale: .normal))
+        min(1, max(1, menuBarHeight - 4) / HUDStyle.rowHeight)
     }
 
     static func scaledSize(_ size: NSSize, menuBarHeight: CGFloat) -> NSSize {
@@ -50,9 +53,9 @@ enum HUDMenuBarPresentation {
     static func sections(snapshot: HUDLogSnapshot, fanSample: FanSample,
                          readings: Set<HUDMenuBarReading>, style: Style,
                          background: HUDBackground,
-                         pressureHistory: HUDMemoryPressureHistory = .init()) -> [[HUDHorizontalView.Reading]] {
+                         coreTypes: [HUDCPUCoreType] = HUDDeviceInfo.current.coreTypes,
+                         topology: CPUCoreTopology = .current) -> [[HUDHorizontalView.Reading]] {
         typealias Reading = HUDHorizontalView.Reading
-        let scale = HUDScale.normal
         let valueColor = HUDStyle.readingColor(background: background)
         let labelColor = HUDStyle.TextStyle.label.color(background: background)
         var result: [[Reading]] = []
@@ -61,20 +64,21 @@ enum HUDMenuBarPresentation {
             snapshot.numbers[column]
         }
         func text(_ column: HUDLogColumn, places: Int = 0, suffix: String = "") -> String {
-            guard let value = number(column) else { return "—" }
+            guard let value = number(column) else { return "" }
             return String(format: "%.*f", locale: Locale(identifier: "en_US_POSIX"),
                           places, places == 0 ? value.rounded() : value) + suffix
         }
         func title(_ metric: HUDMetric) -> Reading {
-            Reading(id: "\(metric.rawValue).title", text: metric.hudTitle, reference: metric.hudTitle,
-                    font: HUDStyle.titleFont(for: metric, scale: scale), color: labelColor,
+            let caption = metric.hudTitle(for: .horizontal)
+            return Reading(id: "\(metric.rawValue).title", text: caption, reference: caption,
+                    font: HUDStyle.titleFont(for: metric), color: labelColor,
                     help: nil, startsMetric: true, metric: metric)
         }
         func value(_ metric: HUDMetric, role: String, text: String, reference: String,
                    highlighted: Bool = false,
                    color: NSColor? = nil) -> Reading {
             Reading(id: "\(metric.rawValue).\(role)", text: text, reference: reference,
-                    font: HUDStyle.readingFont(scale: scale, highlighted: highlighted), color: color ?? valueColor,
+                    font: HUDStyle.readingFont(highlighted: highlighted), color: color ?? valueColor,
                     help: nil, startsMetric: false, metric: metric)
         }
 
@@ -82,12 +86,12 @@ enum HUDMenuBarPresentation {
             let measure = style.fpsMeasure
             // Reserve the wider caption and value so changing the measure keeps the pin width stable.
             result.append([Reading(id: "\(HUDMetric.fps.rawValue).title", text: measure.caption, reference: HUDFPSMeasure.frameRate.caption,
-                font: HUDStyle.titleFont(for: .fps, scale: scale), color: labelColor,
+                font: HUDStyle.titleFont(for: .fps), color: labelColor,
                 help: nil, startsMetric: true, metric: .fps),
-                Reading(id: "fps.value", text: measure.reading(fps: number(.fps), averageMS: number(.frameTimeAverage)) ?? "—",
-                reference: HUDFPSMeasure.frameTime.valueWidthReference, font: HUDStyle.fpsValueFont(scale: scale, highlighted: style.fpsHighlighted),
+                Reading(id: "fps.value", text: measure.reading(fps: number(.fps), averageMS: number(.frameTimeAverage)) ?? "",
+                reference: HUDFPSMeasure.frameTime.valueWidthReference, font: HUDStyle.fpsValueFont(highlighted: style.fpsHighlighted),
                 color: valueColor, help: measure.menuTitle, startsMetric: false, metric: .fps,
-                sizingFont: HUDStyle.fpsValueFont(scale: scale, highlighted: true))])
+                sizingFont: HUDStyle.fpsValueFont(highlighted: true))])
         }
 
         var resources: [Reading] = []
@@ -97,8 +101,8 @@ enum HUDMenuBarPresentation {
             let usage = readings.contains(gpu ? .gpuUsage : .cpuUsage)
             let power = readings.contains(gpu ? .gpuPower : .cpuPower)
             let temperature = readings.contains(gpu ? .gpuTemperature : .cpuTemperature)
-            let totalUsage = usage
-            guard power || temperature || totalUsage else { continue }
+            let cores = readings.contains(gpu ? .gpuCores : .cpuCores)
+            guard power || temperature || usage || cores else { continue }
             let metric = group.totalMetric
             resources.append(title(metric))
             if power {
@@ -112,9 +116,28 @@ enum HUDMenuBarPresentation {
                     highlighted: options.highlighted.contains(.temperature),
                     color: HUDStyle.temperatureColor(number(column), warning: options.heatWarning, background: background)))
             }
-            if totalUsage {
+            if usage {
                 resources.append(value(metric, role: "value", text: text(gpu ? .gpuUsage : .cpuUsage, suffix: "%"),
                     reference: HUDStyle.horizontalPercentageReference, highlighted: options.usageHighlighted))
+            }
+            if cores {
+                let options = gpu ? style.gpuCores : style.cpuCores
+                let rows: [HUDHorizontalView.CoreRow]
+                if gpu {
+                    rows = [.init(name: "Cores", frequency: text(.gpuFrequency, places: 1, suffix: " GHz"), activity: [])]
+                } else {
+                    let types = coreTypes.isEmpty ? [HUDCPUCoreType(name: "Cores", count: 0)] : coreTypes
+                    rows = types.map { type in
+                        let ids = topology.groups.first { $0.name == type.name }?.ids ?? []
+                        let activity: [Double?] = options.mode.showsBars
+                            ? (ids.isEmpty ? Array(repeating: nil, count: type.count) : ids.map { number(.cpuCoreUsage($0)) })
+                            : []
+                        return .init(name: type.name, frequency: options.mode.showsValue
+                            ? text(.cpuTypeFrequency(type.name), places: 1, suffix: " GHz") : nil, activity: activity)
+                    }
+                }
+                resources += HUDCoreDetailView.horizontalReadings(rows: rows, gpu: gpu, options: options,
+                    background: background)
             }
         }
         if readings.contains(.anePower) {
@@ -124,94 +147,49 @@ enum HUDMenuBarPresentation {
         }
         if readings.contains(.socPower) {
             resources += [Reading(id: "package.title", text: "SOC", reference: "SOC",
-                font: HUDStyle.titleFont(for: .gpuTotal, scale: scale), color: labelColor, help: nil, startsMetric: true),
+                font: HUDStyle.titleFont(for: .gpuTotal), color: labelColor, help: nil, startsMetric: true),
                 Reading(id: "package.power", text: text(.socPower, places: 1, suffix: " W"),
                     reference: HUDStyle.horizontalPowerReference,
-                    font: HUDStyle.readingFont(scale: scale, highlighted: style.packageHighlighted), color: valueColor,
+                    font: HUDStyle.readingFont(highlighted: style.packageHighlighted), color: valueColor,
                     help: nil, startsMetric: false)]
         }
         if let options = style.resources[.ram] {
             let details = readings.contains(.memoryDetails)
             let usage = readings.contains(.memoryUsage)
             let pressure = readings.contains(.memoryPressure)
-            func detail(_ metric: HUDMetric, abbreviation: String, column: HUDLogColumn) -> [Reading] {
-                [Reading(id: "\(metric.rawValue).\(abbreviation).title", text: abbreviation, reference: abbreviation,
-                    font: HUDStyle.smallLabelFont(scale: scale), color: labelColor, help: nil,
-                    startsMetric: false, metric: metric, leftAligned: true),
-                 Reading(id: "\(metric.rawValue).\(abbreviation).value", text: text(column, places: 2, suffix: " GB"), reference: "999.99 GB",
-                    font: HUDStyle.readingFont(scale: scale, highlighted: options.highlighted.contains(.details)),
-                    color: valueColor, help: nil, startsMetric: false, metric: metric,
-                    leadingGap: HUDStyle.memoryLabelValueSpacing, leftAligned: true)]
-            }
-            if (usage || details) || pressure {
+            if usage || details || pressure {
                 resources.append(title(.ramTotal))
                 if usage {
                     resources.append(value(.ramTotal, role: "value", text: text(.memoryUsage, suffix: "%"),
                         reference: HUDStyle.horizontalPercentageReference, highlighted: options.usageHighlighted))
                 }
                 if details {
-                    resources += detail(.ramTotal, abbreviation: "PHY", column: .memoryPhysical)
-                    resources += detail(.ramTotal, abbreviation: "SWP", column: .memorySwap)
+                    resources += HUDHorizontalView.memoryDetails(swap: text(.memorySwap, places: 2, suffix: " GB"),
+                        physical: text(.memoryPhysical, places: 2, suffix: " GB"), valueFont: HUDStyle.readingFont(highlighted: options.highlighted.contains(.details)),
+                        background: background)
                 }
                 if pressure {
-                    let pressureText = snapshot.values[.memoryPressure] ?? "—"
-                    let level = options.pressureMode == .colorText ? MemoryPressureMonitor.Level(displayText: pressureText) : nil
+                    let mode = HUDMenuBarReading.pressureMode(options.pressureMode)
+                    let pressureText = snapshot.values[.memoryPressure] ?? ""
+                    let level = mode == .colorText ? MemoryPressureMonitor.Level(displayText: pressureText) : nil
                     resources.append(Reading(id: "ram.pressure", text: pressureText, reference: "warning",
-                        font: HUDStyle.readingFont(scale: scale, highlighted: options.highlighted.contains(.pressure)),
+                        font: HUDStyle.readingFont(highlighted: options.highlighted.contains(.pressure)),
                         color: HUDStyle.pressureColor(for: level, background: background), help: "Memory pressure: \(pressureText)", startsMetric: false,
                         metric: .ramTotal,
-                        sizingFont: HUDStyle.readingFont(scale: scale, highlighted: true),
-                        pressureMode: options.pressureMode, pressureHistory: pressureHistory))
+                        sizingFont: HUDStyle.readingFont(highlighted: true),
+                        pressureMode: mode))
                 }
             }
         }
         if !resources.isEmpty { result.append(resources) }
 
         if readings.contains(.fanUsage) {
-            let options = style.fans
-            let fans = fanSample.displayReadings(averaged: options.averages(in: .horizontal))
-            let fanColor = HUDStyle.titleColor(for: .fans, background: background)
-            let fanReadings = fans.flatMap { fan -> [Reading] in
-                var values = [Reading(id: "fan.\(fan.id).title", text: fan.title, reference: fan.title,
-                    font: HUDStyle.titleFont(for: .fans, scale: scale), color: fanColor,
-                    help: fan.title, startsMetric: true, metric: .fans, fanMarker: fan.iconMarker)]
-                if options.mode.showsRPM {
-                    values.append(Reading(id: "fan.\(fan.id).rpm", text: fan.rpmText.isEmpty ? "—" : fan.rpmText,
-                        reference: "99999 RPM", font: HUDStyle.readingFont(scale: scale, highlighted: options.rpmHighlighted),
-                        color: valueColor, help: nil, startsMetric: false, metric: .fans,
-                        sizingFont: HUDStyle.readingFont(scale: scale, highlighted: true)))
-                }
-                if options.mode.showsBar {
-                    values.append(Reading(id: "fan.\(fan.id).bar", text: "", reference: "",
-                        font: HUDStyle.readingFont(scale: scale, highlighted: false), color: fanColor,
-                        help: "\(fan.title) speed relative to maximum", startsMetric: false, metric: .fans,
-                        barWidth: fanBarWidth(style: style), barFraction: fan.fraction))
-                }
-                return values
-            }
-            if fanReadings.isEmpty {
-                result.append([Reading(id: "fan.status", text: fanSample.message ?? "Fan readings unavailable",
-                    reference: "Fan readings unavailable", font: HUDStyle.smallLabelFont(scale: scale),
-                    color: labelColor, help: nil, startsMetric: true, metric: .fans)])
-            } else { result.append(fanReadings) }
+            var pinnedFans = style.fans
+            pinnedFans.mode = HUDMenuBarReading.fanMode
+            result.append(HUDHorizontalView.fanReadings(sample: fanSample, options: pinnedFans,
+                background: background))
         }
         return result
-    }
-
-    // The existing horizontal fan bar spans the same three reading columns as
-    // the vertical pressure plot, even when some overlay readings are disabled.
-    private static func fanBarWidth(style: Style) -> CGFloat {
-        let options = style.resources[.cpu]
-        let references: [(String, Bool)] = [("0.0 W", options?.highlighted.contains(.power) ?? false),
-            ("149°C", options?.highlighted.contains(.temperature) ?? false),
-            ("100%", options?.usageHighlighted ?? false)]
-        let width = references.reduce(CGFloat.zero) { result, reference in
-            let label = NSTextField(labelWithString: reference.0)
-            label.font = HUDStyle.readingFont(scale: .normal, highlighted: reference.1)
-            return result + label.intrinsicContentSize.width
-        }
-        return width + 2 * HUDStyle.metricColumnSpacing(scale: .normal)
-            + NSTextField(labelWithString: "").alignmentRectInsets.right
     }
 }
 
@@ -227,7 +205,6 @@ final class HUDMenuBarController: NSObject {
     private let bolt = HUDMenuBarPassiveImageView(frame: .zero)
     private let collapse = HUDMenuBarCollapseButton(frame: .zero)
     private var latestSnapshot = HUDLogSnapshot()
-    private var latestPressureHistory = HUDMemoryPressureHistory()
     private var latestFans = FanSample.checking
     private var latestBattery: BatterySample?
     private var latestOptions = HUDMenuBarOptions()
@@ -261,11 +238,14 @@ final class HUDMenuBarController: NSObject {
         collapsedFPSIndicator.imageScaling = .scaleProportionallyUpOrDown
         collapsedFPSIndicator.isHidden = true
         horizontal.isHidden = false
-        horizontal.battery.showsUnavailableReadings = true
-        measuringHorizontal.battery.showsUnavailableReadings = true
+        horizontal.battery.reservesMissingPowerSpace = true
+        measuringHorizontal.battery.reservesMissingPowerSpace = true
         bolt.image = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "PerformanceHUD")
         bolt.imageScaling = .scaleProportionallyUpOrDown
         collapse.title = ""
+        collapse.image = NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Show menu-bar readings")
+        collapse.setAccessibilityLabel("Show menu-bar readings")
+        collapse.imageScaling = .scaleProportionallyDown
         collapse.imagePosition = .imageOnly
         collapse.isBordered = false
         collapse.setButtonType(.momentaryChange)
@@ -281,10 +261,8 @@ final class HUDMenuBarController: NSObject {
 
     func refresh(snapshot: HUDLogSnapshot, fanSample: FanSample,
                  batterySample: BatterySample?, options: HUDMenuBarOptions,
-                 fpsExpanded: Bool = true, autoHideMode: HUDAutoHideMode = .off,
-                 pressureHistory: HUDMemoryPressureHistory = .init()) {
+                 fpsExpanded: Bool = true, autoHideMode: HUDAutoHideMode = .off) {
         latestSnapshot = snapshot
-        latestPressureHistory = pressureHistory
         latestFans = fanSample
         latestBattery = batterySample
         latestOptions = options
@@ -303,24 +281,25 @@ final class HUDMenuBarController: NSObject {
     @objc private func screenParametersChanged() { updatePresentation() }
 
     /// Measures the same renderer used by the status item, including its scale
-    /// transform, padding, and controls. Auto Charge reserves its visible width
+    /// transform and padding. Auto Charge reserves its visible width
     /// and FPS keeps its full width even while rolled up, so readings returning
     /// cannot unexpectedly consume more menu-bar space than was allowed.
     func expandedWidth(for readings: Set<HUDMenuBarReading>) -> CGFloat {
-        guard !readings.isEmpty else { return 40 }
+        guard !readings.isEmpty else { return menuBarHeight }
         let height = menuBarHeight
         let style = HUDMenuBarPresentation.Style.current
         let size = configure(measuringHorizontal, readings: readings, style: style,
                              background: menuBarBackground, reserveAutoCharge: true)
-        guard size.width > 0 else { return 40 }
+        guard size.width > 0 else { return menuBarHeight }
         let factor = HUDMenuBarPresentation.scaleFactor(menuBarHeight: height)
         return HUDMenuBarPresentation.scaledSize(size, menuBarHeight: height).width
-            + 2 * HUDStyle.horizontalPadding(scale: .normal) * factor + 40
+            + 2 * HUDStyle.horizontalPadding * factor
     }
 
     private var menuBarHeight: CGFloat {
-        let height = statusItem.button?.bounds.height ?? 0
-        return height > 0 ? height : NSStatusBar.system.thickness
+        // A native bolt can change the button’s intrinsic height. Size readings
+        // against the status bar so they return at the same scale after hiding.
+        statusItem.statusBar?.thickness ?? NSStatusBar.system.thickness
     }
 
     private var menuBarBackground: HUDBackground {
@@ -340,9 +319,9 @@ final class HUDMenuBarController: NSObject {
         let chargeOnly = readings.contains(.batteryPower) && !batteryOptions.temperature && !batteryOptions.charge
         let showsBattery = batteryOptions.enabled && (!chargeOnly || view.battery.hasVisiblePowerFlow)
         let sections = HUDMenuBarPresentation.sections(snapshot: latestSnapshot, fanSample: latestFans,
-            readings: readings, style: style, background: background, pressureHistory: latestPressureHistory)
+            readings: readings, style: style, background: background)
         return view.configure(sections: sections, showsBattery: showsBattery,
-            scale: .normal, background: background)
+            background: background, inMenuBar: true)
     }
 
     private func reportOverflow(_ value: Bool) {
@@ -375,10 +354,10 @@ final class HUDMenuBarController: NSObject {
                 content.removeFromSuperview()
                 bolt.removeFromSuperview()
                 collapse.removeFromSuperview()
-                setStatusItemLength(NSStatusItem.squareLength)
-                button.image = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "PerformanceHUD")
                 installed = false
             }
+            setStatusItemLength(NSStatusItem.squareLength)
+            if button.image == nil { button.image = bolt.image }
             return
         }
         if !installed {
@@ -387,14 +366,9 @@ final class HUDMenuBarController: NSObject {
             button.addSubview(collapse)
             installed = true
         }
-        // Rebuilding the settings menu may restore the original bolt image.
-        // This view supplies the bolt while readings or their chevron are shown.
-        button.image = nil
         let height = menuBarHeight
-        let buttonWidth: CGFloat = 22
-        let chevronWidth: CGFloat = 18
         let factor = HUDMenuBarPresentation.scaleFactor(menuBarHeight: height)
-        let padding = HUDStyle.horizontalPadding(scale: .normal) * factor
+        let padding = HUDStyle.horizontalPadding * factor
         let background = menuBarBackground
         bolt.contentTintColor = .labelColor
         collapse.contentTintColor = .labelColor
@@ -402,51 +376,50 @@ final class HUDMenuBarController: NSObject {
             && expandedWidth(for: latestOptions.readings) > maximumExpandedWidth
         let isCollapsed = latestOptions.isCollapsed || exceedsLimit
         reportOverflow(exceedsLimit)
-        content.isHidden = isCollapsed
         collapsedFPSIndicator.isHidden = true
-        var contentWidth: CGFloat = 0
-        if !isCollapsed {
-            let style = HUDMenuBarPresentation.Style.current
-            let size = configure(horizontal, readings: latestOptions.readings, style: style,
-                                 background: background)
-            let fpsCollapsed = latestOptions.readings.contains(.fps)
-                && latestAutoHideMode == .fps && !latestFPSExpanded
-            // Empty Auto Charge may leave FPS as the only rendered section.
-            // Keep one global chevron instead of an adjacent passive arrow.
-            let onlyWaitingFPS = fpsCollapsed && size.width == horizontal.fpsSectionWidth
-            if size.width > 0 && !onlyWaitingFPS {
-                let headerWidth = HUDStyle.ramDetailHeight(scale: .normal)
-                let fpsOffset = fpsCollapsed ? max(0, horizontal.fpsSectionWidth - headerWidth) : 0
-                let visibleSize = NSSize(width: size.width - fpsOffset, height: size.height)
-                content.clipsToBounds = fpsCollapsed
-                horizontal.setFPSOpacity(fpsCollapsed ? 0 : 1)
-                horizontal.frame = NSRect(x: -fpsOffset, y: 0, width: size.width, height: size.height)
-                collapsedFPSIndicator.isHidden = !fpsCollapsed
-                collapsedFPSIndicator.contentTintColor = HUDStyle.TextStyle.label.color(background: background)
-                collapsedFPSIndicator.frame = NSRect(x: (headerWidth - 12) / 2,
-                    y: (size.height - 12) / 2, width: 12, height: 12)
-                let scaled = HUDMenuBarPresentation.scaledSize(visibleSize, menuBarHeight: height)
-                content.frame = NSRect(x: padding, y: (height - scaled.height) / 2,
-                                       width: scaled.width, height: scaled.height)
-                content.bounds = NSRect(origin: .zero, size: visibleSize)
-                horizontal.alignReadingFrames()
-                contentWidth = scaled.width + 2 * padding
-            } else {
-                // Retain a valid bounds transform while temporarily empty.
-                content.isHidden = true
-            }
-        }
-        let title = isCollapsed ? "Show menu-bar readings" : "Hide menu-bar readings"
-        collapse.image = NSImage(systemSymbolName: isCollapsed ? "chevron.left" : "chevron.right",
-                                  accessibilityDescription: title)
-        collapse.setAccessibilityLabel(title)
-        collapse.imageScaling = .scaleProportionallyDown
-        // Keep both controls together at the anchored right edge, so collapsing
-        // the readings to their left does not move the next click target.
-        collapse.frame = NSRect(x: contentWidth, y: 0, width: chevronWidth, height: height)
-        bolt.frame = NSRect(x: contentWidth + chevronWidth + 5, y: (height - 15) / 2, width: 12, height: 15)
-        setStatusItemLength(buttonWidth + contentWidth + chevronWidth)
+        collapse.isHidden = !isCollapsed
+        bolt.isHidden = !isCollapsed
         button.setAccessibilityLabel("PerformanceHUD")
+        if isCollapsed {
+            content.isHidden = true
+            button.image = nil
+            collapse.frame = NSRect(x: 0, y: 0, width: 18, height: height)
+            bolt.frame = NSRect(x: 23, y: (height - 15) / 2, width: 12, height: 15)
+            setStatusItemLength(40)
+            return
+        }
+
+        let style = HUDMenuBarPresentation.Style.current
+        let size = configure(horizontal, readings: latestOptions.readings, style: style,
+                             background: background)
+        let fpsCollapsed = latestOptions.readings.contains(.fps)
+            && latestAutoHideMode == .fps && !latestFPSExpanded
+        // Auto Charge can leave a waiting FPS pin as the only section.
+        let onlyWaitingFPS = fpsCollapsed && size.width == horizontal.fpsSectionWidth
+        if size.width > 0 && !onlyWaitingFPS {
+            content.isHidden = false
+            let headerWidth = HUDStyle.ramDetailHeight()
+            let fpsOffset = fpsCollapsed ? max(0, horizontal.fpsSectionWidth - headerWidth) : 0
+            let visibleSize = NSSize(width: size.width - fpsOffset, height: size.height)
+            content.clipsToBounds = fpsCollapsed
+            horizontal.setFPSOpacity(fpsCollapsed ? 0 : 1)
+            horizontal.frame = NSRect(x: -fpsOffset, y: 0, width: size.width, height: size.height)
+            collapsedFPSIndicator.isHidden = !fpsCollapsed
+            collapsedFPSIndicator.contentTintColor = HUDStyle.TextStyle.label.color(background: background)
+            collapsedFPSIndicator.frame = NSRect(x: (headerWidth - 12) / 2,
+                y: (size.height - 12) / 2, width: 12, height: 12)
+            let scaled = HUDMenuBarPresentation.scaledSize(visibleSize, menuBarHeight: height)
+            content.frame = NSRect(x: padding, y: (height - scaled.height) / 2,
+                                   width: scaled.width, height: scaled.height)
+            content.bounds = NSRect(origin: .zero, size: visibleSize)
+            horizontal.alignReadingFrames()
+            button.image = nil
+            setStatusItemLength(scaled.width + 2 * padding)
+        } else {
+            content.isHidden = true
+            if button.image == nil { button.image = bolt.image }
+            setStatusItemLength(NSStatusItem.squareLength)
+        }
     }
 }
 

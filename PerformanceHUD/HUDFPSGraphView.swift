@@ -163,10 +163,10 @@ struct FPSHistoryScale {
 @MainActor
 final class HUDFPSGraphView: NSView {
     private static let fullHitchDepthMS = 200.0
+    private static let hitchTintFraction: CGFloat = 0.22
     private var history = FPSHistory()
     private var lineColor = NSColor.secondaryLabelColor
     private var baselineColor = HUDStyle.separatorColor(background: .dark)
-    private var hudScale: CGFloat = 1
     private var measure = HUDFPSMeasure.frameRate
     private var hitchMarks = true
     private var plotScale = FPSHistoryScale()
@@ -183,7 +183,7 @@ final class HUDFPSGraphView: NSView {
         didSet { if showsBaseline != oldValue { needsDisplay = true } }
     }
 
-    private var dotHaloRadius: CGFloat { 3 * hudScale }
+    private var dotHaloRadius: CGFloat { 3 }
 
     // Align the plot with the other rows, reserving the halo in the HUD's
     // outer padding instead of shortening the line and fill before the divider.
@@ -192,11 +192,11 @@ final class HUDFPSGraphView: NSView {
     }
 
     var plotBounds: NSRect {
-        let halfLineWidth = 1.35 * hudScale / 2
-        let fadeExtension = HUDStyle.fpsHistoryFadeExtension * hudScale
-        return NSRect(x: bounds.minX + halfLineWidth, y: bounds.minY + 9 * hudScale + fadeExtension,
+        let halfLineWidth = 1.35 / 2
+        let fadeExtension = HUDStyle.fpsHistoryFadeExtension
+        return NSRect(x: bounds.minX + halfLineWidth, y: bounds.minY + 9 + fadeExtension,
                       width: max(0, bounds.width - halfLineWidth - dotHaloRadius),
-                      height: max(0, bounds.height - (showsHeading ? 21 * hudScale : 0) - 12 * hudScale - fadeExtension))
+                      height: max(0, bounds.height - (showsHeading ? 21 : 0) - 12 - fadeExtension))
     }
 
     init() {
@@ -214,7 +214,7 @@ final class HUDFPSGraphView: NSView {
     override func layout() {
         super.layout()
         let h = heading.intrinsicContentSize.height
-        heading.frame = NSRect(x: 0, y: bounds.maxY - 10.5 * hudScale - h / 2, width: bounds.width, height: h)
+        heading.frame = NSRect(x: 0, y: bounds.maxY - 10.5 - h / 2, width: bounds.width, height: h)
     }
 
     func configure(measure: HUDFPSMeasure, hitchMarks: Bool) {
@@ -236,12 +236,8 @@ final class HUDFPSGraphView: NSView {
         needsDisplay = true
     }
 
-    func applyStyle(scale: HUDScale, background: HUDBackground) {
-        if hudScale != CGFloat(scale.rawValue) {
-            hudScale = CGFloat(scale.rawValue)
-            invalidateIntrinsicContentSize()
-        }
-        heading.font = HUDStyle.titleFont(for: .fps, scale: scale)
+    func applyStyle(background: HUDBackground) {
+        heading.font = HUDStyle.titleFont(for: .fps)
         heading.textColor = HUDStyle.primaryTitleColor(for: .fps, background: background)
         needsLayout = true
         lineColor = HUDStyle.titleColor(for: .gpuTotal, background: background)
@@ -318,7 +314,7 @@ final class HUDFPSGraphView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard !history.samples.isEmpty else { return }
-        let lineWidth = 1.35 * hudScale
+        let lineWidth = 1.35
         var plot = plotBounds
         let fillBaseline = bounds.minY
         let isRate = measure == .frameRate
@@ -361,8 +357,8 @@ final class HUDFPSGraphView: NSView {
                 for mark in marks {
                     let center = points[mark.index]
                     let depth = (center.y - fillBaseline) * min(mark.worstMS / Self.fullHitchDepthMS, 1)
-                    let rect = NSRect(x: center.x - 0.55 * hudScale, y: center.y - depth,
-                                      width: 1.1 * hudScale, height: depth)
+                    let rect = NSRect(x: center.x - 0.55, y: center.y - depth,
+                                      width: 1.1, height: depth)
                     NSGradient(starting: mark.color.withAlphaComponent(0), ending: mark.color)?.draw(in: rect, angle: 90)
                 }
             }
@@ -381,7 +377,7 @@ final class HUDFPSGraphView: NSView {
             path.lineCapStyle = .round
             path.stroke()
             guard !marks.isEmpty, let context = NSGraphicsContext.current?.cgContext else { return }
-            // Tint the existing curve halfway to each neighbouring sample.
+            // Keep a stretch of the base curve visible between consecutive hitches.
             let outline = path.cgPath.copy(strokingWithWidth: lineWidth, lineCap: .round,
                                            lineJoin: .round, miterLimit: path.miterLimit)
             context.saveGState()
@@ -389,14 +385,14 @@ final class HUDFPSGraphView: NSView {
             context.clip()
             for (index, color, _) in marks {
                 let x = points[index].x
-                let left = index == 0 ? first.x - lineWidth / 2 : (points[index - 1].x + x) / 2
-                let right = index == points.count - 1 ? last.x + lineWidth / 2 : (x + points[index + 1].x) / 2
+                let left = index == 0 ? first.x - lineWidth / 2 : x - (x - points[index - 1].x) * Self.hitchTintFraction
+                let right = index == points.count - 1 ? last.x + lineWidth / 2 : x + (points[index + 1].x - x) * Self.hitchTintFraction
                 color.setFill()
                 NSRect(x: left, y: bounds.minY, width: right - left, height: bounds.height).fill()
             }
             context.restoreGState()
         }
-        let barWidth = max(hudScale, plot.width / CGFloat(FPSHistory.duration) * 0.60)
+        let barWidth = max(1, plot.width / CGFloat(FPSHistory.duration) * 0.60)
         for segment in segments {
             var points: [NSPoint] = []
             marks.removeAll(keepingCapacity: true)
@@ -428,12 +424,12 @@ final class HUDFPSGraphView: NSView {
             lineColor.withAlphaComponent(0.22).setFill()
             circle(radius: dotHaloRadius).fill()
             lineColor.setFill()
-            circle(radius: 1.6 * hudScale).fill()
+            circle(radius: 1.6).fill()
         }
         if showsBaseline {
             baselineColor.setFill()
             NSRect(x: bounds.minX, y: fillBaseline, width: plot.maxX - bounds.minX,
-                   height: 0.5 * hudScale).fill()
+                   height: hudHairline).fill()
         }
     }
 }

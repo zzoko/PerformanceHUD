@@ -165,6 +165,7 @@ struct HotkeyTests {
         let panel: NSPanel = member(controller, "panel")
         let label: NSTextField = member(controller, "label")
         let icon: NSImageView = member(controller, "icon")
+        let glass = panel.contentView as! NativeGlassHUDBackground
         precondition(!panel.isVisible, "No feedback appears until a shortcut requests it")
         let screen = NSScreen.main!
         let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
@@ -174,8 +175,12 @@ struct HotkeyTests {
             precondition(icon.image != nil && panel.isVisible && panel.ignoresMouseEvents)
             precondition(!panel.canBecomeKey && !panel.canBecomeMain && !panel.isKeyWindow)
             precondition(panel.level == .screenSaver && panel.collectionBehavior.contains(.fullScreenAuxiliary))
-            precondition(screen.visibleFrame.contains(panel.frame) && abs(panel.frame.midX - screen.visibleFrame.midX) < 1)
-            precondition(panel.contentView!.bounds.contains(label.frame) && label.frame.width >= label.intrinsicContentSize.width)
+            let body = panel.convertToScreen(glass.convert(glass.bodyFrame, to: nil))
+            precondition(abs(body.midX - screen.visibleFrame.midX) < 1 && abs(screen.visibleFrame.maxY - body.maxY - 28) < 1 && body.height == 44)
+            let systemIsDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            precondition(glass.isDark == (appearance.resolved(isDark: systemIsDark) == .dark) && !panel.hasShadow)
+            precondition(label.superview === glass.contentView && icon.superview === glass.contentView)
+            precondition(glass.contentView.bounds.contains(label.frame) && label.frame.width >= label.intrinsicContentSize.width)
         }
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
         precondition(panel.alphaValue > 0.95, "Feedback fades fully into view")

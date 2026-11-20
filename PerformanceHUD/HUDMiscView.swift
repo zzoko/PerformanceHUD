@@ -6,23 +6,22 @@ final class HUDMiscView: NSView {
     private var coreFields: [(NSTextField, NSTextField)] = []
     private let info: HUDDeviceInfo
     private var options = HUDMiscOptions()
-    private var scale = HUDScale.normal
     override var isFlipped: Bool { true }
 
     init(frame: NSRect, info: HUDDeviceInfo = .current) {
         self.info = info
         super.init(frame: frame)
         for reading in HUDMiscReading.allCases {
-            let title = NSTextField(labelWithString: reading.title)
-            let value = NSTextField(labelWithString: "")
+            let title = HUDReadingLabel(labelWithString: reading.title)
+            let value = HUDReadingLabel(labelWithString: "")
             value.alignment = .right
             value.lineBreakMode = .byTruncatingMiddle
             for field in [title, value] { field.maximumNumberOfLines = 1; addSubview(field) }
             fields[reading] = (title, value)
         }
         for (name, text) in [("CPU cores", info.cpuConfiguration), ("GPU cores", info.gpuConfiguration)] {
-            let title = NSTextField(labelWithString: name)
-            let value = NSTextField(labelWithString: text)
+            let title = HUDReadingLabel(labelWithString: name)
+            let value = HUDReadingLabel(labelWithString: text)
             value.alignment = .right
             value.lineBreakMode = .byTruncatingMiddle
             value.setAccessibilityLabel(name)
@@ -35,8 +34,8 @@ final class HUDMiscView: NSView {
 
     required init?(coder: NSCoder) { fatalError("Use init(frame:)") }
 
-    func configure(options: HUDMiscOptions, scale: HUDScale, background: HUDBackground) {
-        self.options = options; self.scale = scale
+    func configure(options: HUDMiscOptions, background: HUDBackground) {
+        self.options = options
         for (reading, pair) in fields {
             for field in [pair.0, pair.1] {
                 field.isHidden = !options.visibleReadings.contains(reading)
@@ -47,10 +46,10 @@ final class HUDMiscView: NSView {
             pair.1.isHidden = !options.showsCoreCounts
         }
         for pair in Array(fields.values) + coreFields {
-            pair.0.font = HUDStyle.smallLabelFont(scale: scale)
+            pair.0.font = HUDStyle.smallLabelFont()
             pair.0.textColor = HUDStyle.TextStyle.label.color(background: background)
-            pair.1.font = HUDStyle.readingFont(scale: scale, highlighted: false)
-            pair.1.textColor = HUDStyle.TextStyle.reading.color(background: background)
+            pair.1.font = HUDStyle.readingFont(highlighted: options.highlighted)
+            pair.1.textColor = (options.highlighted ? HUDStyle.TextStyle.emphasizedReading : .reading).color(background: background)
         }
         needsLayout = true
     }
@@ -64,13 +63,13 @@ final class HUDMiscView: NSView {
         needsLayout = true
     }
 
-    func height(scale: HUDScale) -> CGFloat {
-        CGFloat(options.rowCount) * HUDStyle.ramDetailHeight(scale: scale)
+    func height() -> CGFloat {
+        CGFloat(options.rowCount) * HUDStyle.ramDetailHeight()
     }
 
     override func layout() {
         super.layout()
-        let rowHeight = HUDStyle.ramDetailHeight(scale: scale)
+        let rowHeight = HUDStyle.ramDetailHeight()
         var rows: [(NSTextField, NSTextField)] = []
         for reading in options.visibleReadings {
             if let pair = fields[reading] { rows.append(pair) }
@@ -83,7 +82,7 @@ final class HUDMiscView: NSView {
             let titleWidth = title.intrinsicContentSize.width
             let leading = title.alignmentRectInsets.left
             title.frame = title.frame(forAlignmentRect: NSRect(x: leading, y: y, width: titleWidth, height: h))
-            let x = leading + titleWidth + HUDStyle.metricColumnSpacing(scale: scale)
+            let x = leading + titleWidth + HUDStyle.metricColumnSpacing
             value.frame = value.frame(forAlignmentRect: NSRect(x: x, y: y,
                 width: max(0, bounds.width - value.alignmentRectInsets.right - x), height: h))
         }

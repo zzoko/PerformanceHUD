@@ -1,89 +1,107 @@
 import AppKit
 
-/// Fixed columns and a fixed row per detected fan keep RPM updates from changing
-/// the panel size. Only discovery, user options or scale affect geometry.
+/// Individual fans share rows in pairs. A single fan or the average stays inline.
 @MainActor
 final class HUDFanView: NSView {
+    struct CellFrames {
+        let badge: NSRect
+        let rpm: NSRect?
+        let bar: NSRect?
+    }
+
     override var isFlipped: Bool { true }
     private(set) var sample = FanSample.checking
+    private var readings: [FanDisplayReading] = []
     private var options = HUDFanOptions()
-    private var scale = HUDScale.normal
     private var background = HUDBackground.dark
     private var preferredBarWidth: CGFloat?
+    private var swapValueTrailing: CGFloat?
+    private static let labelInset = NSTextField(labelWithString: "").alignmentRectInsets.left
+    private let rpmColumnWidth = HUDStyle.horizontalColumnWidth(text: "", reference: FanDisplayReading.rpmWidthReference,
+                                      font: HUDStyle.readingFont(highlighted: true))
 
-    func setPreferredBarWidth(_ width: CGFloat) {
-        guard preferredBarWidth != width else { return }
-        preferredBarWidth = width
+    func setMemoryColumns(barWidth: CGFloat, swapValueTrailing: CGFloat) {
+        guard preferredBarWidth != barWidth || self.swapValueTrailing != swapValueTrailing else { return }
+        preferredBarWidth = barWidth
+        self.swapValueTrailing = swapValueTrailing
         needsDisplay = true
     }
 
-    private var readings: [FanDisplayReading] { sample.displayReadings(averaged: options.averages(in: .vertical)) }
-    var rowCount: Int { max(1, readings.count) }
-    func height(scale: HUDScale) -> CGFloat {
-        ceil(CGFloat(rowCount) * HUDStyle.rowHeight(scale: scale)
-            + CGFloat(rowCount - 1) * HUDStyle.rowSpacing(scale: scale))
-    }
-    var barWidth: CGFloat {
-        let factor = CGFloat(scale.rawValue)
-        let font = HUDStyle.readingFont(scale: scale, highlighted: true)
-        let gap = HUDStyle.metricColumnSpacing(scale: scale)
-        let reserved = (2 + HUDFanIcon.side) * factor
-            + gap
-            + ("99999 RPM" as NSString).size(withAttributes: [.font: font]).width + gap
-        // Reserve the same columns in every mode so the right-aligned bar keeps
-        // its width across visibility changes, readings and RPM emphasis. Match
-        // the icon's actual 2pt leading inset, with one gap on each side of RPM.
-        let target = preferredBarWidth ?? HUDFanBarView.verticalSize.width * factor
-        return min(target, max(0, bounds.width - reserved))
+    private var paired: Bool { readings.count > 1 }
+    var rowCount: Int { max(1, (readings.count + 1) / 2) }
+
+    private func barLineHeight() -> CGFloat {
+        paired && options.mode.showsBar ? (HUDFanBarView.verticalSize.height + 4) : 0
     }
 
-    func update(sample: FanSample, options: HUDFanOptions, scale: HUDScale, background: HUDBackground) {
-        self.sample = sample; self.options = options; self.scale = scale; self.background = background
+    func height() -> CGFloat {
+        ceil(CGFloat(rowCount) * (HUDStyle.rowHeight + barLineHeight())
+            + CGFloat(rowCount - 1) * HUDStyle.rowSpacing)
+    }
+
+    var barWidth: CGFloat {
+        preferredBarWidth ?? HUDFanBarView.verticalSize.width
+    }
+
+    func frames(forFanAt index: Int) -> CellFrames {
+        let infoHeight = HUDStyle.rowHeight
+        let barLine = barLineHeight()
+        let rowY = CGFloat(index / 2) * (infoHeight + barLine + HUDStyle.rowSpacing)
+        let infoY = rowY + barLine
+        let rightStart = bounds.maxX - barWidth
+        let leftColumn = index.isMultiple(of: 2)
+        let columnStart = leftColumn ? bounds.minX + Self.labelInset : rightStart
+        let columnEnd = paired && leftColumn ? columnStart + barWidth : bounds.maxX
+
+        let side = HUDFanIcon.side
+        let badgeX = columnStart - HUDFanIcon.inkInset
+        let badge = NSRect(x: badgeX, y: infoY + (infoHeight - side) / 2, width: side, height: side)
+        let rpmEnd = !paired && options.mode == .both ? bounds.minX + (swapValueTrailing ?? barWidth) : columnEnd
+        let rpm = options.mode.showsRPM
+            ? NSRect(x: rpmEnd - rpmColumnWidth, y: infoY, width: rpmColumnWidth, height: infoHeight) : nil
+        let barHeight = HUDFanBarView.verticalSize.height
+        let bar = options.mode.showsBar ? NSRect(x: paired ? columnStart : rightStart,
+            y: barLine > 0 ? rowY : rowY + (infoHeight - barHeight) / 2, width: barWidth, height: barHeight) : nil
+        return CellFrames(badge: badge, rpm: rpm, bar: bar)
+    }
+
+    func update(sample: FanSample, options: HUDFanOptions, background: HUDBackground) {
+        self.sample = sample; self.options = options; self.background = background
+        readings = sample.displayReadings(averaged: options.averages(in: .vertical))
         setAccessibilityElement(true)
         setAccessibilityRole(.staticText)
         setAccessibilityLabel("Fans")
-        setAccessibilityValue(sample.fans.isEmpty ? sample.message : readings.map {
-            "\($0.title): \(options.usage ? ($0.rpmText.isEmpty ? "unavailable" : $0.rpmText) : "readings hidden")"
+        setAccessibilityValue(sample.fans.isEmpty ? sample.message : readings.map { fan in
+            let value = options.mode.showsRPM ? fan.rpmText : fan.fraction.map { "\(Int(($0 * 100).rounded()))%" } ?? ""
+            return "\(fan.title): \(value.isEmpty ? "unavailable" : value)"
         }.joined(separator: ", "))
         needsDisplay = true
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let statusFont = HUDStyle.smallLabelFont(scale: scale)
+        let statusFont = HUDStyle.smallLabelFont()
         let color = HUDStyle.titleColor(for: .fans, background: background)
         let statusAttributes: [NSAttributedString.Key: Any] = [.font: statusFont, .foregroundColor: HUDStyle.TextStyle.label.color(background: background)]
-        let rpmFont = HUDStyle.readingFont(scale: scale, highlighted: options.rpmHighlighted)
+        let rpmFont = HUDStyle.readingFont(highlighted: options.rpmHighlighted)
         let rpmStyle: HUDStyle.TextStyle = options.rpmHighlighted ? .emphasizedReading : .reading
         let rpmAttributes: [NSAttributedString.Key: Any] = [.font: rpmFont, .foregroundColor: rpmStyle.color(background: background)]
-        let rowHeight = HUDStyle.rowHeight(scale: scale)
-        let factor = CGFloat(scale.rawValue)
+        let rowHeight = HUDStyle.rowHeight
         let textHeight = ("FAN" as NSString).size(withAttributes: statusAttributes).height
         if sample.fans.isEmpty {
             ((sample.message ?? "Fan readings unavailable") as NSString).draw(
-                at: NSPoint(x: 2 * factor, y: (rowHeight - textHeight) / 2), withAttributes: statusAttributes)
+                at: NSPoint(x: 2, y: (rowHeight - textHeight) / 2), withAttributes: statusAttributes)
             return
         }
-        let labelWidth = HUDFanIcon.side * factor
         for (index, fan) in readings.enumerated() {
-            let y = CGFloat(index) * (rowHeight + HUDStyle.rowSpacing(scale: scale))
-            HUDFanIcon.draw(in: NSRect(x: 2 * factor, y: y + (rowHeight - labelWidth) / 2,
-                                      width: labelWidth, height: labelWidth), marker: fan.iconMarker, color: color)
-            guard options.usage else { continue }
-            let width = barWidth
-            let barLeft = bounds.width - width
-            if options.mode.showsRPM {
+            let cell = frames(forFanAt: index)
+            HUDFanIcon.draw(in: cell.badge, marker: fan.iconMarker, color: color)
+            if let rpm = cell.rpm {
                 let text = fan.rpmText as NSString
                 let size = text.size(withAttributes: rpmAttributes)
-                let x = options.mode.showsBar
-                    ? (2 * factor + labelWidth + barLeft - size.width) / 2
-                    : bounds.width - 2 * factor - size.width
-                text.draw(at: NSPoint(x: x, y: y + (rowHeight - size.height) / 2), withAttributes: rpmAttributes)
+                text.draw(at: NSPoint(x: rpm.maxX - size.width, y: rpm.midY - size.height / 2), withAttributes: rpmAttributes)
             }
-            if options.mode.showsBar {
-                let height = HUDFanBarView.verticalSize.height * factor
-                let rect = NSRect(x: barLeft,
-                                  y: y + (rowHeight - height) / 2, width: width, height: height)
-                HUDFanBarView.drawBar(in: rect, color: color, fraction: fan.fraction)
+            if let bar = cell.bar {
+                HUDFanBarView.drawBar(in: bar, color: color, fraction: fan.fraction)
             }
         }
     }

@@ -58,6 +58,24 @@ import AppKit
             }
         }
         verifyGeometry()
+        func checkPinFormats(_ category: HUDCategoryMenuView, _ reading: HUDMenuBarReading, _ formats: [String?]) {
+            let pin = category.subviews.compactMap { $0 as? HUDMenuBarButton }.first { $0.reading == reading }!
+            let mode = pin.modeControl!
+            check(mode.segmentDistribution == .fillEqually && mode.segmentCount == formats.count, "Connector geometry matches the selector")
+            let original = mode.selectedSegment
+            for (index, format) in formats.enumerated() {
+                mode.selectedSegment = index
+                let label = reading.outputSegment(for: index).flatMap { mode.label(forSegment: $0) }
+                check(label == format && pin.accessibilityHelp() == (format.map { "Menu bar format: \($0)." } ?? "The current setting hides this reading."),
+                      "The pin identifies the effective format for every choice in its row")
+            }
+            mode.selectedSegment = original
+        }
+        checkPinFormats(fps, .fps, ["Value", "Value", "Value"])
+        checkPinFormats(memory, .memoryPressure, ["Text", "Meter", "Meter"])
+        checkPinFormats(fan, .fanUsage, ["RPM", "RPM", "RPM"])
+        checkPinFormats(cpu, .cpuCores, ["GHz", "Load", "Both"])
+        checkPinFormats(battery, .batteryPower, ["Always", "Auto", nil])
         var storageOptions = HUDStorageOptions()
         storage.onChange = { storageOptions = $0 }
         let storageMaster: HUDResourceMasterButton = member(storage, "master")
@@ -356,9 +374,15 @@ import AppKit
         // Short displays retain an actual scrollable document, including the final row.
         list.fit(availableHeight: 240)
         check(list.frame.height == 240 && list.documentView!.frame.height > 240, "Category section fits a small display")
+        check(list.layer?.mask != nil, "The list cues more categories below the viewport")
         let last = misc.frame
         list.documentView!.scrollToVisible(last)
         check(list.documentVisibleRect.intersects(last), "Misc stays reachable by scrolling")
+        check(list.layer?.mask == nil, "The final row is fully visible at the bottom")
+        list.documentView!.scrollToVisible(fps.frame)
+        check(list.layer?.mask != nil, "Scrolling back up restores the bottom fade")
+        list.fit(availableHeight: list.documentView!.frame.height)
+        check(list.layer?.mask == nil, "A list that fits has no scroll cue")
         list.fit(availableHeight: 1000)
         fan.update(sample: .noFans)
         list.layoutSubtreeIfNeeded()

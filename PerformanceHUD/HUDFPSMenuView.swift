@@ -135,6 +135,7 @@ final class HUDFPSMenuView: HUDCategoryMenuView {
     }
 
     private func refresh() {
+        needsDisplay = true
         master.state = options.enabled ? .on : .off
         let pinned = isMenuBarSelected(.fps)
         measureControl.selectedSegment = HUDFPSMeasure.allCases.firstIndex(of: options.measure)!

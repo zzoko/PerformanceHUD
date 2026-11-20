@@ -40,9 +40,11 @@ nonisolated struct FanSample: Equatable, Sendable {
         })
     }
 
+    static let maximumVisibleFans = 4
+
     func displayReadings(averaged: Bool) -> [FanDisplayReading] {
         guard averaged, canAverage else {
-            return fans.map { FanDisplayReading(id: "\($0.id)", title: "FAN \($0.id + 1)",
+            return fans.prefix(Self.maximumVisibleFans).map { FanDisplayReading(id: "\($0.id)", title: "FAN \($0.id + 1)",
                                                rpm: $0.rpm, fraction: $0.fraction) }
         }
         // Average each fan's normalized speed, not a ratio of average RPM/max.
@@ -58,6 +60,7 @@ nonisolated struct FanSample: Equatable, Sendable {
 }
 
 nonisolated struct FanDisplayReading: Equatable, Sendable {
+    static let rpmWidthReference = "99999 RPM"
     let id: String
     let title: String
     let rpm: Double?
@@ -76,7 +79,6 @@ enum HUDFanMode: String, CaseIterable, Codable {
 
 struct HUDFanOptions: Codable, Equatable {
     var enabled = true
-    var usage = true
     var mode: HUDFanMode = .both
     var average = true
     var averageMode: HUDFanAverageMode = .horizontal

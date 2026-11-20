@@ -42,7 +42,7 @@ nonisolated struct StorageDrive: Equatable, Sendable {
     var writeMBps: Double?
 
     var freeText: String {
-        guard let freeBytes, freeBytes >= 0 else { return "—" }
+        guard let freeBytes, freeBytes >= 0 else { return "" }
         guard freeBytes >= 1000 else { return "\(freeBytes) B free" }
         var amount = Decimal(freeBytes) / 1000
         var unit = "kB"
@@ -58,7 +58,7 @@ nonisolated struct StorageDrive: Equatable, Sendable {
     }
 
     static func rateText(_ rate: Double?) -> String {
-        guard let rate else { return "—" }
+        guard let rate else { return "" }
         return rate >= 1000 ? String(format: "%.2f GB/s", rate / 1000) : String(format: "%.1f MB/s", rate)
     }
 }

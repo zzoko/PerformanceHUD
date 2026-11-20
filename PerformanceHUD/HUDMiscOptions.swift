@@ -24,6 +24,7 @@ struct HUDMiscOptions: Codable, Equatable {
     var enabled = false
     var readings = Set(HUDMiscReading.allCases)
     var chipMode: HUDChipDisplayMode = .full
+    var highlighted = false
     var visibleReadings: [HUDMiscReading] {
         enabled ? HUDMiscReading.allCases.filter { readings.contains($0) } : []
     }
@@ -45,13 +46,14 @@ struct HUDMiscOptions: Codable, Equatable {
         return merged
     }
 
-    private enum CodingKeys: String, CodingKey { case enabled, readings, chipMode }
+    private enum CodingKeys: String, CodingKey { case enabled, readings, chipMode, highlighted }
 
     init(enabled: Bool = false, readings: Set<HUDMiscReading> = Set(HUDMiscReading.allCases),
-         chipMode: HUDChipDisplayMode = .full) {
+         chipMode: HUDChipDisplayMode = .full, highlighted: Bool = false) {
         self.enabled = enabled
         self.readings = readings
         self.chipMode = chipMode == .tier ? .tier : .full
+        self.highlighted = highlighted
     }
 
     init(from decoder: Decoder) throws {
@@ -59,6 +61,7 @@ struct HUDMiscOptions: Codable, Equatable {
         enabled = try values.decode(Bool.self, forKey: .enabled)
         readings = try values.decode(Set<HUDMiscReading>.self, forKey: .readings)
         chipMode = try values.decodeIfPresent(HUDChipDisplayMode.self, forKey: .chipMode) == .tier ? .tier : .full
+        highlighted = try values.decodeIfPresent(Bool.self, forKey: .highlighted) ?? false
     }
 }
 

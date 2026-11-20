@@ -6,7 +6,7 @@ final class HUDFanMenuView: HUDCategoryMenuView {
     private var options: HUDFanOptions
     private var sample: FanSample
     private let master: HUDResourceMasterButton
-    private let usage = HUDReadingCheckbox(title: "Use", supportsEmphasis: false)
+    private let useLabel = NSTextField(labelWithString: "Use")
     private let average = HUDReadingCheckbox(title: "Average", supportsEmphasis: false)
     private let averageMode = NSSegmentedControl(labels: HUDFanAverageMode.allCases.map(\.title),
                                                 trackingMode: .selectOne, target: nil, action: nil)
@@ -26,9 +26,7 @@ final class HUDFanMenuView: HUDCategoryMenuView {
         unavailableLabel.textColor = .disabledControlTextColor
         master.target = self; master.action = #selector(toggleCategory)
         master.setAccessibilityLabel("Show fans")
-        usage.target = self; usage.action = #selector(toggleUsage)
-        usage.font = .menuFont(ofSize: 0)
-        usage.setControlAccessibilityLabel("Fan Use")
+        useLabel.font = .menuFont(ofSize: 0)
         mode.target = self; mode.action = #selector(changeFanMode)
         mode.segmentStyle = .rounded
         mode.font = .menuFont(ofSize: 0)
@@ -65,23 +63,20 @@ final class HUDFanMenuView: HUDCategoryMenuView {
     private func refresh() {
         let detected = !sample.fans.isEmpty
         let pinned = isMenuBarSelected(.fanUsage)
-        let menuBar = makeMenuBarButton(for: .fanUsage, title: "Fan Use")
+        let menuBar = makeMenuBarButton(for: .fanUsage, title: "Fan RPM")
         menuBar.isEnabled = detected
         unavailableLabel.stringValue = sample.message ?? "Not available"
-        setRows(detected ? [.init(reading: average, mode: averageMode),
-                            .init(reading: usage, mode: mode, emphasis: rpmHighlight, menuBar: menuBar)]
+        setRows(detected ? [.init(reading: useLabel, mode: mode, emphasis: rpmHighlight, menuBar: menuBar),
+                            .init(reading: average, mode: averageMode)]
                          : [.init(reading: unavailableLabel, fullWidth: true)])
         master.isEnabled = sample.status != .noFans
         master.state = options.enabled && master.isEnabled ? .on : .off
-        usage.state = detected && options.usage ? .on : .off
-        usage.isEnabled = options.enabled && detected
         let message = sample.message
-        usage.toolTip = message
-        usage.setAccessibilityHelp(message)
         mode.selectedSegment = HUDFanMode.allCases.firstIndex(of: options.mode) ?? 0
-        mode.isEnabled = detected && ((options.enabled && options.usage) || pinned)
+        mode.isEnabled = detected && options.enabled
+        useLabel.textColor = mode.isEnabled ? .labelColor : .disabledControlTextColor
         rpmHighlight.state = options.rpmHighlighted ? .on : .off
-        rpmHighlight.isEnabled = mode.isEnabled && options.mode.showsRPM
+        rpmHighlight.isEnabled = detected && (pinned || (options.enabled && options.mode.showsRPM))
         rpmHighlight.needsDisplay = true
         average.state = sample.canAverage && options.average ? .on : .off
         average.isEnabled = (options.enabled || pinned) && sample.canAverage
@@ -97,7 +92,6 @@ final class HUDFanMenuView: HUDCategoryMenuView {
         options.enabled = master.state == .on
         changed()
     }
-    @objc private func toggleUsage() { options.usage = usage.state == .on; changed() }
     @objc private func changeFanMode() {
         guard HUDFanMode.allCases.indices.contains(mode.selectedSegment) else { return }
         options.mode = HUDFanMode.allCases[mode.selectedSegment]; changed()

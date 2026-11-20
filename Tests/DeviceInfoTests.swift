@@ -130,9 +130,9 @@ import AppKit
                 for (title, value) in rows {
                     precondition(!title.isHidden && !value.isHidden)
                     precondition((title.alignment == .left || title.alignment == .natural) && value.alignment == .right, "All rows follow Misc layout")
-                    precondition(title.font == HUDStyle.smallLabelFont(scale: scale)
+                    precondition(title.font == HUDStyle.smallLabelFont()
                         && title.textColor == HUDStyle.TextStyle.label.color(background: appearance))
-                    precondition(value.font == HUDStyle.readingFont(scale: scale, highlighted: false)
+                    precondition(value.font == HUDStyle.readingFont(highlighted: false)
                         && value.textColor == HUDStyle.TextStyle.reading.color(background: appearance))
                     precondition(value.alignmentRect(forFrame: value.frame).minX > title.alignmentRect(forFrame: title.frame).maxX, "Label and reading have a gap")
                     precondition(value.frame.width + 0.5 >= value.intrinsicContentSize.width, "Core values fit at \(factor)×")

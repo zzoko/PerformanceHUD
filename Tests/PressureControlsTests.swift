@@ -114,8 +114,8 @@ import AppKit
                         focusedApp: false, highlighted: emphasis, pressureMode: .text)
                     hud.setResourceOptions(option, for: .ram)
                     hud.updateMemoryPressure("warning")
-                    let expectedPressure = HUDStyle.readingFont(scale: .normal, highlighted: pressureBold)
-                    let expectedDetails = HUDStyle.readingFont(scale: .normal, highlighted: detailsBold)
+                    let expectedPressure = HUDStyle.readingFont(highlighted: pressureBold)
+                    let expectedDetails = HUDStyle.readingFont(highlighted: detailsBold)
                     precondition(pressure.font == expectedPressure, "Pressure uses its own text emphasis")
                     precondition(physical[.ramTotal]!.font == expectedDetails && swap.font == expectedDetails,
                                  "Pressure emphasis leaves Physical and Swap independent")
@@ -154,7 +154,7 @@ import AppKit
                                     let expected = mode.usesStateColor ? HUDStyle.warningYellow : HUDStyle.readingColor(background: .dark)
                                     precondition(pressure.textColor == expected, "Text reflects the current state color")
                                 }
-                                precondition(pressure.font == HUDStyle.readingFont(scale: .normal, highlighted: false), "Details cannot bold Pressure")
+                                precondition(pressure.font == HUDStyle.readingFont(highlighted: false), "Details cannot bold Pressure")
                                 precondition(physical[.ramTotal]!.isHidden == !details && swap.isHidden == !details, "Details controls Physical and Swap")
                                 let visible = option.visibleMetrics(for: .ram)
                                 precondition(rows[.ramTotal]!.isHidden == !visible.contains(.ramTotal),
@@ -165,8 +165,7 @@ import AppKit
                                     precondition(meter.isHidden == (!showsPressure || mode.display == .text || mode.isHistory), "Pressure meter is independent")
                                     precondition(history.isHidden == (!showsPressure || !mode.isHistory), "History follows its own style")
                                     if visible.contains(.ramTotal) {
-                                        let expected: CGFloat = 21 + (details ? 36 : 0) + (showsPressure ? 18 : 0)
-                                            + (details || showsPressure ? 6 : 0)
+                                        let expected: CGFloat = (details || showsPressure ? 27 : 21) + (details ? 18 : 0) + (showsPressure ? 18 : 0)
                                             + (showsPressure && mode.isHistory ? 12.375 : 0)
                                         precondition(abs(rows[.ramTotal]!.frame.height - CGFloat(expected)) < 0.5, "Hidden rows reclaim their height")
                                         if showsPressure {

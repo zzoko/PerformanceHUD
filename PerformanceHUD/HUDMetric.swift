@@ -70,7 +70,7 @@ enum HUDMetric: Int, CaseIterable, Hashable {
 
     // MARK: - HUD Titles
 
-    var hudTitle: String {
+    func hudTitle(for layout: HUDAlignment) -> String {
 
         switch self {
         case .storage: return "Storage"
@@ -100,10 +100,10 @@ enum HUDMetric: Int, CaseIterable, Hashable {
             return "ANE"
 
         case .ram:
-            return "MEM (App)"
+            return layout == .vertical ? "Memory (App)" : "MEM (App)"
 
         case .ramTotal:
-            return "MEM"
+            return layout == .vertical ? "Memory" : "MEM"
 
         case .fans:
             return "FAN"

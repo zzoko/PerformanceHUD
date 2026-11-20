@@ -39,21 +39,21 @@ import AppKit
         _ = NSApplication.shared
         UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "fps", "hud.alignment": "vertical"], forName: UserDefaults.argumentDomain)
         let menu = HUDFanMenuView(options: .init(), sample: .noFans)
-        let usage: HUDReadingCheckbox = member(menu, "usage")
+        let useLabel: NSTextField = member(menu, "useLabel")
         let master: NSButton = member(menu, "master")
         let mode: NSSegmentedControl = member(menu, "mode")
         let average: HUDReadingCheckbox = member(menu, "average")
-        check(!master.isEnabled && master.state == .off && !usage.isEnabled && usage.state == .off, "No fans disables and unchecks the category and its controls")
+        check(!master.isEnabled && master.state == .off && !mode.isEnabled, "No fans disables and unchecks the category and its controls")
         check(!average.isEnabled && average.state == .off, "No fans also dims and unchecks Average")
-        check(usage.toolTip == "Not available" && FanSample.noFans.message == "Not available", "Menu and HUD share the no-fan message")
+        check(menu.subviews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Not available" } && FanSample.noFans.message == "Not available", "Menu and HUD share the no-fan message")
         check((0..<mode.segmentCount).map { mode.label(forSegment: $0)! } == ["Bar", "RPM", "Both"] && mode.selectedSegment == 2, "Fan mode labels and Both default")
         menu.update(sample: two)
-        check(master.isEnabled && master.state == .on && usage.isEnabled && usage.state == .on && mode.isEnabled, "Category and saved usage return on detection")
+        check(master.isEnabled && master.state == .on && mode.isEnabled, "Category and saved usage return on detection")
         let averageMode: NSSegmentedControl = member(menu, "averageMode")
         check(average.isEnabled && average.state == .on && averageMode.selectedSegment == 1, "Saved average returns on detection with Horizontal default")
         let single = FanSample(status: .ready, fans: [FanReading(id: 0, rpm: 0, maximumRPM: 6000)])
         menu.update(sample: single)
-        check(usage.isEnabled && mode.isEnabled, "Single fan retains normal reading controls")
+        check(mode.isEnabled, "Single fan retains normal reading controls")
         check(!average.isEnabled && average.state == .off && !averageMode.isEnabled, "Single fan cannot enable average or its layout selector")
         check(single.displayReadings(averaged: true).map(\.title) == ["FAN 1"], "Saved averaging cannot rename a single fan to FAN AVG")
         menu.update(sample: two)
@@ -88,6 +88,9 @@ import AppKit
         let noMaximum = FanSample(status: .ready, fans: [mixed.fans[0], FanReading(id: 1, rpm: 3000, maximumRPM: nil)])
         check(noMaximum.displayReadings(averaged: true)[0].rpm == 2000 && noMaximum.displayReadings(averaged: true)[0].fraction == nil, "RPM average does not require maximum speeds")
         check(FanSample.noFans.displayReadings(averaged: true).isEmpty, "No invented average on fanless Macs")
+        let six = FanSample(status: .ready, fans: (0..<6).map { FanReading(id: $0, rpm: Double($0 * 1000), maximumRPM: 6000) })
+        check(six.displayReadings(averaged: false).map(\.iconMarker) == ["1", "2", "3", "4"], "Only the first four individual fans are visible")
+        check(six.displayReadings(averaged: true).first?.rpm == 2500, "Average includes fans beyond the display limit")
         let suiteName = "PerformanceHUD.FanTests." + UUID().uuidString
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -105,7 +108,7 @@ import AppKit
         lastFanOptions = nil
         master.performClick(nil)
         master.sendAction(master.action, to: master.target)
-        check(lastFanOptions == nil && master.state == .off && !usage.isEnabled, "Fanless category rejects clicks and direct actions")
+        check(lastFanOptions == nil && master.state == .off && !mode.isEnabled, "Fanless category rejects clicks and direct actions")
         for status in [FanSample.checking, .unavailable] {
             menu.update(sample: status, options: .init())
             check(master.isEnabled && master.state == .on, "Unknown hardware or read failure cannot force the category off")
@@ -126,8 +129,8 @@ import AppKit
         menuCanvas.layoutSubtreeIfNeeded()
         let memoryControls: [Int: NSButton] = member(memMenu, "controls")
         check(abs(average.frame.minX - memoryControls[5]!.convert(.zero, to: memMenu).x) < 1, "Average aligns under Details")
-        check(abs(usage.frame.minX - memoryControls[7]!.convert(.zero, to: memMenu).x) < 1, "Fan Usage aligns under MEM Usage")
-        check(average.frame.maxX < averageMode.frame.minX && average.frame.maxY < usage.frame.minY,
+        check(useLabel.stringValue == "Use" && useLabel.frame.minX == HUDCategoryLayout.readingLeading + HUDCategoryLayout.readingLabelInset, "Use is a plain caption in the menu label column")
+        check(average.frame.maxX < averageMode.frame.minX && useLabel.frame.maxY < average.frame.minY,
               "Fan controls occupy separate nonoverlapping rows")
         check(averageMode.frame.width >= averageMode.intrinsicContentSize.width, "Layout selector fits its labels")
         check(rpmHighlight.frame.minX > mode.frame.maxX && menu.bounds.contains(rpmHighlight.frame),
@@ -153,7 +156,7 @@ import AppKit
                 hud.updateFans(sample)
                 let labels: [String: NSTextField] = member(horizontal, "labels")
                 let status = labels["fan.status"]!
-                check(status.font == HUDStyle.smallLabelFont(scale: .normal)
+                check(status.font == HUDStyle.smallLabelFont()
                       && status.textColor == HUDStyle.TextStyle.label.color(background: .dark),
                       "Fan status messages use Label style")
             }
@@ -185,14 +188,14 @@ import AppKit
                 render(menuCanvas, name: "-menu")
                 let fps = HUDFPSMenuView(options: .init(enabled: true, mode: .both), alignment: .vertical)
                 render(fps, name: "-fps-menu")
-                let view = HUDFanView(frame: NSRect(x: 0, y: 0, width: HUDStyle.verticalValueColumnRight(scale: .normal), height: 21))
+                let view = HUDFanView(frame: NSRect(x: 0, y: 0, width: HUDStyle.verticalValueColumnRight(), height: 21))
                 for light in [false, true] {
                     let suffix = light ? "-light" : "-dark"
                     let background: HUDBackground = light ? .light : .dark
-                    view.update(sample: .noFans, options: .init(), scale: .normal, background: background)
+                    view.update(sample: .noFans, options: .init(), background: background)
                     render(view, name: "-status" + suffix, light: light)
                     for highlighted in [false, true] {
-                        view.update(sample: single, options: .init(mode: .both, rpmHighlighted: highlighted), scale: .normal, background: background)
+                        view.update(sample: single, options: .init(mode: .both, rpmHighlighted: highlighted), background: background)
                         render(view, name: (highlighted ? "-emphasized" : "-reading") + suffix, light: light)
                     }
                 }
@@ -207,72 +210,133 @@ import AppKit
             for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
             for scale in (CommandLine.arguments.contains("--normal-size") ? [.normal] : HUDScale.allCases) {
                 hud.setHUDScale(scale)
-                for count in [0, 1, 2, 4, 16] {
+                var horizontalPanelHeight: CGFloat?
+                for count in [0, 1, 2, 3, 4, 16] {
                     for display in HUDFanMode.allCases {
                         for averageMode in HUDFanAverageMode.allCases {
                             for averaged in [false, true] {
                                 let configuration = "alignment=\(alignment), scale=\(scale.rawValue), fans=\(count), mode=\(display), average=\(averaged), averageMode=\(averageMode)"
                                 context = configuration
-                                let options = HUDFanOptions(enabled: true, usage: true, mode: display, average: averaged, averageMode: averageMode)
+                                let options = HUDFanOptions(enabled: true, mode: display, average: averaged, averageMode: averageMode)
                                 hud.setFanOptions(options)
                                 let sample = FanSample(status: count == 0 ? .noFans : .ready, fans: (0..<count).map { FanReading(id: $0, rpm: 0, maximumRPM: 6000) })
                                 hud.updateFans(sample)
                                 panel.contentView?.layoutSubtreeIfNeeded()
                                 let size = panel.frame.size
-                                let expectedRows = count == 0 ? 0 : options.averages(in: alignment) ? 1 : count
+                                let expectedFans = count == 0 ? 0 : options.averages(in: alignment) ? 1 : min(count, 4)
                                 if alignment == .vertical {
-                                    let stack: NSStackView = member(hud, "stackView")
+                                    let stack: NSView = member(hud, "stackView")
                                     let rows: [HUDMetric: NSView] = member(hud, "metricRows")
-                                    check(stack.arrangedSubviews.last(where: { !$0.isHidden }) === rows[.fans], "No divider follows FAN when it is the last category")
-                                    check(fanView.rowCount == max(1, expectedRows), "Correct averaged/individual vertical rows")
-                                    check(abs(fanView.frame.height - fanView.height(scale: scale)) <= 0.5, "All fan rows fit")
+                                    check(stack.subviews.last(where: { !$0.isHidden }) === rows[.fans], "No divider follows FAN when it is the last category")
+                                    check(fanView.rowCount == max(1, (expectedFans + 1) / 2), "Correct averaged/individual vertical rows")
+                                    check(abs(fanView.frame.height - fanView.height()) <= 0.5, "All fan rows fit")
                                     let graph: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
-                                    let target = graph.intrinsicContentSize.width - 4 * CGFloat(scale.rawValue)
+                                    let target = graph.intrinsicContentSize.width - 4
                                     check(abs(fanView.barWidth - target) < 0.01,
                                           "Fan bar matches the pressure history plot width: actual=\(fanView.barWidth), target=\(target), bounds=\(fanView.bounds)")
-                                    let widestRPM = ("99999 RPM" as NSString).size(withAttributes: [
-                                        .font: HUDStyle.readingFont(scale: scale, highlighted: true)]).width
-                                    let rpmLeft = fanView.bounds.width - fanView.barWidth
-                                        - HUDStyle.metricColumnSpacing(scale: scale) - widestRPM
-                                    check(rpmLeft > (2 + HUDFanIcon.side) * CGFloat(scale.rawValue),
-                                          "The widest RPM fits between the fan icon and the wider bar")
+                                    if expectedFans > 0 {
+                                        let cell = fanView.frames(forFanAt: expectedFans - 1)
+                                        check(cell.badge.width == HUDFanIcon.side
+                                              && (cell.rpm != nil) == display.showsRPM && (cell.bar != nil) == display.showsBar,
+                                              "Every fan entry keeps its badge with the selected readings")
+                                        let gap = HUDStyle.metricColumnSpacing
+                                        if let rpm = cell.rpm {
+                                            let widest = ("99999 RPM" as NSString).size(withAttributes: [
+                                                .font: HUDStyle.readingFont(highlighted: true)]).width
+                                            check(rpm.width >= widest && rpm.minX >= cell.badge.maxX + gap,
+                                                  "The five-digit RPM slot clears the badge")
+                                        }
+                                        if let rpm = cell.rpm, let bar = cell.bar, expectedFans == 1 {
+                                            check(rpm.maxX <= bar.minX - gap, "Single RPM clears its bar")
+                                        }
+                                        if expectedFans >= 3 {
+                                            let first = fanView.frames(forFanAt: (expectedFans - 1) % 2)
+                                            check(cell.badge.minX == first.badge.minX && cell.badge.minY > first.badge.maxY,
+                                                  "Later pairs reuse their columns and odd tails stay on the left")
+                                        }
+                                    }
                                 } else {
                                     let labels: [String: NSTextField] = member(horizontal, "labels")
                                     let symbols: [String: NSImageView] = member(horizontal, "symbols")
                                     let icons = symbols.filter { $0.key.hasPrefix("fan.") && $0.key.hasSuffix(".title") && !$0.value.isHidden }
-                                    check(icons.count == expectedRows, "Correct averaged/individual horizontal fan icons")
+                                    check(icons.count == expectedFans, "All displayed horizontal fans have icons")
                                     let pixel = horizontal.convertFromBacking(NSSize(width: 1, height: 1)).width
-                                    for icon in icons.values {
-                                        check(icon.image != nil && abs(icon.frame.width - HUDFanIcon.side * scale.rawValue) <= pixel / 2 + 0.001
+                                    let bars: [String: HUDFanBarView] = member(horizontal, "bars")
+                                    let fans = sample.displayReadings(averaged: options.averages(in: .horizontal))
+                                    let panelHeight = HUDStyle.rowHeight + 2 * HUDStyle.verticalPadding
+                                    if let horizontalPanelHeight {
+                                        check(size.height == horizontalPanelHeight, "Fan count and display mode keep the same window height")
+                                    } else {
+                                        horizontalPanelHeight = size.height
+                                    }
+                                    check(abs(horizontal.bounds.height - panelHeight) <= pixel,
+                                          "Stacking fans keeps the horizontal strip height: \(horizontal.bounds.height), expected \(panelHeight)")
+                                    let parts: [(String, [String: NSView], Bool)] = [
+                                        ("title", symbols, true), ("rpm", labels, display.showsRPM), ("bar", bars, display.showsBar)]
+                                    for (part, views, shown) in parts {
+                                        let frames = fans.compactMap { fan -> NSRect? in
+                                            let id = "fan.\(fan.id).\(part)"
+                                            return views[id].flatMap { $0.isHidden ? nil : $0.frame }
+                                        }
+                                        let expectedCount = shown ? expectedFans : 0
+                                        check(frames.count == expectedCount, "Each fan shows its selected parts")
+                                        for (i, frame) in frames.enumerated() {
+                                            check(frame.minY >= horizontal.bounds.minY - pixel && frame.maxY <= horizontal.bounds.maxY + pixel,
+                                                  "Fan \(part) fits inside the existing horizontal strip")
+                                            if frames.count == 1 && part == "title" {
+                                                check(abs(frame.midY - HUDStyle.rowHeight / 2) <= pixel, "One badge stays centered")
+                                            }
+                                            if i % 2 == 1 {
+                                                let upper = frames[i - 1]
+                                                check(frame.minX == upper.minX && abs(upper.midY - frame.midY - 23) <= pixel,
+                                                      "Fans in a pair share a column and sit 23 pt apart at 1×")
+                                            } else if i > 0 {
+                                                check(frame.minX > frames[0].maxX && frame.minY == frames[0].minY,
+                                                      "Fan 3 starts the next column level with fan 1, including with an empty slot below")
+                                            }
+                                        }
+                                    }
+                                    let columnGap = HUDStyle.metricColumnSpacing
+                                    for (id, icon) in icons {
+                                        check(icon.image != nil && abs(icon.frame.width - HUDFanIcon.side) <= pixel / 2 + 0.001
                                               && abs(icon.frame.height - icon.frame.width) < 0.001,
                                               "Icons retain their compact square size (\(icon.frame.size), pixel \(pixel))")
+                                        if display.showsRPM {
+                                            let rpm = labels[id.replacingOccurrences(of: ".title", with: ".rpm")]!
+                                            let slot = rpm.alignmentRect(forFrame: rpm.frame)
+                                            check(rpm.alignment == .center && abs(slot.minX - icon.frame.maxX - columnGap) <= pixel + 0.001,
+                                                  "Both and RPM center the number in the same slot beside its badge")
+                                        }
                                     }
-                                    if display == .both {
-                                        let bars: [String: HUDFanBarView] = member(horizontal, "bars")
-                                        for (id, bar) in bars where !bar.isHidden {
+                                    for (id, bar) in bars where !bar.isHidden {
+                                        let icon = icons[id.replacingOccurrences(of: ".bar", with: ".title")]!
+                                        if display == .bar {
+                                            let gap = bar.frame.minX - icon.frame.maxX
+                                            check(abs(gap - 2 * columnGap) <= pixel + 0.001,
+                                                  "Bar alone uses the wider label-to-reading gap")
+                                        } else {
                                             guard let rpm = labels[id.replacingOccurrences(of: ".bar", with: ".rpm")] else {
                                                 fatalError("Both needs RPM beside its bar")
                                             }
-                                            let icon = symbols[id.replacingOccurrences(of: ".bar", with: ".title")]!
                                             let textRect = rpm.alignmentRect(forFrame: rpm.frame)
                                             let halfTextWidth = rpm.intrinsicContentSize.width / 2
                                             let leftGap = textRect.midX - halfTextWidth - icon.frame.maxX
                                             let rightGap = bar.frame.minX - textRect.midX - halfTextWidth
                                             check(rpm.alignment == .center && leftGap > 0 && abs(leftGap - rightGap) <= pixel + 0.001,
                                                   "Both centres RPM with equal visible spacing to its icon and bar")
-                                            let graph: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
-                                            check(abs(bar.frame.width - (graph.intrinsicContentSize.width - 4 * CGFloat(scale.rawValue))) <= pixel / 2 + 0.001,
-                                                  "Horizontal and vertical bars share the pressure graph width")
                                         }
+                                        let graph: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
+                                        check(abs(bar.frame.width - (graph.intrinsicContentSize.width - 4)) <= pixel / 2 + 0.001,
+                                              "Horizontal and vertical bars share the pressure graph width")
                                     }
                                     if count == 1 { check(icons.values.first?.accessibilityLabel() == "FAN 1", "Single fan keeps an accessible label") }
                                     if count == 0, let status = labels["fan.status"] {
-                                        check(status.font == HUDStyle.smallLabelFont(scale: scale), "No fan status uses the small Label font")
+                                        check(status.font == HUDStyle.smallLabelFont(), "No fan status uses the small Label font")
                                     }
                                     let dividers: [NSView] = member(horizontal, "dividers")
                                     let visible = dividers.filter { !$0.isHidden }
-                                    let faintWidth = max(1, (0.5 * scale.rawValue / pixel).rounded()) * pixel
-                                    check(visible.count == max(0, expectedRows - 1) && visible.allSatisfy {
+                                    let faintWidth = max(0.5, pixel)
+                                    check(visible.count == max(0, (expectedFans + 1) / 2 - 1) && visible.allSatisfy {
                                         abs($0.frame.width - faintWidth) < 0.001 && ($0.layer?.backgroundColor?.alpha ?? 1) < 0.2
                                     }, "Only faint, pixel-aligned dividers within FAN")
                                 }
@@ -318,7 +382,75 @@ import AppKit
                 else if let totalBarWidth { check(fanView.barWidth == totalBarWidth, "Total-only and Both keep exactly the same bar width") }
             }
         }
-        // Bold boundaries around FAN, faint separator between two fan readings.
+        hud.setResourceOptions(.init(enabled: true, temperature: false, totalUse: true, focusedApp: false,
+                                     details: true, pressure: true, pressureMode: .colorHistory), for: .ram)
+        let history: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
+        let titles: [HUDMetric: NSTextField] = member(hud, "titleLabels")
+        let memoryTitle = titles[.ramTotal]!
+        let swap: NSTextField = member(hud, "ramSwapValueLabel")
+        for scale in [HUDScale.small, .init(rawValue: 0.81), .normal, .large] {
+            hud.setHUDScale(scale)
+            for mode in HUDFanMode.allCases {
+                hud.setFanOptions(.init(mode: mode, average: false))
+                hud.updateFans(two)
+                panel.contentView?.layoutSubtreeIfNeeded()
+                let plot = fanView.convert(history.plotBounds, from: history)
+                let labelColumn = fanView.convert(memoryTitle.alignmentRect(forFrame: memoryTitle.frame),
+                                                  from: memoryTitle.superview).minX
+                let left = fanView.frames(forFanAt: 0), right = fanView.frames(forFanAt: 1)
+                let height = HUDStyle.rowHeight + (mode.showsBar ? 10 : 0)
+                check(abs(fanView.frame.height - ceil(height)) <= 0.5, "Paired bars have a separate line above their badges")
+                for (cell, start) in [(left, labelColumn), (right, plot.minX)] {
+                    let badge = cell.badge
+                    let badgeStart = badge.minX + HUDFanIcon.inkInset
+                    check(abs(badgeStart - start) <= 0.5 && badge.width == 20,
+                          "The 20 pt badge outline starts at the label or plot edge in every mode")
+                    if let rpm = cell.rpm {
+                        check(abs(rpm.maxX - start - plot.width) <= 0.5 && rpm.midY == badge.midY,
+                              "RPM shares the badge line and aligns to its bar's end")
+                    }
+                    if let bar = cell.bar {
+                        check(abs(bar.minX - start) <= 0.5 && abs(bar.width - plot.width) <= 0.5, "Bars match the pressure plot")
+                        if let rpm = cell.rpm {
+                            check(abs(rpm.minY - bar.maxY - 4) < 0.001, "Both leaves a scaled 4 pt gap before the badge/RPM row")
+                        }
+                        check(badge.minY >= bar.maxY + 4, "Each paired badge sits below its bar in Bar and Both")
+                    }
+                }
+            }
+            hud.setFanOptions(.init(mode: .rpm, average: false))
+            panel.contentView?.layoutSubtreeIfNeeded()
+            let leftBadge = fanView.convert(fanView.frames(forFanAt: 0).badge, to: nil)
+            let rightRPM = fanView.convert(fanView.frames(forFanAt: 1).rpm!, to: nil)
+            hud.setFanOptions(.init(mode: .both, averageMode: .vertical))
+            check(fanView.rowCount == 1 && fanView.frames(forFanAt: 0).bar!.midY == fanView.frames(forFanAt: 0).badge.midY,
+                  "Average brings the badge, RPM, and bar back to the inline row")
+            let swapEnd = swap.superview!.convert(swap.alignmentRect(forFrame: swap.frame), to: nil).maxX
+            for sample in [single, two] {
+                hud.updateFans(sample)
+                for mode in HUDFanMode.allCases {
+                    hud.setFanOptions(.init(mode: mode, averageMode: .vertical))
+                    for showMemory in [true, false, true] {
+                        hud.setMetricEnabled(.ramTotal, enabled: showMemory)
+                        panel.contentView?.layoutSubtreeIfNeeded()
+                        let cell = fanView.frames(forFanAt: 0)
+                        let badgeStart = fanView.convert(cell.badge, to: nil).minX
+                        check(badgeStart == leftBadge.minX, "Single and average badges keep the left fan's position")
+                        if let bar = cell.bar {
+                            check(cell.badge.midY == bar.midY && cell.badge.maxX < bar.minX,
+                                  "Single and average badges share the bar's line without overlap")
+                        }
+                        if let rpm = cell.rpm {
+                            let rpmEnd = fanView.convert(rpm, to: nil).maxX
+                            let expectedEnd = mode == .rpm ? rightRPM.maxX : swapEnd
+                            check(abs(rpmEnd - expectedEnd) <= 0.5,
+                                  "Single and average RPM align with the right fan in RPM mode and Swap in Both: mode=\(mode), RPM=\(rpmEnd), expected=\(expectedEnd)")
+                        }
+                    }
+                }
+            }
+        }
+        // A two-fan column has only the category dividers on its sides.
         hud.setAlignment(.horizontal)
         for metric in HUDMetric.allCases { hud.setMetricEnabled(metric, enabled: false) }
         hud.setHUDScale(.normal)
@@ -328,7 +460,7 @@ import AppKit
         hud.updateFans(two)
         context = "horizontal MEM, two fans, and BAT boundaries"
         let dividers: [NSView] = member(horizontal, "dividers")
-        check(dividers.filter { !$0.isHidden }.map { $0.frame.width } == [1.5, 0.5, 1.5], "Bold FAN boundaries, faint internal divider")
+        check(dividers.filter { !$0.isHidden }.map { $0.frame.width } == [1.5, 1.5], "The FAN column keeps both category dividers")
         for alignment in HUDAlignment.allCases {
             context = "RPM emphasis, alignment=\(alignment), scale=1, mode=both"
             hud.setAlignment(alignment)
@@ -338,7 +470,7 @@ import AppKit
             check(panel.frame.size == unhighlightedSize, "RPM emphasis does not resize the HUD")
             if alignment == .horizontal {
                 let labels: [String: NSTextField] = member(horizontal, "labels")
-                check(labels["fan.0.rpm"]?.font == HUDStyle.readingFont(scale: .normal, highlighted: true), "RPM uses highlighted font")
+                check(labels["fan.0.rpm"]?.font == HUDStyle.readingFont(highlighted: true), "RPM uses highlighted font")
             }
         }
         hud.setAlignment(.horizontal)
@@ -370,24 +502,25 @@ import AppKit
                 hud.updateFans(two)
                 snapshot(horizontal, at: path + (useAverage ? "-horizontal-average.png" : "-horizontal-individual.png"))
             }
-            let view = HUDFanView(frame: NSRect(x: 0, y: 0, width: HUDStyle.verticalValueColumnRight(scale: .normal), height: 21))
+            let view = HUDFanView(frame: NSRect(x: 0, y: 0, width: HUDStyle.verticalValueColumnRight(), height: 21))
             let history: HUDMemoryPressureHistoryView = member(hud, "ramPressureHistory")
-            view.setPreferredBarWidth(history.intrinsicContentSize.width - 4)
-            view.update(sample: two, options: .init(averageMode: .both), scale: .normal, background: .dark)
+            view.setMemoryColumns(barWidth: history.intrinsicContentSize.width - 4,
+                                  swapValueTrailing: swap.alignmentRect(forFrame: swap.frame).maxX)
+            view.update(sample: two, options: .init(averageMode: .both), background: .dark)
             snapshot(view, at: path + "-vertical-average.png")
-            view.frame.size.height = view.height(scale: .normal) * 2 + HUDStyle.rowSpacing(scale: .normal)
-            view.update(sample: two, options: .init(average: false), scale: .normal, background: .dark)
+            view.update(sample: two, options: .init(average: false), background: .dark)
+            view.frame.size.height = view.height()
             snapshot(view, at: path + "-vertical-individual.png")
-            view.frame.size.height = HUDStyle.rowHeight(scale: .normal)
+            view.frame.size.height = HUDStyle.rowHeight
             for mode in HUDFanMode.allCases {
-                view.update(sample: single, options: .init(mode: mode, averageMode: .both), scale: .normal, background: .dark)
+                view.update(sample: single, options: .init(mode: mode, averageMode: .both), background: .dark)
                 snapshot(view, at: path + "-vertical-single-" + mode.rawValue + ".png")
             }
             menu.update(sample: single)
             snapshot(menuCanvas, at: path + "-menu-single.png")
             rpmHighlight.performClick(nil)
             snapshot(menuCanvas, at: path + "-menu-highlighted.png")
-            view.update(sample: single, options: .init(mode: .both, rpmHighlighted: true), scale: .normal, background: .dark)
+            view.update(sample: single, options: .init(mode: .both, rpmHighlighted: true), background: .dark)
             snapshot(view, at: path + "-vertical-highlighted.png")
 
         }

@@ -62,6 +62,12 @@ final class NativeGlassHUDBackground: NSView {
 
     override func layout() {
         super.layout()
+        layoutSurface()
+    }
+
+    // Window resizing only needs the glass, viewport and shadow. Its native
+    // content subtree already has the fitting geometry for the selected layout.
+    func layoutSurface() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let body = bodyFrame

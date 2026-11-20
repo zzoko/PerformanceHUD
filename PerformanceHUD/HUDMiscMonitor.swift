@@ -38,7 +38,7 @@ final class HUDMiscMonitor {
     }
 
     func configure(_ options: HUDMiscOptions) {
-        guard self.options != options else { return }
+        guard self.options.visibleReadings != options.visibleReadings else { return }
         self.options = options
         displayTimer?.invalidate(); displayTimer = nil
         if let thermalObserver { NotificationCenter.default.removeObserver(thermalObserver) }
