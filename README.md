@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/banner-dark.webp">
-    <source media="(prefers-color-scheme: light)" srcset="docs/images/banner-light.webp">
-    <img src="docs/images/banner-light.webp" alt="PerformanceHUD — a lightweight performance overlay for macOS" width="860">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/banner-dark-3.8.webp">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/banner-light-3.8.webp">
+    <img src="docs/images/banner-light-3.8.webp" alt="PerformanceHUD — a lightweight performance overlay for macOS" width="860">
   </picture>
 </p>
 
