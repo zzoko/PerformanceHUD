@@ -65,7 +65,7 @@ def main():
             feed.write_text('<?xml version="1.0" encoding="utf-8"?>\n'
                 '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">'
                 '<channel><title>PerformanceHUD updates</title>'
-                '<link>https://github.com/zzoko/PerformanceHUD</link>'
+                '<link>https://performancehud.com</link>'
                 '<description>Official PerformanceHUD updates</description></channel></rss>\n')
         else:
             app = args.app.resolve()
@@ -98,7 +98,7 @@ def main():
                     "<pre>" + html.escape(args.notes.read_text()) + "</pre>")
             run(tools / "generate_appcast", "--account", KEY_ACCOUNT, "--maximum-deltas", "0",
                 "--download-url-prefix", BASE + "/download/", "--embed-release-notes",
-                "--link", "https://github.com/zzoko/PerformanceHUD", "-o", feed, packages)
+                "--link", "https://performancehud.com", "-o", feed, packages)
         run(tools / "sign_update", "--account", KEY_ACCOUNT, feed)
         run(tools / "sign_update", "--account", KEY_ACCOUNT, "--verify", feed)
         entries = []

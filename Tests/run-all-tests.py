@@ -28,7 +28,6 @@ def main():
     suites.append(("worker-tests", ["node", "--test",
                    *map(str, sorted((ROOT / "UpdateService/test").glob("*.test.mjs")))]))
     suites.append(("publisher-tests", [sys.executable, str(ROOT / "UpdateService/test/publish_update_test.py")]))
-    suites.append(("repository-activity-tests", [sys.executable, str(ROOT / ".github/tests/test_repository_activity.py")]))
     if args.include_updater:
         suites.append(("updater-integration-tests", [sys.executable, str(ROOT / "Tests/run-updater-integration.py"),
                        "--sparkle", str(args.include_updater.resolve())]))

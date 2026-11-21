@@ -11,7 +11,7 @@ const home = `<!doctype html><html lang="en"><meta charset="utf-8">
 <style>body{font:17px system-ui;max-width:36rem;margin:15vh auto;padding:24px;color-scheme:light dark;line-height:1.6}a{color:#579bdd}</style>
 <h1>PerformanceHUD</h1><p>Already have the app? Use <strong>Check for updates</strong> in its menu.</p>
 <p>Get your first copy from <a href="https://ko-fi.com/s/01a23ddc51">Ko-fi</a>, or
-<a href="https://github.com/zzoko/PerformanceHUD">build it from source</a>.</p></html>`;
+<a href="https://performancehud.com/install/#build-from-source">build it from source</a>.</p></html>`;
 
 function response(body, status = 200, extra = {}) {
   return new Response(body, { status, headers: {
