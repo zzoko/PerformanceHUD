@@ -26,7 +26,7 @@ SITE = {
     "url": "https://performancehud.com",
     "buy": "https://ko-fi.com/s/01a23ddc51",
     "github": "https://github.com/zzoko/PerformanceHUD",
-    "price": "$3.99",
+    "price": "$4.99",
 }
 # Order of the documentation sidebar.
 DOCS = ["install", "compatibility", "metalhud", "privacy", "changelog", "support", "license"]
