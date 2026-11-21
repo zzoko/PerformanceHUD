@@ -1,0 +1,207 @@
+---
+title: PerformanceHUD · A lightweight performance overlay for macOS
+description: PerformanceHUD shows what your Mac is doing while you play. A native Apple silicon app under 10 MB.
+---
+<nav class="page-nav" aria-label="On this page">
+  <a href="#overview">PerformanceHUD</a>
+  <a href="#download">Download options</a>
+  <a href="#features">Features &amp; controls</a>
+  <a href="#compatibility">Display compatibility</a>
+  <a href="#requirements">Requirements</a>
+  <a href="/install/">Documentation</a>
+</nav>
+
+<section class="hero" id="overview" data-nav="overview">
+  <h1>See what your Mac is doing while you play.</h1>
+  <p class="hero-sub">A lightweight performance overlay for macOS.</p>
+</section>
+
+<section class="showcase-pin" aria-label="PerformanceHUD on a MacBook" data-nav="overview">
+  <div class="showcase-stage">
+    <div class="showcase-frame">
+      <figure class="device">
+        <div class="device-screen">
+          <!-- One render per theme (light HUD on silver, dark HUD on space black). The script below loads the one for the
+               current theme; the other loads on the first switch and cross-fades in at the same point in the loop. -->
+          <video data-theme-video="light" data-src="/media/hero-screen-light.mp4" data-poster="/media/hero-screen-light-poster.jpg" width="1852" height="1216" muted loop playsinline preload="none" aria-hidden="true"></video>
+          <video data-theme-video="dark" data-src="/media/hero-screen-dark.mp4" data-poster="/media/hero-screen-dark-poster.jpg" width="1852" height="1216" muted loop playsinline preload="none" aria-hidden="true"></video>
+        </div>
+        <img class="device-frame frame-silver" src="/media/macbook-pro-14-silver.svg" width="1608" height="996" alt="" draggable="false">
+        <img class="device-frame frame-space-black" src="/media/macbook-pro-14-space-black.svg" width="1608" height="996" alt="" draggable="false">
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="layouts" aria-label="The PerformanceHUD menu switching the HUD layout" data-nav="overview">
+  <div class="layouts-card">
+    <figure class="device device-top">
+      <div class="device-screen" data-lazy>
+        <video data-theme-video="light" data-src="/media/layouts-light.mp4" data-poster="/media/layouts-light-poster.jpg" width="2408" height="956" muted loop playsinline preload="none" aria-hidden="true"></video>
+        <video data-theme-video="dark" data-src="/media/layouts-dark.mp4" data-poster="/media/layouts-dark-poster.jpg" width="2408" height="956" muted loop playsinline preload="none" aria-hidden="true"></video>
+      </div>
+      <img class="device-frame frame-silver" src="/media/macbook-pro-14-top-silver.svg" width="1369" height="551" alt="" draggable="false">
+      <img class="device-frame frame-space-black" src="/media/macbook-pro-14-top-space-black.svg" width="1369" height="551" alt="" draggable="false">
+    </figure>
+  </div>
+</section>
+
+<section class="section alt" id="download" data-nav="download">
+  <div class="wrap center">
+    <h2>Download options.</h2>
+    <p class="lede">Get the ready-built app for {{price}}, or build it yourself for free. Both have exactly the same features: no subscription, nothing to unlock.</p>
+    <div class="cta-stack">
+      <a class="btn btn-primary btn-large" href="{{buy}}" rel="noopener">Download on Ko-fi</a>
+      <a class="btn btn-gray" href="/install/#build-from-source">Build it yourself<small>Free · Requires Xcode</small></a>
+    </div>
+    <p class="fine">Buying the app helps keep PerformanceHUD maintained, and lets you use it personally or commercially, including in monetized videos and streams. Free source builds and modifications are for personal, non-commercial use. Resale and external redistribution are not permitted. See the <a href="/license/">license</a> for details.</p>
+  </div>
+</section>
+
+<section class="section" id="features" data-nav="features">
+  <div class="wrap">
+    <h2 class="center">Features &amp; controls.</h2>
+    <div class="tiles">
+      <p class="tile">A small overlay sits on top of your game with the live frame rate and what’s behind it: CPU and GPU load, temperatures and power draw, memory pressure, disk activity, fans and battery. It’s a native Apple silicon app under 10 MB.</p>
+      <p class="tile">Use the <strong>FPS</strong> preset for just the frame-rate number, <strong>Balanced</strong> for the everyday essentials, or <strong>Detailed</strong> for everything down to per-core activity, clock speeds and the resolution a game is actually outputting. Each reading can be turned on or off, emphasized, or shown as a number, a bar or a graph.</p>
+      <p class="tile">A 60-second FPS history makes dips easy to spot, temperatures automatically highlight with a warning in the overlay past certain thresholds, and memory pressure has its own history graph. Lay it out as a vertical panel or a horizontal strip, from 0.5× to 2× size.</p>
+      <p class="tile">The HUD never takes focus from the game, and clicks pass straight through it; hold Option to drag it somewhere else. Toggle it with <strong>Option-H</strong>, even mid-game, or let it hide itself when no frame rate is detected and come back when a game starts rendering.</p>
+      <p class="tile">Press <strong>Option-L</strong> to log your selected readings to CSV once per second, even with the overlay switched off, and compare settings or games in a spreadsheet afterwards.</p>
+      <p class="tile">Pin a few readings to the menu bar to watch your Mac outside games, even with the HUD switched off. Readings turned off aren’t measured at all, so the overlay only samples what you use.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="compatibility" data-nav="compatibility">
+  <div class="wrap faq">
+    <h2>Display compatibility.</h2>
+    <details>
+      <summary>Windowed and borderless (recommended)</summary>
+      <p>The most compatible option; it just works. The HUD stays visible over any game or app, correctly scaled and Retina-sharp regardless of the game’s rendering resolution.</p>
+    </details>
+    <details>
+      <summary>Fullscreen — native macOS games</summary>
+      <p>Generally works. Some games change macOS display scaling in exclusive fullscreen, and since the HUD follows macOS scaling, it can end up smaller or larger along with the rest of the system UI. Setting a game to 4K, for example, can shrink it noticeably. If that happens, adjust <strong>Size</strong> in the PerformanceHUD menu (<strong>0.5×</strong> to <strong>2×</strong>) until it fits. Confirmed working in exclusive fullscreen in Stray, and in Minecraft with Vulkan rendering.</p>
+    </details>
+    <details>
+      <summary>Fullscreen — Windows games through compatibility layers</summary>
+      <p>With CrossOver or similar tools, the HUD only appears reliably when the game’s fullscreen resolution matches your desktop’s current “looks like” resolution, or its 2× Retina equivalent. Confirmed working at matching resolutions in Red Dead Redemption 2 and Resident Evil Requiem through CrossOver. If the HUD disappears, switch to one of those resolutions or to windowed/borderless.</p>
+    </details>
+    <details>
+      <summary>Finding your desktop resolution</summary>
+      <p>Open <strong>System Settings → Displays</strong> and hover over the selected scaling thumbnail, or choose <strong>Show List</strong>. Double both numbers for the 2× Retina equivalent. A 13-inch MacBook Air at its default scaling, for example, uses <strong>1470×956</strong>, so RDR2 in fullscreen through CrossOver would need an in-game resolution of <strong>1470×956</strong> or <strong>2940×1912</strong>. Windowed and borderless modes don’t need a matching resolution at all.</p>
+    </details>
+  </div>
+</section>
+
+<section class="section sysreq" id="requirements" data-nav="requirements">
+  <div class="wrap">
+    <h2>Requirements.</h2>
+    <dl>
+      <div><dt>Mac</dt><dd>Apple silicon (M-series)</dd></div>
+      <div><dt>Operating system</dt><dd>macOS 27.0 or later</dd></div>
+    </dl>
+  </div>
+</section>
+<script>
+  // Highlight the menu item for the section in view (the last one once the page is scrolled to the bottom).
+  const links = new Map([...document.querySelectorAll('.page-nav a[href^="#"]')].map(a => [a.hash.slice(1), a]));
+  const sections = [...document.querySelectorAll("[data-nav]")];
+  function update() {
+    const atBottom = innerHeight + scrollY >= document.documentElement.scrollHeight - 2;
+    const current = atBottom ? sections.at(-1) : sections.filter(s => s.getBoundingClientRect().top <= innerHeight * 0.45).at(-1) ?? sections[0];
+    links.forEach((a, id) => a.toggleAttribute("aria-current", id === current.dataset.nav));
+  }
+  // MacBook showcase: the gray card widens to the full window as the section reaches the top, holds,
+  // then narrows again before the section scrolls away. CSS turns this off for portrait, short windows and Reduce Motion.
+  const pin = document.querySelector(".showcase-pin");
+  const stage = pin.querySelector(".showcase-stage");
+  const still = matchMedia("(orientation: portrait), (max-height: 500px), (prefers-reduced-motion: reduce)");
+  const clamp = n => Math.min(1, Math.max(0, n));
+  function porthole() {
+    if (still.matches) { stage.style.removeProperty("--clip"); return; }
+    const rect = pin.getBoundingClientRect();
+    const runway = pin.offsetHeight - innerHeight;
+    let inset = clamp(rect.top / (innerHeight * 0.4));
+    if (runway > 0 && rect.top <= 0) inset = Math.max(inset, clamp((-rect.top / runway - 0.61) / 0.39));
+    const small = matchMedia("(max-width: 734px)").matches;
+    const side = Math.max(matchMedia("(min-width: 1100px)").matches ? 220 : small ? 16 : 30, (document.documentElement.clientWidth - 1240) / 2);
+    stage.style.setProperty("--clip", `inset(${Math.round(inset * (small ? 40 : 60))}px ${Math.round(inset * side)}px round ${Math.round(inset * (small ? 36 : 44))}px)`);
+  }
+
+  addEventListener("scroll", () => requestAnimationFrame(() => { update(); porthole(); }), { passive: true });
+  addEventListener("resize", porthole);
+  update();
+  porthole();
+
+  // Screen videos: each screen has one render per theme. Both renders share the same timing, so on a theme switch
+  // the other one starts at the same point in the loop and cross-fades in once it's playing: the HUD changes
+  // appearance mid-game. A [data-lazy] screen loads only once it's near the viewport. With Reduce Motion on, only
+  // the poster frames show and switch.
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function themedScreen(screen) {
+    const videos = Object.fromEntries([...screen.querySelectorAll("[data-theme-video]")].map(v => [v.dataset.themeVideo, v]));
+    let shown = null, switching = 0, lead = 0.1; // lead: how long the last seek-and-start took, in seconds
+    let active = !("lazy" in screen.dataset);
+    function load(video) {
+      if (video.getAttribute("src")) return;
+      video.poster = video.dataset.poster;
+      video.preload = "auto";
+      video.src = video.dataset.src;
+    }
+    function reveal(next) {
+      const previous = shown;
+      shown = next;
+      next.classList.add("is-shown");
+      if (previous && previous !== next) {
+        previous.classList.remove("is-shown");
+        setTimeout(() => { if (shown !== previous) previous.pause(); }, 400);
+      }
+    }
+    function sync() {
+      if (!active) return;
+      const next = videos[document.documentElement.dataset.theme === "dark" ? "dark" : "light"];
+      if (next === shown) return;
+      load(next);
+      if (reduceMotion || !shown) {
+        reveal(next);
+        if (!reduceMotion) next.play().catch(() => {});
+        return;
+      }
+      // Start the incoming render where the current one will be once it's ready (ahead by however long the last
+      // switch took), then cross-fade.
+      const attempt = ++switching, from = shown;
+      const start = () => {
+        if (attempt !== switching) return;
+        let started = false;
+        const began = performance.now();
+        const go = () => {
+          if (started || attempt !== switching) return;
+          started = true;
+          next.play().catch(() => {}).finally(() => {
+            if (attempt !== switching) return;
+            lead = Math.min(0.5, (performance.now() - began) / 1000);
+            reveal(next);
+          });
+        };
+        next.addEventListener("seeked", go, { once: true });
+        setTimeout(go, 1500); // in case the seek never reports back
+        const duration = next.duration || from.duration;
+        next.currentTime = duration ? (from.currentTime + lead) % duration : from.currentTime;
+      };
+      if (next.readyState >= 1) start(); else next.addEventListener("loadedmetadata", start, { once: true });
+    }
+    if (!active) {
+      new IntersectionObserver((entries, observer) => {
+        if (!entries.some(entry => entry.isIntersecting)) return;
+        observer.disconnect();
+        active = true;
+        sync();
+      }, { rootMargin: "400px 0px" }).observe(screen);
+    }
+    return sync;
+  }
+  const screenSyncs = [...document.querySelectorAll(".device-screen")].map(themedScreen);
+  screenSyncs.forEach(sync => sync());
+  addEventListener("themechange", () => screenSyncs.forEach(sync => sync()));
+</script>

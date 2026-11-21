@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<meta name="description" content="{{description}}">
+<meta name="theme-color" content="#ffffff">
+<meta name="color-scheme" content="light">
+<script>
+  // Set the theme before the page paints: light, unless the visitor switched to dark with the nav button.
+  (() => {
+    let theme;
+    try { theme = localStorage.getItem("theme"); } catch {}
+    if (theme !== "dark") theme = "light";
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#000000" : "#ffffff";
+  })();
+</script>
+<link rel="canonical" href="{{url}}{{path}}">
+<link rel="icon" href="/media/favicon.png">
+<link rel="apple-touch-icon" href="/media/icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="PerformanceHUD">
+<meta property="og:title" content="{{title}}">
+<meta property="og:description" content="{{description}}">
+<meta property="og:url" content="{{url}}{{path}}">
+<meta property="og:image" content="{{url}}/media/hero-poster.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="{{body_class}}">
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/"><img src="/media/icon.png" alt="" width="24" height="24"><span class="brand-text">PerformanceHUD<small>Source available ❤️</small></span></a>
+    <div class="nav-actions">
+      <button class="theme-toggle" type="button" aria-label="Dark mode" aria-pressed="false">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>
+      </button>
+      <a class="nav-link" href="/install/">Documentation</a>
+      <a class="btn btn-primary btn-small" href="{{buy}}" rel="noopener">Buy</a>
+    </div>
+  </div>
+</header>
+<main id="main">
+{{main}}
+</main>
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-cols">
+      <div><h2>Product</h2><a href="/changelog/">Changelog</a><a href="/metalhud/">PerformanceHUD vs MetalHUD</a><a href="{{github}}" rel="noopener">Source code</a></div>
+      <div><h2>Help</h2><a href="/install/">Install</a><a href="/compatibility/">Display compatibility</a><a href="/support/">Support</a></div>
+      <div><h2>Legal</h2><a href="/privacy/">Privacy &amp; access</a><a href="/license/">License</a></div>
+    </div>
+    <p class="footer-note">© 2026 PerformanceHUD</p>
+  </div>
+</footer>
+<script>
+  // Light/dark switch. The site is light until a visitor turns dark mode on here; the choice is remembered.
+  (() => {
+    const root = document.documentElement, toggle = document.querySelector(".theme-toggle");
+    function apply(theme) {
+      // Change every color in the same frame (style.css turns transitions off under .theme-switching).
+      root.classList.add("theme-switching");
+      root.dataset.theme = theme;
+      toggle.setAttribute("aria-pressed", theme === "dark");
+      document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#000000" : "#ffffff";
+      getComputedStyle(root).color; // apply the new colors before transitions come back
+      root.classList.remove("theme-switching");
+      dispatchEvent(new CustomEvent("themechange", { detail: theme }));
+    }
+    toggle.addEventListener("click", () => {
+      const theme = root.dataset.theme === "dark" ? "light" : "dark";
+      try { localStorage.setItem("theme", theme); } catch {}
+      // A short whole-page cross-fade where supported; otherwise (or with Reduce Motion) an instant switch.
+      if (document.startViewTransition && !document.hidden && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        const transition = document.startViewTransition(() => apply(theme));
+        transition.ready.catch(() => {}); // a skipped fade still switches the theme
+        transition.finished.catch(() => {});
+      } else apply(theme);
+    });
+    toggle.setAttribute("aria-pressed", root.dataset.theme === "dark");
+  })();
+</script>
+</body>
+</html>

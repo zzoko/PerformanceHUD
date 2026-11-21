@@ -1,0 +1,18 @@
+<div class="doc-shell">
+  <aside class="doc-nav" aria-label="Documentation">
+    <p class="eyebrow">Documentation</p>
+    {{nav}}
+  </aside>
+  <article class="doc-body">
+    <header class="doc-head">
+      <h1>{{title}}</h1>
+      <p class="lede">{{description}}</p>
+    </header>
+    {{content}}
+    <p class="doc-edit"><a href="{{github}}/blob/main/{{source}}" rel="noopener">Suggest an edit on GitHub</a></p>
+  </article>
+  <aside class="doc-toc{{toc_class}}" aria-label="On this page">
+    <p class="eyebrow">On this page</p>
+    {{toc}}
+  </aside>
+</div>

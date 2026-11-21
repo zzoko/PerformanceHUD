@@ -296,7 +296,7 @@ class Publisher:
         self.run(sys.executable, "-m", "unittest", "discover", "-s", ROOT / "test", "-p", "*_test.py")
         self.run("/bin/sh", REPO / "Tests/run-update-policy-tests.sh")
         prepare = [sys.executable, self.stage / "prepare_release.py", "--app", app, "--sparkle-tools", self.tools]
-        notes = release_notes((REPO / "docs/CHANGELOG.md").read_text(), version)
+        notes = release_notes((REPO / "site/content/changelog.md").read_text(), version)
         if notes:
             notes_path = self.stage / "release-notes.txt"
             notes_path.write_text(notes)
