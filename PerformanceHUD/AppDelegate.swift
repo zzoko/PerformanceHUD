@@ -1594,7 +1594,7 @@ final class AppDelegate:
     private func setHUDAlignment(_ alignment: HUDAlignment) {
         HUDPreferences.alignment = alignment
         enabledMetrics = HUDPreferences.visibleMetrics
-        hudWindow?.setAlignment(alignment)
+        hudWindow?.setAlignment(alignment, animated: true)
         fpsMenuView?.update(options: HUDPreferences.fpsOptions, alignment: alignment)
         miscMenuView?.update(alignment: alignment)
         processMenuView?.update(alignment: alignment)

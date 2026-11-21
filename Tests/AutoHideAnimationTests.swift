@@ -20,6 +20,129 @@ import AppKit
         hud.setHUDEnabled(true)
         return hud
     }
+    static func layoutTiming() {
+        let tall = CGSize(width: 285, height: 398.5)
+        let wide = CGSize(width: 1435.5, height: 49)
+        for (start, end) in [(tall, wide), (wide, tall)] {
+            let path = HUDLayoutTransition(from: start, to: end)
+            precondition(abs(path.duration - 0.632) < 0.002)
+            let early = path.frame(at: 0.12)
+            if start == tall {
+                precondition(early.size.width == start.width && early.size.height < start.height)
+            } else {
+                precondition(early.size.width < start.width && early.size.height == start.height)
+            }
+            let crossover = path.frame(at: path.handoff)
+            precondition(crossover.size.width > tall.width && crossover.size.height > wide.height,
+                         "Both edges are moving during the overlap")
+            precondition(crossover.outgoing < 0.0001 && crossover.incoming == 0)
+            precondition(abs(path.frame(at: path.handoff - 0.025).outgoing - 0.5) < 0.001)
+            precondition(abs(path.frame(at: path.handoff + 0.025).incoming - 0.5) < 0.001)
+        }
+        for end in [tall, CGSize(width: 200, height: 80), CGSize(width: 700, height: 480),
+                    CGSize(width: 285, height: 49), CGSize(width: 285.5, height: 398.5)] {
+            let path = HUDLayoutTransition(from: tall, to: end)
+            let middle = path.frame(at: path.handoff)
+            precondition(abs(middle.size.width - (tall.width + end.width) / 2) < 0.001)
+            precondition(abs(middle.size.height - (tall.height + end.height) / 2) < 0.001)
+            precondition(path.frame(at: 0).size == tall && path.frame(at: 0).outgoing == 1)
+            precondition(path.frame(at: path.duration).size == end && path.frame(at: path.duration).incoming > 0.999)
+        }
+    }
+
+    @MainActor static func layoutSwitches() async {
+        let hud = HUDWindowController()
+        defer { hud.shutdown() }
+        hud.setAutoHideMode(.off)
+        hud.setAutoHideAnimated(false)
+        hud.setHUDEnabled(true)
+        let panel: HUDPanel = member(hud, "panel")
+        let body: NSView = member(hud, "container")
+        let live: NSView = member(hud, "scaledContentView")
+        let glass: NativeGlassHUDBackground = member(hud, "backgroundView")
+        let defaults = UserDefaults.standard
+        let saved = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        defer { defaults.setVolatileDomain(saved, forName: UserDefaults.argumentDomain) }
+        func select(_ layout: HUDAlignment) {
+            var domain = saved
+            domain["hud.alignment"] = layout.rawValue
+            defaults.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
+            hud.setAlignment(layout, animated: true)
+        }
+        func topLeft() -> CGPoint {
+            panel.convertPoint(toScreen: body.convert(NSPoint(x: 0, y: body.bounds.maxY), to: nil))
+        }
+        select(.horizontal)
+        let horizontal = body.frame.size
+        select(.vertical)
+        let vertical = body.frame.size
+        precondition(vertical != horizontal && body.subviews.count == 1)
+        hud.setAutoHideAnimated(true)
+        for (layout, from, to) in [(HUDAlignment.horizontal, vertical, horizontal), (.vertical, horizontal, vertical)] {
+            let anchor = topLeft()
+            select(layout)
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                precondition(body.frame.size == to && body.subviews.count == 1)
+                continue
+            }
+            precondition(body.frame.size == from && glass.clipsContent && live.alphaValue == 0)
+            let snapshot = body.subviews.last as! NSImageView
+            let bitmap = snapshot.image!.representations.first as! NSBitmapImageRep
+            // The snapshot contains the readings and empty pixels around them, without glass.
+            var ink = false, clear = false
+            for y in stride(from: 0, to: bitmap.pixelsHigh, by: 3) {
+                for x in stride(from: 0, to: bitmap.pixelsWide, by: 3) {
+                    let alpha = bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0
+                    ink = ink || alpha > 0.3
+                    clear = clear || alpha == 0
+                    if ink && clear { break }
+                }
+                if ink && clear { break }
+            }
+            precondition(ink && clear, "Outgoing content is a transparent snapshot with visible readings")
+            let deadline = ProcessInfo.processInfo.systemUptime + 1.5
+            var sawIntermediate = false
+            while snapshot.superview != nil && ProcessInfo.processInfo.systemUptime < deadline {
+                precondition(topLeft() == anchor && snapshot.frame.maxY == body.bounds.maxY)
+                precondition(snapshot.alphaValue == 0 || live.alphaValue == 0)
+                sawIntermediate = sawIntermediate || (body.frame.size != from && body.frame.size != to)
+                try? await Task.sleep(for: .milliseconds(12))
+            }
+            precondition(sawIntermediate && topLeft() == anchor && body.frame.size == to)
+            precondition(live.alphaValue == 1 && snapshot.superview == nil && !glass.clipsContent)
+        }
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        select(.horizontal)
+        try? await Task.sleep(for: .milliseconds(100))
+        let interrupted = body.frame
+        select(.vertical)
+        precondition(body.frame == interrupted && body.subviews.count == 2, "Reverse from the current viewport")
+        hud.setAutoHideAnimated(false)
+        precondition(body.frame.size == vertical && body.subviews.count == 1 && live.alphaValue == 1)
+        hud.setAutoHideMode(.fps)
+        let arrow: NSImageView = member(hud, "collapsedFPSIndicator")
+        precondition(!arrow.isHidden)
+        hud.setAutoHideAnimated(true)
+        select(.horizontal)
+        hud.updateFPS(60)
+        try? await Task.sleep(for: .seconds(1.2))
+        precondition(body.frame.size == horizontal && body.subviews.count == 1 && arrow.isHidden,
+                     "FPS arriving during a layout switch reveals the live destination")
+        select(.vertical)
+        hud.setHUDEnabled(false)
+        precondition(!panel.isVisible && body.subviews.count == 1)
+        hud.setHUDEnabled(true)
+        hud.setAutoHideAnimated(false)
+        hud.setAutoHideMode(.off)
+        hud.markFPSUnavailable()
+        try? await Task.sleep(for: .seconds(3.1))
+        hud.setAutoHideAnimated(true)
+        hud.setAutoHideMode(.all)
+        try? await Task.sleep(for: .milliseconds(500))
+        select(.horizontal)
+        precondition(hud.isAutomaticallyHidden && !panel.isVisible && body.subviews.count == 1)
+    }
+
     @MainActor static func main() async {
         _ = NSApplication.shared
         let suiteName = "AutoHideAnimation.tests.\(UUID().uuidString)"
@@ -37,6 +160,8 @@ import AppKit
         UserDefaults.standard.setVolatileDomain(["hud.enabled": false, "hud.autoHide.mode": "fps",
             "hud.autoHide.animated": true, "hud.alignment": "vertical", "hud.background": "dark"],
             forName: UserDefaults.argumentDomain)
+        layoutTiming()
+        await layoutSwitches()
         let menu = HUDAutoHideMenuView(selected: .fps)
         let control: NSSegmentedControl = member(menu, "control")
         let status: NSTextField = member(menu, "status")

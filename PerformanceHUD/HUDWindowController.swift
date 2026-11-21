@@ -169,6 +169,12 @@ final class HUDWindowController {
     }
     private var modeTransition: ModeTransition?
     private var modeAnimationTimer: Timer?
+    private struct LayoutPresentation {
+        var size: NSSize
+        let outgoing: NSImageView
+    }
+    private var layoutPresentation: LayoutPresentation?
+    private var layoutAnimationTimer: Timer?
     private var fpsAvailability = HUDFPSAvailability() {
         didSet {
             if oldValue.expanded != fpsAvailability.expanded { onFPSAvailabilityChange?() }
@@ -198,7 +204,7 @@ final class HUDWindowController {
         modeTransition?.fpsProgress ?? (dynamicFPSActive ? fpsProgress : 1)
     }
 
-    private var shouldAnimateAutoHide: Bool {
+    private var shouldAnimateHUD: Bool {
         autoHideAnimated && hudEnabled && hasVisibleContent
             && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
@@ -212,6 +218,7 @@ final class HUDWindowController {
         fpsAvailabilityTask?.cancel()
         fpsAnimationTimer?.invalidate()
         modeAnimationTimer?.invalidate()
+        layoutAnimationTimer?.invalidate()
     }
 
     // MARK: - Init
@@ -659,6 +666,7 @@ final class HUDWindowController {
             enabled
         fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
         if !enabled {
+            stopLayoutAnimation()
             stopModeAnimation()
             autoHidePresentation.transition(visible: fpsAvailability.expanded, animated: false)
             fpsAnimationTimer?.invalidate()
@@ -681,6 +689,7 @@ final class HUDWindowController {
 
     private func transitionToAutoHideMode(_ mode: HUDAutoHideMode) {
         let startSize = presentedHUDSize
+        stopLayoutAnimation()
         var startFPS = presentedFPSProgress
         let fullExtent = alignment == .horizontal ? expandedHUDSize.width : expandedHUDSize.height
         let startExtent = alignment == .horizontal ? startSize.width : startSize.height
@@ -707,7 +716,7 @@ final class HUDWindowController {
         let endSize = settledHUDSize
         let endExtent = alignment == .horizontal ? endSize.width : endSize.height
         let distance = max(abs(endFPS - startFPS), abs(endExtent - startExtent) / max(1, fullExtent))
-        guard shouldAnimateAutoHide, distance > 0 else {
+        guard shouldAnimateHUD, distance > 0 else {
             stopModeAnimation()
             applyHUDPresentation()
             updateVisibility()
@@ -746,6 +755,7 @@ final class HUDWindowController {
         // Enabling animation affects the next transition. Disabling it finishes
         // an in-flight transition immediately without changing the hide mode.
         guard !animated else { return }
+        if layoutPresentation != nil { finishLayoutAnimation() }
         fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
         if modeTransition != nil {
             transitionToAutoHideMode(autoHideMode)
@@ -766,10 +776,16 @@ final class HUDWindowController {
     }
 
     private func animateAutoHide(visible: Bool) {
-        autoHidePresentation.transition(visible: visible, animated: shouldAnimateAutoHide)
+        autoHidePresentation.transition(visible: visible, animated: shouldAnimateHUD)
     }
 
-    func setAlignment(_ alignment: HUDAlignment) {
+    func setAlignment(_ alignment: HUDAlignment, animated: Bool = false) {
+        if animated && alignment == self.alignment { return }
+        if animated && shouldAnimateHUD && panel.isVisible && !isAutomaticallyHidden {
+            captureOutgoingLayout()
+        } else {
+            stopLayoutAnimation()
+        }
         self.alignment = alignment
         titleLabels[.ram]?.stringValue = HUDMetric.ram.hudTitle(for: alignment)
         if alignment == .horizontal { ramPressureHistory.clear() }
@@ -777,9 +793,95 @@ final class HUDWindowController {
         if visibleDrives.isEmpty { enabledMetrics.remove(.storage) }
         else { enabledMetrics.insert(.storage) }
         for (metric, row) in metricRows { row.isHidden = !enabledMetrics.contains(metric) }
+        if layoutPresentation != nil && autoHidePresentation.enabled {
+            autoHidePresentation.transition(visible: fpsAvailability.expanded, animated: false)
+        }
         updateLayout()
+        if layoutPresentation != nil { animateToMeasuredLayout() }
         restorePosition()
         updateVisibility()
+    }
+
+    /// Capture only the transparent readings, including the currently visible
+    /// handoff on a reversal. The same live glass stays underneath both layouts.
+    private func captureOutgoingLayout() {
+        let size = presentedHUDSize
+        let bounds = container.bounds
+        guard !bounds.isEmpty, let bitmap = container.bitmapImageRepForCachingDisplay(in: bounds) else {
+            stopLayoutAnimation()
+            return
+        }
+        container.cacheDisplay(in: bounds, to: bitmap)
+        let image = NSImage(size: bounds.size)
+        image.addRepresentation(bitmap)
+        let snapshot = NSImageView(frame: bounds)
+        snapshot.image = image
+        snapshot.imageScaling = .scaleNone
+        snapshot.setAccessibilityElement(false)
+        stopLayoutAnimation()
+        container.addSubview(snapshot, positioned: .above, relativeTo: scaledContentView)
+        scaledContentView.alphaValue = 0
+        layoutPresentation = LayoutPresentation(size: size, outgoing: snapshot)
+    }
+
+    private func animateToMeasuredLayout() {
+        guard let presentation = layoutPresentation, hasVisibleContent, !isAutomaticallyHidden else {
+            finishLayoutAnimation()
+            return
+        }
+        let path = HUDLayoutTransition(from: presentation.size, to: settledHUDSize)
+        let started = ProcessInfo.processInfo.systemUptime
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self else { timer.invalidate(); return }
+                guard self.shouldAnimateHUD, !self.isAutomaticallyHidden else {
+                    self.finishLayoutAnimation()
+                    return
+                }
+                // Hardware discovery or another menu action can change the fitting
+                // size mid-switch. Start from what is actually on screen.
+                if path.end != self.settledHUDSize {
+                    self.captureOutgoingLayout()
+                    self.animateToMeasuredLayout()
+                    return
+                }
+                let elapsed = ProcessInfo.processInfo.systemUptime - started
+                if elapsed >= path.duration {
+                    self.finishLayoutAnimation()
+                    return
+                }
+                let frame = path.frame(at: elapsed)
+                self.layoutPresentation?.size = frame.size
+                self.resizeLayoutViewport(to: frame.size)
+                presentation.outgoing.alphaValue = frame.outgoing
+                self.scaledContentView.alphaValue = frame.incoming
+            }
+        }
+        layoutAnimationTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func resizeLayoutViewport(to size: NSSize) {
+        let wasResizing = resizingHUD
+        resizingHUD = true
+        layoutNativeSurface(size: size, anchor: visibleTopLeft)
+        resizingHUD = wasResizing
+        panel.draggableContentRect = container.convert(container.bounds, to: nil)
+    }
+
+    private func stopLayoutAnimation() {
+        layoutAnimationTimer?.invalidate()
+        layoutAnimationTimer = nil
+        layoutPresentation?.outgoing.removeFromSuperview()
+        layoutPresentation = nil
+        scaledContentView.alphaValue = 1
+    }
+
+    private func finishLayoutAnimation() {
+        stopLayoutAnimation()
+        applyHUDPresentation()
+        if autoHidePresentation.enabled { animateAutoHide(visible: fpsAvailability.expanded) }
+        else { animateFPS(to: fpsAvailability.expanded ? 1 : 0) }
     }
 
     // MARK: - Metric Visibility
@@ -974,6 +1076,7 @@ final class HUDWindowController {
 
     func setHUDScale(_ scale: HUDScale) {
         guard hudScale != scale else { return }
+        if layoutPresentation != nil { finishLayoutAnimation() }
         hudScale = scale
         applyWindowScale()
         restorePosition()
@@ -1001,6 +1104,7 @@ final class HUDWindowController {
     func retryGlassSession() { glassSession.retry() }
 
     func shutdown() {
+        stopLayoutAnimation()
         stopModeAnimation()
         autoHidePresentation.stop()
         windowGeometryTask?.cancel()
@@ -1447,7 +1551,7 @@ final class HUDWindowController {
         defer { resizingHUD = false }
         // Match AppKit’s backing-pixel grid for stable text and native glass edges.
         expandedHUDSize = pixelAlignedSize(NSSize(width: proposedWidth, height: proposedHeight))
-        layoutNativeSurface(size: expandedHUDSize, anchor: visibleTopLeft)
+        layoutNativeSurface(size: layoutPresentation?.size ?? expandedHUDSize, anchor: visibleTopLeft)
         container.layoutSubtreeIfNeeded()
 
         configureDynamicFPSPresentation()
@@ -1511,7 +1615,7 @@ final class HUDWindowController {
     }
 
     private var presentedHUDSize: NSSize {
-        modeTransition?.size ?? settledHUDSize
+        layoutPresentation?.size ?? modeTransition?.size ?? settledHUDSize
     }
 
     private var settledHUDSize: NSSize {
@@ -1531,10 +1635,11 @@ final class HUDWindowController {
         let progress = presentedFPSProgress
         let horizontal = alignment == .horizontal
         let wholeHUD = autoHidePresentation.enabled
-        let clipsContent = usesFPSPresentation || wholeHUD
+        let clipsContent = layoutPresentation != nil || usesFPSPresentation || wholeHUD
         let size = presentedHUDSize
         let width = size.width
         let height = size.height
+        let indicatorArea = layoutPresentation == nil ? size : settledHUDSize
         // FPS rolls its rows away; All options keeps the content anchored while
         // the rounded glass edge moves over it, including its rim and shadow.
         let fullExtent = horizontal ? expandedHUDSize.width : expandedHUDSize.height
@@ -1546,12 +1651,8 @@ final class HUDWindowController {
         // Keep the top-left anchor fixed while the native surface and window resize.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let anchor = visibleTopLeft
-        let wasResizing = resizingHUD
-        resizingHUD = true
         backgroundView.clipsContent = clipsContent
-        layoutNativeSurface(size: size, anchor: anchor)
-        resizingHUD = wasResizing
+        resizeLayoutViewport(to: size)
         if !horizontal {
             stackView.frame.origin.y = expandedHUDSize.height - HUDStyle.verticalPadding - stackView.frame.height + offset
             positionPressureGraph()
@@ -1576,12 +1677,11 @@ final class HUDWindowController {
         let indicatorSize: CGFloat = 12
         collapsedFPSIndicator.frame = NSRect(
             x: horizontal ? HUDStyle.horizontalPadding + (collapsedFPSHeaderHeight - indicatorSize) / 2
-                : (width - indicatorSize) / 2,
-            y: horizontal ? (height - indicatorSize) / 2
+                : (indicatorArea.width - indicatorSize) / 2,
+            y: horizontal ? (indicatorArea.height - indicatorSize) / 2
                 : expandedHUDSize.height - HUDStyle.verticalPadding - (collapsedFPSHeaderHeight + indicatorSize) / 2,
             width: indicatorSize, height: indicatorSize)
         backgroundView.alphaValue = height < 1 || width < 1 ? 0 : 1
-        panel.draggableContentRect = container.convert(container.bounds, to: nil)
         container.layoutSubtreeIfNeeded()
         if !horizontal, usesFPSPresentation, let first = fpsPresentationAnchor {
             // Align the moving boundary to the window's backing grid.
@@ -1599,12 +1699,12 @@ final class HUDWindowController {
     }
 
     private func animateFPS(to target: CGFloat) {
-        if shouldAnimateAutoHide && fpsAnimationTimer != nil && fpsAnimationTarget == target { return }
+        if shouldAnimateHUD && fpsAnimationTimer != nil && fpsAnimationTarget == target { return }
         fpsAnimationTarget = target
         fpsAnimationTimer?.invalidate()
         fpsAnimationTimer = nil
         guard dynamicFPSActive, fpsProgress != target else { return }
-        guard shouldAnimateAutoHide, panel.isVisible else {
+        guard shouldAnimateHUD, panel.isVisible else {
             fpsProgress = target
             applyHUDPresentation()
             return
@@ -1632,7 +1732,7 @@ final class HUDWindowController {
         fpsAvailability.receivedReading()
         // Menu-bar FPS remains live with the overlay disabled. Cache its state
         // for the next reveal without animating the hidden window.
-        guard hudEnabled else { return }
+        guard hudEnabled, layoutPresentation == nil else { return }
         // Do not restart an in-flight expansion for each arriving sample.
         if let transition = modeTransition {
             if !transition.available { transitionToAutoHideMode(autoHideMode) }
@@ -1649,7 +1749,7 @@ final class HUDWindowController {
             guard let self else { return }
             fpsAvailabilityTask = nil
             fpsAvailability.advance(to: ProcessInfo.processInfo.systemUptime)
-            guard hudEnabled else { return }
+            guard hudEnabled, layoutPresentation == nil else { return }
             if !fpsAvailability.expanded {
                 if modeTransition != nil { transitionToAutoHideMode(autoHideMode) }
                 else if autoHidePresentation.enabled { animateAutoHide(visible: false) }
@@ -1712,6 +1812,9 @@ final class HUDWindowController {
         let radius = 16 * windowScale
         if backgroundView.cornerRadius != radius { backgroundView.cornerRadius = radius }
         backgroundView.layoutSurface()
+        if let snapshot = layoutPresentation?.outgoing {
+            snapshot.setFrameOrigin(NSPoint(x: 0, y: size.height - snapshot.frame.height))
+        }
         let full = NSSize(width: expandedHUDSize.width * windowScale, height: expandedHUDSize.height * windowScale)
         let contentFrame = NSRect(x: 0, y: size.height - full.height, width: full.width, height: full.height)
         if scaledContentView.frame != contentFrame { scaledContentView.frame = contentFrame }
@@ -1723,12 +1826,14 @@ final class HUDWindowController {
     // MARK: - Screen Position
 
     func resetPosition() {
+        if layoutPresentation != nil { finishLayoutAnimation() }
         customTopLeft = nil
         HUDPreferences.hudPosition = nil
         restorePosition()
     }
 
     private func restorePosition() {
+        guard layoutPresentation == nil else { return }
         let positioningSize = dynamicFPSActive || autoHidePresentation.enabled || modeTransition != nil
             ? windowSize(for: expandedHUDSize) : container.frame.size
         if let customTopLeft, !NSScreen.screens.isEmpty {

@@ -2,6 +2,10 @@
 
 [← Back to README](../README.md)
 
+### v3.9
+
+- Switching between **Vertical** and **Horizontal** now animates from the HUD’s top-left corner at the same pace as auto-hide. Turn on **Reduce motion** for an instant switch.
+
 ### v3.8
 
 - CSV recording can start or continue with the HUD disabled or automatically hidden. **Stop logging** appears in red while a recording is active.
