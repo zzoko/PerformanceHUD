@@ -57,3 +57,7 @@ HUD preferences, custom hotkeys, and helper setup state are saved locally using 
 Recording can start or continue with the HUD disabled or automatically hidden. **Stop logging** or quit to save the CSV to your Desktop. macOS may request Desktop folder access to save the file. Logging never starts automatically.
 
 During recording, the app writes a recovery CSV under `~/Library/Application Support/PerformanceHUD/Logs/`. That copy is removed after a successful Desktop save. If saving fails or the app exits unexpectedly, the recovery file stays there; a save-error alert offers to show it in Finder. You can delete CSV and recovery files whenever you no longer need them. The files contain no screen images or audio.
+
+## This website
+
+performancehud.com counts visits with Cloudflare Web Analytics. It uses no cookies, doesn't track you across other sites and doesn't store personal data. It records which pages are viewed, the site you came from, and your browser, device type and country, to show how people find PerformanceHUD. The app doesn't send anything to the website.
