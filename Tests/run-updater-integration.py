@@ -97,6 +97,7 @@ def check_case(binary, sparkle, framework, wrangler, case):
         feed.unlink()
     service = root / "service"
     shutil.copy2(ROOT / "UpdateService/src/worker.mjs", service / "worker.mjs")
+    shutil.copy2(ROOT / "UpdateService/src/handler.mjs", service / "handler.mjs")
     (service / "releases.json").write_text(json.dumps([{"file": file}]))
     (service / ".dev.vars").write_text("DOWNLOAD_SIGNING_SECRET=" + os.urandom(48).hex() + "\n")
     (service / "wrangler.jsonc").write_text(json.dumps({

@@ -45,3 +45,5 @@ __pycache__/
 .dev.vars.*
 UpdateService/assets/
 UpdateService/staging/
+# Local record of the live releases; publish_update.py rebuilds it from the signed feed
+UpdateService/src/releases.json

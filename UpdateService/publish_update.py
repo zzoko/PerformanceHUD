@@ -47,21 +47,12 @@ def next_build(settings, releases):
         raise RuntimeError("Set an integer Build number in Xcode.")
     if releases and numeric_version < max(version_tuple(r["version"]) for r in releases):
         raise RuntimeError("This project's Version is older than the published app. Update it in Xcode first.")
-    # Apply the number to this build first; save it to the project only after
-    # publication succeeds, so failed attempts do not change source metadata.
-    return str(max(int(current), max((int(r["build"]) for r in releases), default=0) + 1))
-
-
-def save_build_number(project, build):
-    text = project.read_text()
-    pattern = r"(\bCURRENT_PROJECT_VERSION\s*=\s*)([0-9]+)(\s*;)"
-    changed, count = re.subn(pattern, lambda match: match[1] + str(max(int(match[2]), int(build))) + match[3], text)
-    if not count:
-        raise RuntimeError("The update is live, but its build number could not be saved in the Xcode project.")
-    if changed != text:
-        temporary = project.with_suffix(".pbxproj.new")
-        temporary.write_text(changed)
-        os.replace(temporary, project)
+    # The release commit carries the build number, so publishing never changes the project.
+    published = max((int(r["build"]) for r in releases), default=0)
+    if int(current) <= published:
+        raise RuntimeError(f"Build {current} is already published. Set Build to {published + 1} in Xcode "
+                           "and commit it with the release before publishing.")
+    return current
 
 
 def feed_releases(data):
@@ -218,6 +209,7 @@ class Publisher:
     def remember_published(self):
         # Preserve old archive bytes. A later run can recover them from the
         # verified live feed if the machine lost its local generated assets.
+        # Both records are git-ignored local copies of what is live.
         assets = ROOT / "assets"
         assets.mkdir(exist_ok=True)
         shutil.copytree(self.stage / "assets/packages", assets / "packages", dirs_exist_ok=True)
@@ -226,9 +218,6 @@ class Publisher:
             temporary = destination.with_name(destination.name + ".new")
             shutil.copy2(source, temporary)
             os.replace(temporary, destination)
-        releases = json.loads((self.stage / "src/releases.json").read_text())
-        save_build_number(REPO / "PerformanceHUD.xcodeproj/project.pbxproj",
-                          max(int(release["build"]) for release in releases))
 
     def publish(self, previous_feed):
         command = [self.node, self.wrangler, "deploy", "--config", self.stage / "wrangler.jsonc"]

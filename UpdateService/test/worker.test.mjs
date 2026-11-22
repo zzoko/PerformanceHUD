@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHandler } from "../src/worker.mjs";
+import { createHandler } from "../src/handler.mjs";
 
 const file = "PerformanceHUD-2.0-8.zip";
 const other = "PerformanceHUD-2.1-9.zip";

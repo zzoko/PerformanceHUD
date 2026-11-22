@@ -41,6 +41,10 @@ def main():
         raise SystemExit("Signing key does not match PerformanceHUD's public key.")
     assets = ROOT / "assets"
     manifest = ROOT / "src/releases.json"
+    if not manifest.is_file():
+        # Git-ignored local record of what is live; publish_update.py rebuilds it from the signed feed.
+        raise SystemExit("src/releases.json is missing: run publish_update.py, which restores it from the live feed "
+                         "(only a brand-new service starts from a file containing []).")
     published = json.loads(manifest.read_text())
     if args.empty and published:
         raise SystemExit("Refusing to replace a populated release feed with an empty feed.")

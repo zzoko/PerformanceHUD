@@ -33,13 +33,25 @@ def feed_with_notes(notes, notes_format=None):
 
 
 class PublisherTests(unittest.TestCase):
-    def test_build_increases_without_manual_project_edits(self):
+    def test_build_comes_from_the_committed_project(self):
         settings = {"MARKETING_VERSION": "2.1", "CURRENT_PROJECT_VERSION": "8"}
         self.assertEqual(publisher.next_build(settings, []), "8")
+        with self.assertRaisesRegex(RuntimeError, "Set Build to 9"):
+            publisher.next_build(settings, [{"version": "2.0", "build": "8"}])
+        settings["CURRENT_PROJECT_VERSION"] = "9"
         self.assertEqual(publisher.next_build(settings, [{"version": "2.0", "build": "8"}]), "9")
-        self.assertEqual(settings["CURRENT_PROJECT_VERSION"], "8")
         settings["CURRENT_PROJECT_VERSION"] = "20"
         self.assertEqual(publisher.next_build(settings, [{"version": "2.0", "build": "8"}]), "20")
+
+    def test_publishing_never_changes_tracked_files(self):
+        self.assertFalse(hasattr(publisher, "save_build_number"))
+        with tempfile.TemporaryDirectory() as temp, patch.object(publisher, "ROOT", Path(temp)), \
+                patch.object(publisher, "REPO", Path(temp) / "repo"):
+            p = self.make_publisher(Path(temp))
+            (Path(temp) / "src").mkdir()   # a checkout always has src/ (the Worker code)
+            p.remember_published()
+            self.assertEqual((Path(temp) / "src/releases.json").read_text(), "[]\n")
+            self.assertFalse((Path(temp) / "repo").exists())
 
     def test_older_marketing_version_is_rejected(self):
         settings = {"MARKETING_VERSION": "2.0", "CURRENT_PROJECT_VERSION": "20"}
@@ -47,16 +59,6 @@ class PublisherTests(unittest.TestCase):
             publisher.next_build(settings, [{"version": "2.1", "build": "9"}])
         self.assertEqual(publisher.version_tuple("2.0.0"), publisher.version_tuple("2.0"))
         self.assertGreater(publisher.version_tuple("2.10"), publisher.version_tuple("2.9"))
-
-    def test_published_build_is_saved_for_both_xcode_configurations(self):
-        with tempfile.TemporaryDirectory() as temp:
-            project = Path(temp) / "project.pbxproj"
-            project.write_text("CURRENT_PROJECT_VERSION = 8;\nMARKETING_VERSION = 2.1;\nCURRENT_PROJECT_VERSION = 8;\n")
-            publisher.save_build_number(project, 9)
-            self.assertEqual(project.read_text().count("CURRENT_PROJECT_VERSION = 9;"), 2)
-            self.assertIn("MARKETING_VERSION = 2.1;", project.read_text())
-            publisher.save_build_number(project, 7)
-            self.assertEqual(project.read_text().count("CURRENT_PROJECT_VERSION = 9;"), 2)
 
     def test_feed_rejects_external_or_unsafe_archives(self):
         data = feed()
