@@ -61,6 +61,17 @@ description: PerformanceHUD shows what your Mac is doing while you play. A nativ
 <section class="section" id="features" data-nav="features">
   <div class="wrap">
     <h2 class="center">Features &amp; controls.</h2>
+    <!-- The tour, on the same MacBook as the showcase. One render per theme, loaded once it's near the viewport. -->
+    <div class="tour">
+      <figure class="device device-tour" data-camera="{&quot;move&quot;:1.8,&quot;pull&quot;:14.9,&quot;push&quot;:4.5,&quot;region&quot;:[174.84,115,1163.31,764],&quot;screen&quot;:[1512,993],&quot;zoom&quot;:1.45}">
+        <div class="device-screen" data-lazy>
+          <video data-theme-video="light" data-src="/media/tour-light.mp4" data-poster="/media/tour-light-poster.jpg" width="2558" height="1680" muted loop playsinline preload="none" aria-hidden="true"></video>
+          <video data-theme-video="dark" data-src="/media/tour-dark.mp4" data-poster="/media/tour-dark-poster.jpg" width="2558" height="1680" muted loop playsinline preload="none" aria-hidden="true"></video>
+        </div>
+        <img class="device-frame frame-silver" src="/media/macbook-pro-14-silver.svg" width="1608" height="996" alt="" draggable="false">
+        <img class="device-frame frame-space-black" src="/media/macbook-pro-14-space-black.svg" width="1608" height="996" alt="" draggable="false">
+      </figure>
+    </div>
     <div class="tiles">
       <p class="tile">A small overlay sits on top of your game with the live frame rate and what’s behind it: CPU and GPU load, temperatures and power draw, memory pressure, disk activity, fans and battery. It’s a native Apple silicon app under 10 MB.</p>
       <p class="tile">Use the <strong>FPS</strong> preset for just the frame-rate number, <strong>Balanced</strong> for the everyday essentials, or <strong>Detailed</strong> for everything down to per-core activity, clock speeds and the resolution a game is actually outputting. Each reading can be turned on or off, emphasized, or shown as a number, a bar or a graph.</p>
@@ -146,6 +157,7 @@ description: PerformanceHUD shows what your Mac is doing while you play. A nativ
     function load(video) {
       if (video.getAttribute("src")) return;
       video.poster = video.dataset.poster;
+      if (reduceMotion) return; // poster only: don't download a video that won't play
       video.preload = "auto";
       video.src = video.dataset.src;
     }
@@ -204,4 +216,59 @@ description: PerformanceHUD shows what your Mac is doing while you play. A nativ
   const screenSyncs = [...document.querySelectorAll(".device-screen")].map(themedScreen);
   screenSyncs.forEach(sync => sync());
   addEventListener("themechange", () => screenSyncs.forEach(sync => sync()));
+
+  // Tour camera: the render keeps the whole screen; the page pushes in on the whole MacBook instead, so the laptop
+  // and its screen zoom as one. data-camera is the render's tour-camera.json: the target (screen points, top-left
+  // origin) and timing, eased with smootherstep like the render's timeline. It follows the video's own playback time.
+  const tour = document.querySelector(".device-tour");
+  const camera = tour && tour.dataset.camera ? JSON.parse(tour.dataset.camera) : null;
+  if (camera && !reduceMotion) {
+    const screen = tour.querySelector(".device-screen");
+    const [W, H] = camera.screen;
+    const card = tour.parentElement;
+    // The view to push in to: the render's target, re-sized around its centre to `zoom` (W / zoom points wide).
+    function regionFor(zoom) {
+      let [rx, ry, rw, rh] = camera.region;
+      const cx = rx + rw / 2, cy = ry + rh / 2;
+      rw = W / zoom; rh = H / zoom;
+      return [Math.min(Math.max(0, cx - rw / 2), W - rw), Math.min(Math.max(0, cy - rh / 2), H - rh), rw, rh];
+    }
+    // Fully zoomed in, only the screen shows: at least `zoom`, more where the card's shape needs it (on phones).
+    function coverZoom() {
+      const sx = screen.offsetLeft, sy = screen.offsetTop, sw = screen.offsetWidth, sh = screen.offsetHeight;
+      const dx = tour.offsetLeft, dy = tour.offsetTop, cw = card.clientWidth, ch = card.clientHeight;
+      for (let zoom = camera.zoom || W / camera.region[2]; zoom < 3; zoom += 0.01) {
+        const [rx, ry] = regionFor(zoom), k = zoom;
+        const tx = sx - k * (sx + rx / W * sw), ty = sy - k * (sy + ry / H * sh);
+        if (tx + k * sx <= -dx && tx + k * (sx + sw) >= cw - dx && ty + k * sy <= -dy && ty + k * (sy + sh) >= ch - dy) return zoom;
+      }
+      return 3;
+    }
+    let rx, ry, rw;
+    function measure() { [rx, ry, rw] = regionFor(coverZoom()); }
+    measure();
+    const smoother = p => { p = clamp(p); return p * p * p * (p * (6 * p - 15) + 10); };
+    const amount = t => t < camera.push ? 0 : t < camera.pull ? smoother((t - camera.push) / camera.move) : 1 - smoother((t - camera.pull) / camera.move);
+    let visible = false, last = -1;
+    function frame() {
+      if (!visible) return;
+      const video = screen.querySelector("video.is-shown");
+      const c = video ? amount(video.currentTime) : 0;
+      if (c !== last) {
+        last = c;
+        // The current view (a rect of the screen, in points) fills the screen box: scale the MacBook by W / view
+        // width about its top-left corner, then move the view's corner back onto the screen box's corner.
+        const vx = rx * c, vy = ry * c, vw = W + (rw - W) * c;
+        const k = W / vw, sx = screen.offsetLeft, sy = screen.offsetTop;
+        const px = sx + vx / W * screen.offsetWidth, py = sy + vy / H * screen.offsetHeight;
+        tour.style.transform = c ? `translate(${sx - k * px}px, ${sy - k * py}px) scale(${k})` : "";
+      }
+      requestAnimationFrame(frame);
+    }
+    new IntersectionObserver(entries => {
+      const now = entries.some(entry => entry.isIntersecting);
+      if (now && !visible) { visible = true; requestAnimationFrame(frame); } else if (!now) visible = false;
+    }).observe(tour.parentElement);
+    addEventListener("resize", () => { measure(); last = -1; });
+  }
 </script>

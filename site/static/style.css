@@ -194,6 +194,12 @@ p { margin: 0 0 1em; }
 .section { padding: 120px 0; }
 .section.alt { background: var(--bg-alt); }
 
+/* Tour video in Features & controls: the same MacBook (frame and screen box) as the showcase, in a gray card
+   like the showcase and layouts cards. The render has the showcase's screen shape. */
+.tour { position: relative; display: flex; justify-content: center; overflow: hidden; margin-top: 56px; padding: 56px 0 48px; border-radius: 44px; background: var(--bg-alt); }
+/* The script pushes in on the whole MacBook (transform about its top-left corner); the card clips it. */
+.device-tour { width: min(100% - clamp(32px, 8%, 96px), 860px); transform-origin: 0 0; will-change: transform; }
+
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-top: 64px; }
 .tile { background: var(--card); border-radius: 28px; padding: 30px; margin: 0; color: var(--muted); }
 .tile strong { color: var(--text); font-weight: 600; }
@@ -263,6 +269,7 @@ p { margin: 0 0 1em; }
   .hero { padding: 128px 16px 0; }
   .section { padding: 88px 0; }
   .tiles { grid-template-columns: 1fr; gap: 16px; margin-top: 40px; }
+  .tour { margin-top: 36px; padding: 34px 0 30px; border-radius: 20px; }
   .faq h2 { margin-bottom: 36px; }
   .sysreq dl { grid-template-columns: 1fr; }
   .footer-cols { gap: 40px; }
