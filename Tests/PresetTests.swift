@@ -250,6 +250,18 @@ import AppKit
         check(HUDPresetStore(in: defaults).savedPresets.first?.configuration == customized,
               "Saved setups survive constructing a new store")
         let second = try presets.add(name: "Second setup", configuration: customized)
+        _ = NSApplication.shared
+        let menu = HUDPresetMenuController(onSelect: { _ in }, onSave: {}, onManage: {})
+        menu.update(selection: .builtIn(.full), savedPresets: [])
+        check(menu.nextSelection == .builtIn(.fpsOnly), "Detailed wraps to FPS without saved presets")
+        let cycle: [HUDPresetSelection] = [.builtIn(.fpsOnly), .builtIn(.balanced), .builtIn(.full),
+                                           .saved(first.id, first.name), .saved(second.id, second.name)]
+        for (index, selection) in cycle.enumerated() {
+            menu.update(selection: selection, savedPresets: presets.savedPresets)
+            check(menu.nextSelection == cycle[(index + 1) % cycle.count], "Cycle down in menu order, including identical saved configurations")
+        }
+        menu.update(selection: .custom, savedPresets: presets.savedPresets)
+        check(menu.nextSelection == .builtIn(.fpsOnly), "Custom starts at the first menu choice")
         presets.preferredSavedID = first.id
         check(presets.selection(for: customized).title == "Workload", "Preferred identical saved setup stays selected")
         presets.preferredSavedID = second.id

@@ -172,9 +172,11 @@ final class HUDWindowController {
     private struct LayoutPresentation {
         var size: NSSize
         let outgoing: NSImageView
+        let kind: HUDLayoutTransition.Kind
     }
     private var layoutPresentation: LayoutPresentation?
     private var layoutAnimationTimer: Timer?
+    private var applyingPreset = false
     private var fpsAvailability = HUDFPSAvailability() {
         didSet {
             if oldValue.expanded != fpsAvailability.expanded { onFPSAvailabilityChange?() }
@@ -782,7 +784,7 @@ final class HUDWindowController {
     func setAlignment(_ alignment: HUDAlignment, animated: Bool = false) {
         if animated && alignment == self.alignment { return }
         if animated && shouldAnimateHUD && panel.isVisible && !isAutomaticallyHidden {
-            captureOutgoingLayout()
+            captureOutgoingLayout(for: .alignment)
         } else {
             stopLayoutAnimation()
         }
@@ -804,7 +806,7 @@ final class HUDWindowController {
 
     /// Capture only the transparent readings, including the currently visible
     /// handoff on a reversal. The same live glass stays underneath both layouts.
-    private func captureOutgoingLayout() {
+    private func captureOutgoingLayout(for kind: HUDLayoutTransition.Kind) {
         let size = presentedHUDSize
         let bounds = container.bounds
         guard !bounds.isEmpty, let bitmap = container.bitmapImageRepForCachingDisplay(in: bounds) else {
@@ -821,7 +823,7 @@ final class HUDWindowController {
         stopLayoutAnimation()
         container.addSubview(snapshot, positioned: .above, relativeTo: scaledContentView)
         scaledContentView.alphaValue = 0
-        layoutPresentation = LayoutPresentation(size: size, outgoing: snapshot)
+        layoutPresentation = LayoutPresentation(size: size, outgoing: snapshot, kind: kind)
     }
 
     private func animateToMeasuredLayout() {
@@ -829,7 +831,11 @@ final class HUDWindowController {
             finishLayoutAnimation()
             return
         }
-        let path = HUDLayoutTransition(from: presentation.size, to: settledHUDSize)
+        let path = HUDLayoutTransition(from: presentation.size, to: settledHUDSize, kind: presentation.kind)
+        guard path.duration > 0 else { finishLayoutAnimation(); return }
+        let initial = path.frame(at: 0)
+        presentation.outgoing.alphaValue = initial.outgoing
+        scaledContentView.alphaValue = initial.incoming
         let started = ProcessInfo.processInfo.systemUptime
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
             MainActor.assumeIsolated {
@@ -841,7 +847,7 @@ final class HUDWindowController {
                 // Hardware discovery or another menu action can change the fitting
                 // size mid-switch. Start from what is actually on screen.
                 if path.end != self.settledHUDSize {
-                    self.captureOutgoingLayout()
+                    self.captureOutgoingLayout(for: presentation.kind)
                     self.animateToMeasuredLayout()
                     return
                 }
@@ -878,13 +884,52 @@ final class HUDWindowController {
     }
 
     private func finishLayoutAnimation() {
+        let wasPreset = layoutPresentation?.kind == .preset
         stopLayoutAnimation()
         applyHUDPresentation()
+        if wasPreset { restorePosition() }
         if autoHidePresentation.enabled { animateAutoHide(visible: fpsAvailability.expanded) }
         else { animateFPS(to: fpsAvailability.expanded ? 1 : 0) }
     }
 
     // MARK: - Metric Visibility
+
+    func applyPreset(_ preset: HUDPresetConfiguration, animated: Bool = true) {
+        if animated && shouldAnimateHUD && panel.isVisible && !isAutomaticallyHidden
+            && (!autoHidePresentation.enabled || (autoHidePresentation.targetsVisible && autoHidePresentation.progress == 1)) {
+            captureOutgoingLayout(for: .preset)
+        } else {
+            stopLayoutAnimation()
+        }
+
+        // Apply every category before measuring or ordering the panel. A preset
+        // may pass through an empty selection on the way to a visible one.
+        applyingPreset = true
+        cpuCoreOptions = preset.cpuCores
+        gpuCoreOptions = preset.gpuCores.gpuFrequencyOnly
+        for group in HUDResourceGroup.allCases {
+            if let options = preset.resources[group] { setResourceOptions(options, for: group) }
+        }
+        setBatteryOptions(preset.battery)
+        setStorageOptions(preset.storage)
+        setFanOptions(preset.fans)
+        setMiscOptions(preset.misc)
+        setProcessOptions(preset.process)
+        setPackagePowerOptions(preset.packagePower)
+        setFPSOptions(preset.fps)
+        applyingPreset = false
+
+        updateLayout()
+        if layoutPresentation != nil { animateToMeasuredLayout() }
+        updateVisibility()
+    }
+
+    private func updateCategoryLayout() {
+        guard !applyingPreset else { return }
+        updateLayout()
+        if layoutPresentation?.kind == .preset { finishLayoutAnimation() }
+        updateVisibility()
+    }
 
     func setStorageOptions(_ options: HUDStorageOptions) {
         storageOptions = options
@@ -896,7 +941,9 @@ final class HUDWindowController {
         storageDrives = drives
         let visible = visibleDrives
         if oldCount != visible.count || enabledMetrics.contains(.storage) != !visible.isEmpty {
-            setMetricEnabled(.storage, enabled: !visible.isEmpty)
+            setMetricVisibility(.storage, enabled: !visible.isEmpty)
+            updateLayout()
+            updateVisibility()
         } else if hudEnabled && !isAutomaticallyHidden && !visible.isEmpty {
             if alignment == .horizontal { refreshHorizontalReadings() }
             else { storageView.configure(visible, options: storageOptions, background: textBackground) }
@@ -920,8 +967,7 @@ final class HUDWindowController {
 
     func setPackagePowerOptions(_ options: HUDPackagePowerOptions) {
         packageOptions = options
-        updateLayout()
-        updateVisibility()
+        updateCategoryLayout()
     }
 
     func setResourceOptions(_ options: HUDResourceOptions, for group: HUDResourceGroup) {
@@ -975,8 +1021,7 @@ final class HUDWindowController {
             valueLabels[group.totalMetric]?.isHidden = !group.supportsTotalUse || !options.totalUse
             updateReadingAppearance()
         }
-        updateLayout()
-        updateVisibility()
+        updateCategoryLayout()
     }
 
     func updateTemperatures(_ sample: TemperatureSample) {
@@ -1033,11 +1078,15 @@ final class HUDWindowController {
         }
         if !visible.contains(.fpsGraph) { fpsGraphView.reset() }
         // Apply the pair together, avoiding an intermediate window resize.
-        updateLayout()
-        updateVisibility()
+        updateCategoryLayout()
     }
 
     func setMetricEnabled(_ metric: HUDMetric, enabled: Bool) {
+        setMetricVisibility(metric, enabled: enabled)
+        updateCategoryLayout()
+    }
+
+    private func setMetricVisibility(_ metric: HUDMetric, enabled: Bool) {
         guard let row = metricRows[metric] else { return }
         let enabled = enabled && (metric != .storage || !visibleDrives.isEmpty)
         if enabled { enabledMetrics.insert(metric) }
@@ -1045,9 +1094,6 @@ final class HUDWindowController {
         row.isHidden = !enabled
 
         if metric == .fpsGraph && !enabled { fpsGraphView.reset() }
-
-        updateLayout()
-        updateVisibility()
     }
 
     private func updateVisibility() {
@@ -1294,7 +1340,7 @@ final class HUDWindowController {
     }
 
     private func refreshHorizontalReadings(forceLayout: Bool = false) {
-        guard alignment == .horizontal else { return }
+        guard alignment == .horizontal, !applyingPreset else { return }
         guard forceLayout || (hudEnabled && !isAutomaticallyHidden) else { return }
         var sections: [[HUDHorizontalView.Reading]] = []
         for metrics in metricGroups {

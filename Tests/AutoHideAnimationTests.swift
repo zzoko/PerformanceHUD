@@ -23,6 +23,17 @@ import AppKit
     static func layoutTiming() {
         let tall = CGSize(width: 285, height: 398.5)
         let wide = CGSize(width: 1435.5, height: 49)
+        let reveal = HUDFPSAvailability.animationDuration
+        let taller = CGSize(width: tall.width, height: tall.height + 21)
+        let narrower = CGSize(width: wide.width - 40, height: wide.height)
+        for (start, end) in [(tall, taller), (wide, narrower), (tall, tall)] {
+            let preset = HUDLayoutTransition(from: start, to: end, kind: .preset)
+            precondition(preset.duration == (start == end ? 0 : reveal))
+            let size = preset.frame(at: reveal / 4).size
+            // Auto-hide's smoothstep covers 15.625% of the distance at one quarter of its duration.
+            precondition(size.width == start.width + (end.width - start.width) * 0.15625)
+            precondition(size.height == start.height + (end.height - start.height) * 0.15625)
+        }
         for (start, end) in [(tall, wide), (wide, tall)] {
             let path = HUDLayoutTransition(from: start, to: end)
             precondition(abs(path.duration - 0.632) < 0.002)
@@ -143,6 +154,86 @@ import AppKit
         precondition(hud.isAutomaticallyHidden && !panel.isVisible && body.subviews.count == 1)
     }
 
+    @MainActor static func presetSwitches(_ alignment: HUDAlignment) async {
+        let hud = fixture(alignment, animated: false)
+        defer { hud.shutdown() }
+        hud.setAutoHideMode(.off)
+        let panel: HUDPanel = member(hud, "panel")
+        let body: NSView = member(hud, "container")
+        let glass: NativeGlassHUDBackground = member(hud, "backgroundView")
+        let compact = HUDPresetConfiguration.builtIn(.fpsOnly)
+        let detailed = HUDPresetConfiguration.builtIn(.full)
+        hud.applyPreset(detailed)
+        let large = body.frame.size
+        hud.applyPreset(compact)
+        let small = body.frame.size
+        precondition(large != small && !glass.clipsContent)
+
+        // Switching from SOC alone to FPS alone removes the last old category
+        // before the FPS setter runs. Keep the native glass session alive.
+        let session: NativeGlassSession = member(hud, "glassSession")
+        var stopped = false
+        hud.onGlassSessionChange = { stopped = stopped || session.status == "Stopped" }
+        var socOnly = compact
+        socOnly.fps.enabled = false
+        socOnly.packagePower.enabled = true
+        hud.applyPreset(socOnly)
+        hud.applyPreset(compact)
+        precondition(!stopped && panel.isVisible && body.frame.size == small)
+        hud.onGlassSessionChange = nil
+
+        hud.setAutoHideAnimated(true)
+        for (preset, start, end) in [(detailed, small, large), (compact, large, small)] {
+            let anchor = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
+            hud.applyPreset(preset)
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                precondition(body.frame.size == end && !glass.clipsContent)
+                continue
+            }
+            precondition(panel.isVisible && glass.clipsContent && body.frame.size == start)
+            var sawIntermediate = false
+            let deadline = ProcessInfo.processInfo.systemUptime + 1
+            while glass.clipsContent && ProcessInfo.processInfo.systemUptime < deadline {
+                precondition(panel.isVisible && glass.alphaValue == 1)
+                precondition(panel.frame.minX == anchor.x && panel.frame.maxY == anchor.y)
+                sawIntermediate = sawIntermediate || (body.frame.size != start && body.frame.size != end)
+                try? await Task.sleep(for: .milliseconds(12))
+            }
+            precondition(sawIntermediate && body.frame.size == end && body.subviews.count == 1)
+        }
+
+        var custom = compact
+        custom.fps.valueHighlighted.toggle()
+        hud.applyPreset(custom)
+        precondition(body.frame.size == small && !glass.clipsContent, "Same-size presets apply immediately")
+        hud.applyPreset(detailed)
+        try? await Task.sleep(for: .milliseconds(80))
+        let interrupted = body.frame.size
+        hud.applyPreset(compact)
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            precondition(body.frame.size == interrupted, "Reverse from the visible size")
+        }
+        hud.setAutoHideAnimated(false)
+        precondition(body.frame.size == small && !glass.clipsContent)
+        hud.setAutoHideAnimated(true)
+        hud.applyPreset(detailed)
+        hud.setPackagePowerOptions(.init(enabled: false))
+        precondition(panel.isVisible && !glass.clipsContent && body.frame.size != small, "Individual toggles are immediate")
+        hud.applyPreset(compact)
+        hud.setHUDEnabled(false)
+        precondition(!panel.isVisible && body.subviews.count == 1)
+        hud.applyPreset(detailed)
+        precondition(!panel.isVisible, "A preset cannot enable the HUD")
+        hud.setHUDEnabled(true)
+        precondition(panel.isVisible && body.frame.size == large && !glass.clipsContent)
+        hud.setAutoHideAnimated(false)
+        hud.setAutoHideMode(.all)
+        hud.setAutoHideAnimated(true)
+        hud.applyPreset(compact)
+        precondition(hud.isAutomaticallyHidden && !panel.isVisible)
+        print("PASS: in-place preset growth, shrink, interruption and instant visibility in \(alignment)")
+    }
+
     @MainActor static func main() async {
         _ = NSApplication.shared
         let suiteName = "AutoHideAnimation.tests.\(UUID().uuidString)"
@@ -162,6 +253,7 @@ import AppKit
             forName: UserDefaults.argumentDomain)
         layoutTiming()
         await layoutSwitches()
+        for alignment in HUDAlignment.allCases { await presetSwitches(alignment) }
         let menu = HUDAutoHideMenuView(selected: .fps)
         let control: NSSegmentedControl = member(menu, "control")
         let status: NSTextField = member(menu, "status")

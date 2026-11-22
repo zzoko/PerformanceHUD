@@ -2,13 +2,14 @@ import AppKit
 import Carbon
 
 enum HUDHotkeyAction: String, CaseIterable, Codable {
-    case visibility, logging, appearance
+    case visibility, appearance, preset, logging
 
     var title: String {
         switch self {
-        case .visibility: return "Show / hide HUD"
-        case .logging: return "Start / stop logging"
+        case .visibility: return "Enable / disable HUD"
         case .appearance: return "Cycle appearance"
+        case .preset: return "Cycle presets"
+        case .logging: return "Start / stop logging"
         }
     }
 
@@ -17,6 +18,7 @@ enum HUDHotkeyAction: String, CaseIterable, Codable {
         case .visibility: return 1
         case .logging: return 2
         case .appearance: return 3
+        case .preset: return 4
         }
     }
 
@@ -26,6 +28,7 @@ enum HUDHotkeyAction: String, CaseIterable, Codable {
         case .visibility: key = kVK_ANSI_H
         case .logging: key = kVK_ANSI_L
         case .appearance: key = kVK_ANSI_A
+        case .preset: key = kVK_ANSI_P
         }
         return HUDShortcut(keyCode: UInt32(key), modifiers: UInt32(optionKey))
     }
@@ -145,14 +148,16 @@ struct HUDHotkeySettings: Codable, Equatable {
     var visibility: HUDShortcut?
     var logging: HUDShortcut?
     var appearance: HUDShortcut?
+    var preset: HUDShortcut?
     var dragModifier: HUDDragModifier = .option
 
     private enum CodingKeys: String, CodingKey {
-        case visibility, logging, appearance, dragModifier
+        case visibility, logging, appearance, preset, dragModifier
     }
 
     static let defaults = HUDHotkeySettings(visibility: HUDHotkeyAction.visibility.defaultShortcut,
-        logging: HUDHotkeyAction.logging.defaultShortcut, appearance: HUDHotkeyAction.appearance.defaultShortcut)
+        logging: HUDHotkeyAction.logging.defaultShortcut, appearance: HUDHotkeyAction.appearance.defaultShortcut,
+        preset: HUDHotkeyAction.preset.defaultShortcut)
     private static let storageKey = "hud.hotkeys"
 
     subscript(action: HUDHotkeyAction) -> HUDShortcut? {
@@ -161,6 +166,7 @@ struct HUDHotkeySettings: Codable, Equatable {
             case .visibility: return visibility
             case .logging: return logging
             case .appearance: return appearance
+            case .preset: return preset
             }
         }
         set {
@@ -168,6 +174,7 @@ struct HUDHotkeySettings: Codable, Equatable {
             case .visibility: visibility = newValue
             case .logging: logging = newValue
             case .appearance: appearance = newValue
+            case .preset: preset = newValue
             }
         }
     }
@@ -205,7 +212,24 @@ extension HUDHotkeySettings {
         visibility = try values.decodeIfPresent(HUDShortcut.self, forKey: .visibility)
         logging = try values.decodeIfPresent(HUDShortcut.self, forKey: .logging)
         appearance = try values.decodeIfPresent(HUDShortcut.self, forKey: .appearance)
+        if values.contains(.preset) {
+            preset = try values.decodeIfPresent(HUDShortcut.self, forKey: .preset)
+        } else {
+            // Give older installations the new default unless the user already assigned it.
+            let shortcut = HUDHotkeyAction.preset.defaultShortcut
+            preset = [visibility, logging, appearance].contains(shortcut) ? nil : shortcut
+        }
         // Older saved hotkeys have no drag setting. Keep those bindings intact.
         dragModifier = (try? values.decode(HUDDragModifier.self, forKey: .dragModifier)) ?? .option
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encodeIfPresent(visibility, forKey: .visibility)
+        try values.encodeIfPresent(logging, forKey: .logging)
+        try values.encodeIfPresent(appearance, forKey: .appearance)
+        // An explicit null keeps a cleared preset shortcut cleared on relaunch.
+        try values.encode(preset, forKey: .preset)
+        try values.encode(dragModifier, forKey: .dragModifier)
     }
 }

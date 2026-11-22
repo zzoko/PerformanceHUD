@@ -1300,6 +1300,7 @@ final class AppDelegate:
             case .appearance:
                 setHUDBackground(hudBackground.next)
                 showShortcutFeedback(.appearance(hudBackground))
+            case .preset: cyclePreset()
             }
         }
         hotkeys.onChange = { [weak self] in self?.updateHotkeyHints() }
@@ -1464,23 +1465,35 @@ final class AppDelegate:
 
     private func selectPreset(_ selection: HUDPresetSelection) {
         statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.async { [weak self] in self?.applyPreset(selection) }
+    }
+
+    private func cyclePreset() {
+        statusItem?.menu?.cancelTracking()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            let configuration: HUDPresetConfiguration
-            switch selection {
-            case .builtIn(let preset):
-                configuration = .builtIn(preset)
-                presetStore.preferredSavedID = nil
-            case .saved(let id, _):
-                guard let saved = presetStore.savedPresets.first(where: { $0.id == id }) else { return }
-                configuration = saved.configuration
-                presetStore.preferredSavedID = id
-            case .custom: return
-            }
-            applyingHUDConfiguration = true
-            configuration.apply()
-            applyHUDConfiguration(resetDesign: false)
+            updatePresetMenu()
+            guard let next = presetMenu?.nextSelection else { return }
+            applyPreset(next, showFeedback: true)
         }
+    }
+
+    private func applyPreset(_ selection: HUDPresetSelection, showFeedback: Bool = false) {
+        let configuration: HUDPresetConfiguration
+        switch selection {
+        case .builtIn(let preset):
+            configuration = .builtIn(preset)
+            presetStore.preferredSavedID = nil
+        case .saved(let id, _):
+            guard let saved = presetStore.savedPresets.first(where: { $0.id == id }) else { return }
+            configuration = saved.configuration
+            presetStore.preferredSavedID = id
+        case .custom: return
+        }
+        applyingHUDConfiguration = true
+        configuration.apply()
+        applyHUDConfiguration(resetDesign: false)
+        if showFeedback { showShortcutFeedback(.preset(selection.title)) }
     }
 
     private func setPresetEditing(_ editing: Bool) {
@@ -1558,30 +1571,18 @@ final class AppDelegate:
         hudBackground = HUDPreferences.background
         enabledMetrics = HUDPreferences.visibleMetrics
 
-        // Hide the HUD while applying all options, then restore its final layout.
-        hudWindow?.setHUDEnabled(false)
-        for group in HUDResourceGroup.allCases {
-            hudWindow?.setResourceOptions(HUDPreferences.resourceOptions(for: group), for: group)
-        }
-        hudWindow?.setBatteryOptions(HUDPreferences.batteryOptions)
-        hudWindow?.setStorageOptions(HUDPreferences.storageOptions())
-        hudWindow?.setFanOptions(HUDPreferences.fanOptions)
-        hudWindow?.setMiscOptions(HUDPreferences.miscOptions)
-        hudWindow?.setProcessOptions(HUDPreferences.processOptions)
-        hudWindow?.setCPUCoreOptions(HUDPreferences.cpuCoreOptions)
-        hudWindow?.setGPUCoreOptions(HUDPreferences.gpuCoreOptions)
-        hudWindow?.setPackagePowerOptions(HUDPreferences.packagePowerOptions)
         if resetDesign {
+            hudWindow?.setHUDEnabled(false)
             hudWindow?.setAutoHideMode(HUDPreferences.autoHideMode)
             hudWindow?.setAlignment(HUDPreferences.alignment)
         }
-        hudWindow?.setFPSOptions(HUDPreferences.fpsOptions)
+        hudWindow?.applyPreset(.capture(), animated: !resetDesign)
         if resetDesign {
             hudWindow?.setHUDScale(hudScale)
             hudWindow?.setBackground(hudBackground)
             hudWindow?.resetPosition()
+            hudWindow?.setHUDEnabled(hudEnabled)
         }
-        hudWindow?.setHUDEnabled(hudEnabled)
         reconcileMonitoring()
 
         applyingHUDConfiguration = false

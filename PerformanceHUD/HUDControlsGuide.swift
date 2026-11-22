@@ -79,10 +79,10 @@ final class HUDControlsGuide: NSWindowController {
             ("Set Up Power Readings…", "Required for CPU, GPU, ANE, and SOC watts and CPU/GPU GHz. Follow the macOS approval prompt. Battery watts and CPU core bars work without setup."),
             ("Remove Power Helper", "Unregisters the helper. Other readings remain available.")]),
         .init(title: "Edit hotkeys", rows: [
-            ("Defaults", "Option-H toggles the HUD. Option-L toggles logging. Option-A cycles appearance. Option-drag moves the HUD. Logging and appearance shortcuts briefly show their new state."),
+            ("Defaults", "Option-H toggles the HUD, Option-L toggles logging, and Option-A cycles appearance. Option-P cycles through built-in and saved presets in menu order. Option-drag moves the HUD."),
             ("Change a shortcut", "Click an action and press a combination with Control, Option, or Command. Escape cancels. Delete or Clear removes it. You can also change the drag modifier.")]),
         .init(title: "Accessibility", rows: [
-            ("Reduce motion", "Skip layout and auto-hide animations and shortcut popup fades."),
+            ("Reduce motion", "Skip preset, layout, and auto-hide animations and shortcut popup fades."),
             ("Reduce transparency", "Use solid backgrounds for the menu, HUD, and shortcut popups.")]),
         .init(title: "Check for updates", rows: [("", "Check now and choose whether to install. First launch also checks once, even with automatic checks off.")]),
         .init(title: "Automatic update checks", rows: [("Off / Weekly / Monthly", "Off by default. Weekly checks every 7 days, Monthly every 30. Available updates appear in the menu for you to install.")]),

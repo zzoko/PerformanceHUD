@@ -12,7 +12,7 @@ final class HUDHotkeyEditor: NSWindowController, NSWindowDelegate {
 
     init(hotkeys: HUDHotkeyMonitor) {
         self.hotkeys = hotkeys
-        let window = HUDHotkeyWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: 364),
+        let window = HUDHotkeyWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: 400),
             styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Edit hotkeys"
         window.isReleasedWhenClosed = false
@@ -175,7 +175,7 @@ final class HUDHotkeyEditor: NSWindowController, NSWindowDelegate {
     @objc private func restoreDefaults() {
         recording = nil
         if let error = hotkeys.update(.defaults) { setMessage(error, error: true) }
-        else { setMessage("Defaults restored: ⌥H, ⌥L, ⌥A, and ⌥ + drag.") }
+        else { setMessage("Default shortcuts and drag modifier restored.") }
         refresh()
     }
 

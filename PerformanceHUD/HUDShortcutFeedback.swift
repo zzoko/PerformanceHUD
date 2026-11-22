@@ -2,12 +2,14 @@ import AppKit
 
 enum HUDShortcutFeedback {
     case appearance(HUDBackground)
+    case preset(String)
     case loggingStarted
     case loggingStopped
 
     var text: String {
         switch self {
         case .appearance(let background): return "Appearance · \(background.menuTitle)"
+        case .preset(let name): return "Preset · \(name)"
         case .loggingStarted: return "Logging started"
         case .loggingStopped: return "Logging stopped"
         }
@@ -18,6 +20,7 @@ enum HUDShortcutFeedback {
         case .appearance(.light): return "sun.max"
         case .appearance(.dark): return "moon"
         case .appearance(.system): return "circle.lefthalf.filled"
+        case .preset: return "square.stack.3d.up"
         case .loggingStarted: return "record.circle"
         case .loggingStopped: return "stop.circle"
         }

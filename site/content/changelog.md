@@ -3,6 +3,12 @@ title: Changelog
 description: Every PerformanceHUD release and what changed.
 ---
 
+## v4.0
+
+- Switching presets keeps the glass visible and resizes the HUD in place over 0.4 seconds. Same-size presets switch instantly, as do all presets with **Reduce motion** on.
+- **Option-P** cycles through FPS, Balanced, Detailed, and your saved presets in menu order. A brief message at the top of the screen shows the selected preset. You can change or clear the shortcut in **Edit hotkeys**.
+- In **Edit hotkeys**, the HUD shortcut is now labeled **Enable / disable HUD**, and logging sits just above **Move HUD**.
+
 ## v3.9
 
 - Switching between **Vertical** and **Horizontal** now animates from the HUD’s top-left corner at the same pace as auto-hide. Turn on **Reduce motion** for an instant switch.

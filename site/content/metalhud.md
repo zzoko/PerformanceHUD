@@ -11,7 +11,7 @@ It's made to stay on screen while you play. Keep a few readings up for the whole
 
 - **The whole system, not just frames.** CPU, GPU and Neural Engine usage, temperatures and watts, down to per-core activity and clock speeds, plus memory pressure, swap, fans, battery charge rate, and readings for the app in focus. Useful context when tuning settings or comparing how demanding games are.
 - **A layout that fits your setup.** A horizontal strip or a vertical panel, with the readings you pick and emphasis on the ones that matter. Size, position and appearance are adjustable, including Apple's native Liquid Glass with automatic Light/Dark switching.
-- **Controls that work mid-game.** Show or hide the overlay with an editable hotkey, even after a game has launched. Other hotkeys start or stop logging and switch appearance, and focused-app readings follow whichever app is active.
+- **Controls that work mid-game.** Editable hotkeys toggle the HUD and logging, switch appearance, and cycle through built-in and saved presets. Focused-app readings follow whichever app is active.
 - **Small details for everyday play.** A 60-second FPS or frame-time history with optional hitch marks, automatic hiding when FPS goes away, presets for switching between setups, and a battery icon that reflects your Mac's power state.
 - **CSV logging.** Record selected readings once per second, ready for a spreadsheet or graph.
 - **Low overhead.** Native Liquid Glass rendering has shown under 1% performance overhead in current testing. Results vary by game, Mac and enabled readings.

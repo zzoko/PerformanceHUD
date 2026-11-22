@@ -16,6 +16,13 @@ final class HUDPresetMenuController: NSObject {
     private var displayedSelection: HUDPresetSelection?
     private var displayedSavedPresets: [SavedIdentity] = []
 
+    // Follow the actual submenu order. Custom and the end of the list wrap to FPS.
+    var nextSelection: HUDPresetSelection? {
+        guard let current = displayedSelection, let index = choices.firstIndex(of: current),
+              index + 1 < choices.count else { return choices.first }
+        return choices[index + 1]
+    }
+
     init(onSelect: @escaping (HUDPresetSelection) -> Void,
          onSave: @escaping () -> Void, onManage: @escaping () -> Void) {
         self.onSelect = onSelect
