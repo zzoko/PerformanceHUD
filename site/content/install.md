@@ -20,7 +20,7 @@ If there's no **Open Anyway** option, or macOS says the app is damaged, stop and
 
 ### Allow Background App Activity
 
-CPU, GPU, ANE and SoC watt readings come from a small power helper that macOS needs to approve.
+CPU, GPU, ANE and SOC watt readings come from a small power helper that macOS needs to approve.
 
 1. On first launch, choose **Enable Power Readings**.
 2. If macOS asks, open **System Settings → General → Login Items & Extensions → Login Items**, turn on **PerformanceHUD** under **Background App Activity**, and authenticate.
@@ -47,7 +47,7 @@ Set **Auto start on login → On** to open PerformanceHUD with your saved settin
 2. Open **PerformanceHUD.xcodeproj** in a version of Xcode that includes the macOS 27 SDK or newer.
 3. For each target, **PerformanceHUD** and **PowerHelper**, open **Signing & Capabilities** and replace the author's development team with your own, using matching Apple signing certificates for both. You don't need the author's signing credentials. Ad-hoc (unsigned, local-only) builds can show the other readings but can't enable the power helper.
 4. Choose the **PerformanceHUD** scheme and **My Mac**, then **Product → Run**.
-5. For CPU, GPU, ANE and SoC watts, follow **Allow Background App Activity** above.
+5. For CPU, GPU, ANE and SOC watts, follow **Allow Background App Activity** above.
 
 A locally built app usually doesn't need the Gatekeeper approval from the downloaded-app steps. Xcode fetches the pinned Sparkle dependency automatically when building. You only need Xcode to build from source, not to install the downloaded app.
 
