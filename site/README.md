@@ -12,7 +12,7 @@ The source of performancehud.com. Plain HTML and CSS with a small build script t
 | `static/` | Copied to the site as-is: `style.css`, `media/`, and Cloudflare's `_headers` and `_redirects`. `_headers` lets browsers keep `/media/` for 30 days, so the build adds `?v=<content hash>` to every `/style.css` and `/media/` URL in the pages: replace a file under the same name and visitors still get the new one. |
 | `build.py` | Builds everything into `dist/` (not committed). |
 
-`content/changelog.md` is also where the in-app update notes come from: `UpdateService/publish_update.py` reads the section for the version it's publishing. Add a `## v3.9` section at the top before releasing.
+`content/changelog.md` is also where the in-app update notes come from: `UpdateService/publish_update.py` reads the section for the version it's publishing. Add a `## vX.Y` section for the new version at the top before each release.
 
 `content/license.md` shows the repository's `LICENSE` file, so the license only exists in one place.
 
