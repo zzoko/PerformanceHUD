@@ -43,7 +43,7 @@ Set **Auto start on login → On** to open PerformanceHUD with your saved settin
 
 ## Build from source
 
-1. Download a version from the [list of releases](https://github.com/zzoko/PerformanceHUD/tags), or clone the repository with `git clone https://github.com/zzoko/PerformanceHUD.git`, and read the [license](/license/). Personal builds and modifications are permitted; compiled redistribution is not.
+1. Clone the latest release with `git clone --branch {{version}} https://github.com/zzoko/PerformanceHUD.git` and read the [license](/license/). Without `--branch {{version}}`, you get the latest development state instead; earlier versions are in the [list of releases](https://github.com/zzoko/PerformanceHUD/tags). Personal builds and modifications are permitted; compiled redistribution is not.
 2. Open **PerformanceHUD.xcodeproj** in a version of Xcode that includes the macOS 27 SDK or newer.
 3. For each target, **PerformanceHUD** and **PowerHelper**, open **Signing & Capabilities** and replace the author's development team with your own, using matching Apple signing certificates for both. You don't need the author's signing credentials. Ad-hoc (unsigned, local-only) builds can show the other readings but can't enable the power helper.
 4. Choose the **PerformanceHUD** scheme and **My Mac**, then **Product → Run**.

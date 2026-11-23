@@ -28,6 +28,18 @@ SITE = {
     "github": "https://github.com/zzoko/PerformanceHUD",
     "price": "$4.99",
 }
+
+
+def latest_release():
+    """The newest version in the changelog (its first ## vX.Y heading), which is also the newest release tag."""
+    for line in (ROOT / "content/changelog.md").read_text().splitlines():
+        m = re.match(r"##\s+v?(\d+(?:\.\d+)*)\s*$", line)
+        if m:
+            return m.group(1)
+    raise SystemExit("content/changelog.md has no ## vX.Y section to take the release version from.")
+
+
+SITE["version"] = latest_release()
 # Order of the documentation sidebar.
 DOCS = ["install", "compatibility", "metalhud", "privacy", "changelog", "support", "license"]
 
@@ -129,6 +141,11 @@ def render(template, **values):
     return re.sub(r"\{\{(\w+)\}\}", lambda m: str(values.get(m.group(1), SITE.get(m.group(1), ""))), template)
 
 
+def fill(text):
+    """Doc pages: replace {{name}} for names in SITE (such as {{version}}) and leave anything else as written."""
+    return re.sub(r"\{\{(\w+)\}\}", lambda m: str(SITE[m.group(1)]) if m.group(1) in SITE else m.group(0), text)
+
+
 def doc_nav(current, titles):
     links = []
     for slug in DOCS:
@@ -178,7 +195,7 @@ def build():
         if meta.get("layout") == "plain":
             content, headings = f'<pre class="plain">{html.escape(body.strip())}</pre>', []
         else:
-            content, headings = markdown(body)
+            content, headings = markdown(fill(body))
         toc = "".join(f'<a href="#{hid}">{inline(text)}</a>' for hid, text in headings)
         main = render(doc_template, title=html.escape(meta["title"]), description=html.escape(meta.get("description", "")),
                       content=content, nav=doc_nav(slug, titles), toc=toc,
