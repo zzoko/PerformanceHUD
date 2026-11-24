@@ -21,28 +21,14 @@ description: PerformanceHUD shows what your Mac is doing while you play. A nativ
     <div class="showcase-frame">
       <figure class="device">
         <div class="device-screen">
-          <!-- One render per theme (light HUD on silver, dark HUD on space black). The script below loads the one for the
-               current theme; the other loads on the first switch and cross-fades in at the same point in the loop. -->
-          <video data-theme-video="light" data-src="/media/hero-screen-light.mp4" data-poster="/media/hero-screen-light-poster.jpg" width="1852" height="1216" muted loop playsinline preload="none" aria-hidden="true"></video>
-          <video data-theme-video="dark" data-src="/media/hero-screen-dark.mp4" data-poster="/media/hero-screen-dark-poster.jpg" width="1852" height="1216" muted loop playsinline preload="none" aria-hidden="true"></video>
+          <!-- One render (the dark HUD on the Pro Black desktop), the same in both themes; the MacBook's finish follows
+               the theme. The script below loads it; with Reduce Motion on, only its first frame shows. -->
+          <video data-src="/media/hero-screen.mp4" data-poster="/media/hero-screen-poster.jpg" width="1852" height="1216" muted loop playsinline preload="none" aria-hidden="true"></video>
         </div>
         <img class="device-frame frame-silver" src="/media/macbook-pro-14-silver.svg" width="1608" height="996" alt="" draggable="false">
         <img class="device-frame frame-space-black" src="/media/macbook-pro-14-space-black.svg" width="1608" height="996" alt="" draggable="false">
       </figure>
     </div>
-  </div>
-</section>
-
-<section class="layouts" aria-label="The PerformanceHUD menu switching the HUD layout" data-nav="overview">
-  <div class="layouts-card">
-    <figure class="device device-top">
-      <div class="device-screen" data-lazy>
-        <video data-theme-video="light" data-src="/media/layouts-light.mp4" data-poster="/media/layouts-light-poster.jpg" width="2408" height="956" muted loop playsinline preload="none" aria-hidden="true"></video>
-        <video data-theme-video="dark" data-src="/media/layouts-dark.mp4" data-poster="/media/layouts-dark-poster.jpg" width="2408" height="956" muted loop playsinline preload="none" aria-hidden="true"></video>
-      </div>
-      <img class="device-frame frame-silver" src="/media/macbook-pro-14-top-silver.svg" width="1369" height="551" alt="" draggable="false">
-      <img class="device-frame frame-space-black" src="/media/macbook-pro-14-top-space-black.svg" width="1369" height="551" alt="" draggable="false">
-    </figure>
   </div>
 </section>
 
@@ -61,20 +47,44 @@ description: PerformanceHUD shows what your Mac is doing while you play. A nativ
 <section class="section" id="features" data-nav="features">
   <div class="wrap">
     <h2 class="center">Features &amp; controls.</h2>
-    <!-- The tour, on the same MacBook as the showcase. One render per theme, loaded once it's near the viewport. -->
-    <div class="tour">
-      <figure class="device device-tour" data-camera="{&quot;move&quot;:1.8,&quot;pull&quot;:14.9,&quot;push&quot;:4.5,&quot;region&quot;:[174.84,115,1163.31,764],&quot;screen&quot;:[1512,993],&quot;zoom&quot;:1.5}">
-        <div class="device-screen" data-lazy>
-          <video data-theme-video="light" data-src="/media/tour-light.mp4" data-poster="/media/tour-light-poster.jpg" width="2558" height="1680" muted loop playsinline preload="none" aria-hidden="true"></video>
-          <video data-theme-video="dark" data-src="/media/tour-dark.mp4" data-poster="/media/tour-dark-poster.jpg" width="2558" height="1680" muted loop playsinline preload="none" aria-hidden="true"></video>
+    <!-- The HUD alone in its three presets with a game's readings (stills of the dark HUD from the renderer, on the
+         Pro Black wallpaper, cut at the glass's edge; the same in both themes). Pointing at a note or a row outlines that part; FPS is tucked
+         away, as on the desktop, and rolls open while its note is selected. The script below runs it; without scripts
+         it's the Balanced HUD and a plain list. -->
+    <div class="explorer">
+      <div class="explorer-hud">
+        <div class="explorer-presets" role="group" aria-label="Preset" hidden>
+          <button type="button" data-preset="fps">FPS</button>
+          <button type="button" data-preset="balanced" aria-pressed="true">Balanced</button>
+          <button type="button" data-preset="detailed">Detailed</button>
         </div>
-        <img class="device-frame frame-silver" src="/media/macbook-pro-14-silver.svg" width="1608" height="996" alt="" draggable="false">
-        <img class="device-frame frame-space-black" src="/media/macbook-pro-14-space-black.svg" width="1608" height="996" alt="" draggable="false">
-      </figure>
+        <div class="explorer-panel">
+          <img data-preset="fps" data-state="closed" src="/media/hud-fps.webp" width="428" height="138" alt="The PerformanceHUD overlay on the FPS preset" loading="lazy" hidden>
+          <img data-preset="fps" data-state="open" src="/media/hud-fps-fps.webp" width="428" height="147" alt="The PerformanceHUD overlay on the FPS preset, with the frame rate showing" loading="lazy" hidden>
+          <img data-preset="balanced" data-state="closed" src="/media/hud-balanced.webp" width="855" height="1196" alt="The PerformanceHUD overlay on the Balanced preset" loading="lazy">
+          <img data-preset="balanced" data-state="open" src="/media/hud-balanced-fps.webp" width="855" height="1342" alt="The PerformanceHUD overlay on the Balanced preset, with the frame rate showing" loading="lazy" hidden>
+          <img data-preset="detailed" data-state="closed" src="/media/hud-detailed.webp" width="855" height="2088" alt="The PerformanceHUD overlay on the Detailed preset" loading="lazy" hidden>
+          <img data-preset="detailed" data-state="open" src="/media/hud-detailed-fps.webp" width="855" height="2235" alt="The PerformanceHUD overlay on the Detailed preset, with the frame rate showing" loading="lazy" hidden>
+          <span class="explorer-band" aria-hidden="true"></span>
+        </div>
+      </div>
+      <script type="application/json" class="explorer-data">{"fps":{"width":0.5006,"closed":{"ratio":3.10145,"glass":[0.0,100.0],"rows":{"fps":[35.76,64.24]}},"open":{"ratio":2.91156,"glass":[0.0,100.0],"rows":{"fps":[27.37,72.63]}}},"balanced":{"width":1.0,"closed":{"ratio":0.71488,"glass":[0.0,100.0],"rows":{"fps":[3.07,8.48],"gpu":[11.6,19.27],"cpu":[18.37,38.09],"chip":[37.19,51.64],"memory":[54.51,77.49],"fans":[76.97,87.15],"battery":[90.02,97.69]}},"open":{"ratio":0.63711,"glass":[0.0,100.0],"rows":{"fps":[1.93,20.64],"gpu":[21.15,28.24],"cpu":[27.18,45.0],"chip":[43.94,57.07],"memory":[59.36,80.08],"fans":[79.36,88.69],"battery":[90.98,98.07]}}},"detailed":{"width":1.0,"closed":{"ratio":0.40948,"glass":[0.0,100.0],"rows":{"fps":[1.24,5.37],"app":[6.13,11.54],"gpu":[12.16,21.89],"cpu":[20.35,32.67],"chip":[31.13,40.42],"memory":[41.04,55.22],"storage":[53.9,61.98],"fans":[62.59,69.45],"battery":[70.06,75.48],"misc":[76.1,99.19]}},"open":{"ratio":0.38255,"glass":[0.0,100.0],"rows":{"fps":[0.68,12.88],"app":[12.22,17.44],"gpu":[17.86,27.11],"cpu":[25.51,37.17],"chip":[35.58,44.42],"memory":[44.84,58.25],"storage":[56.85,64.56],"fans":[64.97,71.54],"battery":[71.95,77.17],"misc":[77.59,99.32]}}}}</script>
+      <ol class="explorer-list">
+        <li><button type="button" data-note="fps"><strong>FPS</strong><span>Frame rate or frame time, a 60-second history and hitch marks. Tucked away until a game renders.</span></button></li>
+        <li><button type="button" data-note="app"><strong>App</strong><span>The app in front and its own GPU, CPU and memory use.</span></button></li>
+        <li><button type="button" data-note="gpu"><strong>GPU</strong><span>Power, temperature and load, plus its clock speed. Columns keep their place as the numbers change.</span></button></li>
+        <li><button type="button" data-note="cpu"><strong>CPU</strong><span>Power, temperature and load, plus each core’s activity and clock speeds. A core type’s GHz is weighted by how active each core was.</span></button></li>
+        <li><button type="button" data-note="chip"><strong>ANE and SOC</strong><span>Power drawn by the Neural Engine, and for the whole chip: CPU, GPU and Neural Engine together.</span></button></li>
+        <li><button type="button" data-note="memory"><strong>Memory</strong><span>Memory in use, swap and physical, with a 30-second pressure graph on a fixed 0–100 scale. Missing samples stay gaps.</span></button></li>
+        <li><button type="button" data-note="storage"><strong>Storage</strong><span>Each drive’s read and write speed and its free space.</span></button></li>
+        <li><button type="button" data-note="fans"><strong>Fans</strong><span>Each fan’s speed against its maximum.</span></button></li>
+        <li><button type="button" data-note="battery"><strong>Battery</strong><span>Power source and flow, battery temperature and charge.</span></button></li>
+        <li><button type="button" data-note="misc"><strong>Misc</strong><span>Game output resolution, refresh rate, Game Mode, thermal state, macOS and chip. With no game rendering, Resolution shows a dash.</span></button></li>
+      </ol>
     </div>
     <div class="tiles">
       <p class="tile">A small overlay sits on top of your game with the live frame rate and what’s behind it: CPU and GPU load, temperatures and power draw, memory pressure, disk activity, fans and battery. It’s a native Apple silicon app under 10 MB.</p>
-      <p class="tile">Use the <strong>FPS</strong> preset for just the frame-rate number, <strong>Balanced</strong> for the everyday essentials, or <strong>Detailed</strong> for everything down to per-core activity, clock speeds and the resolution a game is actually outputting. Each reading can be turned on or off, emphasized, or shown as a number, a bar or a graph.</p>
+      <p class="tile">Each reading can be turned on or off, emphasized, or shown as a number, a bar or a graph, from the menu bar icon. The built-in presets are only starting points: <strong>FPS</strong> for just the frame-rate number, <strong>Balanced</strong> for the everyday essentials, and <strong>Detailed</strong> for everything down to per-core activity, clock speeds and the resolution a game is actually outputting. Save your own combinations as presets too.</p>
       <p class="tile">A 60-second FPS history makes dips easy to spot, temperatures automatically highlight with a warning in the overlay past certain thresholds, and memory pressure has its own history graph. Lay it out as a vertical panel or a horizontal strip, from 0.5× to 2× size.</p>
       <p class="tile">The HUD never takes focus from the game, and clicks pass straight through it; hold Option to drag it somewhere else. Toggle it with <strong>Option-H</strong>, even mid-game, or let it hide itself when no frame rate is detected and come back when a game starts rendering.</p>
       <p class="tile">Press <strong>Option-L</strong> to log your selected readings to CSV once per second, even with the overlay switched off, and compare settings or games in a spreadsheet afterwards.</p>
@@ -145,130 +155,62 @@ description: PerformanceHUD shows what your Mac is doing while you play. A nativ
   update();
   porthole();
 
-  // Screen videos: each screen has one render per theme. Both renders share the same timing, so on a theme switch
-  // the other one starts at the same point in the loop and cross-fades in once it's playing: the HUD changes
-  // appearance mid-game. A [data-lazy] screen loads only once it's near the viewport. With Reduce Motion on, only
-  // the poster frames show and switch.
+  // The showcase's screen video. With Reduce Motion on, only its poster frame shows and the video isn't downloaded.
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  function themedScreen(screen) {
-    const videos = Object.fromEntries([...screen.querySelectorAll("[data-theme-video]")].map(v => [v.dataset.themeVideo, v]));
-    let shown = null, switching = 0, lead = 0.1; // lead: how long the last seek-and-start took, in seconds
-    let active = !("lazy" in screen.dataset);
-    function load(video) {
-      if (video.getAttribute("src")) return;
-      video.poster = video.dataset.poster;
-      if (reduceMotion) return; // poster only: don't download a video that won't play
-      video.preload = "auto";
-      video.src = video.dataset.src;
+  const screenVideo = document.querySelector(".device-screen video");
+  if (screenVideo) {
+    screenVideo.poster = screenVideo.dataset.poster;
+    if (!reduceMotion) {
+      screenVideo.preload = "auto";
+      screenVideo.src = screenVideo.dataset.src;
+      screenVideo.play().catch(() => {});
     }
-    function reveal(next) {
-      const previous = shown;
-      shown = next;
-      next.classList.add("is-shown");
-      if (previous && previous !== next) {
-        previous.classList.remove("is-shown");
-        setTimeout(() => { if (shown !== previous) previous.pause(); }, 400);
-      }
-    }
-    function sync() {
-      if (!active) return;
-      const next = videos[document.documentElement.dataset.theme === "dark" ? "dark" : "light"];
-      if (next === shown) return;
-      load(next);
-      if (reduceMotion || !shown) {
-        reveal(next);
-        if (!reduceMotion) next.play().catch(() => {});
-        return;
-      }
-      // Start the incoming render where the current one will be once it's ready (ahead by however long the last
-      // switch took), then cross-fade.
-      const attempt = ++switching, from = shown;
-      const start = () => {
-        if (attempt !== switching) return;
-        let started = false;
-        const began = performance.now();
-        const go = () => {
-          if (started || attempt !== switching) return;
-          started = true;
-          next.play().catch(() => {}).finally(() => {
-            if (attempt !== switching) return;
-            lead = Math.min(0.5, (performance.now() - began) / 1000);
-            reveal(next);
-          });
-        };
-        next.addEventListener("seeked", go, { once: true });
-        setTimeout(go, 1500); // in case the seek never reports back
-        const duration = next.duration || from.duration;
-        next.currentTime = duration ? (from.currentTime + lead) % duration : from.currentTime;
-      };
-      if (next.readyState >= 1) start(); else next.addEventListener("loadedmetadata", start, { once: true });
-    }
-    if (!active) {
-      new IntersectionObserver((entries, observer) => {
-        if (!entries.some(entry => entry.isIntersecting)) return;
-        observer.disconnect();
-        active = true;
-        sync();
-      }, { rootMargin: "400px 0px" }).observe(screen);
-    }
-    return sync;
   }
-  const screenSyncs = [...document.querySelectorAll(".device-screen")].map(themedScreen);
-  screenSyncs.forEach(sync => sync());
-  addEventListener("themechange", () => screenSyncs.forEach(sync => sync()));
 
-  // Tour camera: the render keeps the whole screen; the page pushes in on the whole MacBook instead, so the laptop
-  // and its screen zoom as one. data-camera is the render's tour-camera.json: the target (screen points, top-left
-  // origin) and timing, eased with smootherstep like the render's timeline. It follows the video's own playback time.
-  const tour = document.querySelector(".device-tour");
-  const camera = tour && tour.dataset.camera ? JSON.parse(tour.dataset.camera) : null;
-  if (camera && !reduceMotion) {
-    const screen = tour.querySelector(".device-screen");
-    const [W, H] = camera.screen;
-    const card = tour.parentElement;
-    // The view to push in to: the render's target, re-sized around its centre to `zoom` (W / zoom points wide).
-    function regionFor(zoom) {
-      let [rx, ry, rw, rh] = camera.region;
-      const cx = rx + rw / 2, cy = ry + rh / 2;
-      rw = W / zoom; rh = H / zoom;
-      return [Math.min(Math.max(0, cx - rw / 2), W - rw), Math.min(Math.max(0, cy - rh / 2), H - rh), rw, rh];
-    }
-    // Fully zoomed in, only the screen shows: at least `zoom`, more where the card's shape needs it (on phones).
-    function coverZoom() {
-      const sx = screen.offsetLeft, sy = screen.offsetTop, sw = screen.offsetWidth, sh = screen.offsetHeight;
-      const dx = tour.offsetLeft, dy = tour.offsetTop, cw = card.clientWidth, ch = card.clientHeight;
-      for (let zoom = camera.zoom || W / camera.region[2]; zoom < 3; zoom += 0.01) {
-        const [rx, ry] = regionFor(zoom), k = zoom;
-        const tx = sx - k * (sx + rx / W * sw), ty = sy - k * (sy + ry / H * sh);
-        if (tx + k * sx <= -dx && tx + k * (sx + sw) >= cw - dx && ty + k * sy <= -dy && ty + k * (sy + sh) >= ch - dy) return zoom;
+  // HUD explorer: a preset shows that HUD; a note (hover, focus or tap) or a row on the HUD outlines that part. FPS
+  // rolls open while its note is the selected one.
+  const explorer = document.querySelector(".explorer");
+  if (explorer) {
+    const data = JSON.parse(explorer.querySelector(".explorer-data").textContent);
+    const panel = explorer.querySelector(".explorer-panel"), band = explorer.querySelector(".explorer-band");
+    const hud = explorer.querySelector(".explorer-hud"), picker = explorer.querySelector(".explorer-presets");
+    const notes = [...explorer.querySelectorAll("button[data-note]")], stills = [...panel.querySelectorAll("img[data-preset]")];
+    let preset = "balanced", note = "";   // no note selected at first: FPS stays tucked away
+    picker.hidden = false;
+    const current = () => data[preset][note === "fps" ? "open" : "closed"];
+    function apply() {
+      const state = current(), rows = state.rows, selected = rows[note];
+      panel.style.width = data[preset].width * 100 + "%";   // the FPS preset's HUD is narrower
+      // Room for the open state, so rolling FPS open doesn't move the page below.
+      hud.style.setProperty("--tallest", data[preset].width / data[preset].open.ratio);
+      stills.forEach(still => { still.hidden = still.dataset.preset !== preset || still.dataset.state !== (note === "fps" ? "open" : "closed"); });
+      if (selected) {
+        band.style.top = selected[0] + "%"; band.style.height = selected[1] - selected[0] + "%";
+        band.style.left = state.glass[0] + "%"; band.style.right = 100 - state.glass[1] + "%";
       }
-      return 3;
+      explorer.classList.toggle("is-live", Boolean(selected) && Object.keys(rows).length > 1);   // one row needs no outline
+      explorer.classList.toggle("is-tile", state.glass[0] > 0);   // the still has desktop around the glass
+      notes.forEach(item => {
+        item.parentElement.hidden = !(item.dataset.note in data[preset].closed.rows);
+        item.setAttribute("aria-current", item.dataset.note === note);
+      });
+      picker.querySelectorAll("button").forEach(item => item.setAttribute("aria-pressed", item.dataset.preset === preset));
     }
-    let rx, ry, rw;
-    function measure() { [rx, ry, rw] = regionFor(coverZoom()); }
-    measure();
-    const smoother = p => { p = clamp(p); return p * p * p * (p * (6 * p - 15) + 10); };
-    const amount = t => t < camera.push ? 0 : t < camera.pull ? smoother((t - camera.push) / camera.move) : 1 - smoother((t - camera.pull) / camera.move);
-    let visible = false, last = -1;
-    function frame() {
-      if (!visible) return;
-      const video = screen.querySelector("video.is-shown");
-      const c = video ? amount(video.currentTime) : 0;
-      if (c !== last) {
-        last = c;
-        // The current view (a rect of the screen, in points) fills the screen box: scale the MacBook by W / view
-        // width about its top-left corner, then move the view's corner back onto the screen box's corner.
-        const vx = rx * c, vy = ry * c, vw = W + (rw - W) * c;
-        const k = W / vw, sx = screen.offsetLeft, sy = screen.offsetTop;
-        const px = sx + vx / W * screen.offsetWidth, py = sy + vy / H * screen.offsetHeight;
-        tour.style.transform = c ? `translate(${sx - k * px}px, ${sy - k * py}px) scale(${k})` : "";
-      }
-      requestAnimationFrame(frame);
+    function select(key) { if (key !== note) { note = key; apply(); } }
+    notes.forEach(item => ["pointerenter", "focus", "click"].forEach(type => item.addEventListener(type, () => select(item.dataset.note))));
+    picker.addEventListener("click", event => {
+      const chosen = event.target.closest("button[data-preset]");
+      if (!chosen) return;
+      preset = chosen.dataset.preset;
+      if (!(note in data[preset].closed.rows)) note = "";
+      apply();
+    });
+    function rowAt(event) {
+      const box = panel.getBoundingClientRect(), y = (event.clientY - box.top) / box.height * 100, rows = current().rows;
+      const hit = Object.keys(rows).find(key => y >= rows[key][0] && y < rows[key][1]);
+      if (hit) select(hit);
     }
-    new IntersectionObserver(entries => {
-      const now = entries.some(entry => entry.isIntersecting);
-      if (now && !visible) { visible = true; requestAnimationFrame(frame); } else if (!now) visible = false;
-    }).observe(tour.parentElement);
-    addEventListener("resize", () => { measure(); last = -1; });
+    panel.addEventListener("pointermove", rowAt); panel.addEventListener("click", rowAt);
+    apply();
   }
 </script>

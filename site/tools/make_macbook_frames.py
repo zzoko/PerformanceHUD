@@ -1,5 +1,4 @@
-"""Writes the homepage MacBook frames: static/media/macbook-pro-14-{silver,space-black}.svg (the whole laptop)
-and macbook-pro-14-top-{silver,space-black}.svg (the top of the lid, for the layouts band).
+"""Writes the homepage MacBook frames: static/media/macbook-pro-14-{silver,space-black}.svg (the whole laptop).
 
 Front view of the 14-inch MacBook Pro with PROLED XDR Display (2026), traced by measurement from a
 1600 x 1200 straight-on product photo of the silver model (units are that photo's pixels). The space
@@ -15,9 +14,6 @@ black colours were sampled from Apple's straight-on product tile. Both frames sh
 
 style.css positions the video under the screen opening with the same numbers (viewBox -4 100 1608 996).
 
-The top view is the same drawing cropped to the lid's top and the band render (the top 600 pt of the screen,
-2408 x 956): viewBox 115 105 1369 551.45, ending where the band ends (132 + 1321 x 956 / 2408 = 656.45), so the
-band fills the opening down to the bottom edge, where the page cuts the lid off.
 Run:  python3 tools/make_macbook_frames.py
 """
 from pathlib import Path
@@ -57,7 +53,7 @@ BASE = "M0 1024H1600V1050C1600 1068 1590 1081 1566 1081H34C10 1081 0 1068 0 1050
 SCOOP = "M664 1024L671 1041Q672 1044 676 1044H924Q928 1044 929 1041L936 1024Z"
 
 
-VIEWS = {"": ("-4 100 1608 996", 1608, 996), "top-": ("115 105 1369 551.45", 1369, 551)}
+VIEWS = {"": ("-4 100 1608 996", 1608, 996)}
 
 
 def svg(f, view):

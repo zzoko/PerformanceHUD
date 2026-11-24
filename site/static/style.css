@@ -1,7 +1,7 @@
 /* PerformanceHUD — one stylesheet, no build step.
    Layout and type scale follow promaxdisplay.com. Light by default, whatever the system setting; the nav
-   switch sets :root[data-theme="dark"], which swaps the palette below, the MacBook finish (silver / space
-   black) and the HUD video. */
+   switch sets :root[data-theme="dark"], which swaps the palette below and the MacBook finish (silver / space
+   black). */
 :root {
   --bg: #ffffff;
   --bg-alt: #f5f5f7;
@@ -132,8 +132,7 @@ p { margin: 0 0 1em; }
   background: var(--bg-alt); clip-path: var(--clip); will-change: clip-path; --dev-w: min(80.1vw, 1126px, (100vh - 300px) * 1.449); }
 .device { position: relative; flex: none; width: var(--dev-w); aspect-ratio: 1608 / 996; margin: 0; }
 .device-screen { position: absolute; left: 8.893%; top: 3.2129%; width: 82.1517%; height: 87.1034%; background: #000; box-shadow: 0 0 0 2px #000; }
-.device-screen video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s ease; }
-.device-screen video.is-shown { opacity: 1; }
+.device-screen video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
 .device-frame { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; user-select: none; }
 .frame-space-black, :root[data-theme="dark"] .frame-silver { display: none; }
 :root[data-theme="dark"] .frame-space-black { display: block; }
@@ -156,29 +155,6 @@ p { margin: 0 0 1em; }
   .showcase-pin { max-width: none; padding-inline: 220px; }
 }
 
-/* Layouts band, directly below the showcase: a closer look at the top of the same MacBook (the lid cut off by the
-   card's bottom edge). The card matches the showcase card at rest: same side insets and corner radius. The frame is
-   macbook-pro-14-top-*.svg; .device-screen matches its opening (x 139-1460, y 132-656.45 in a 115 105 1369 551.45
-   viewBox), which the band render fills down to the bottom edge. */
-.layouts { padding: 0 max(30px, calc((100% - 1240px) / 2)); margin-bottom: 72px; }
-.layouts-card { display: flex; justify-content: center; overflow: hidden; padding-top: 64px; border-radius: 44px; background: var(--bg-alt); }
-.device-top { width: min(100% - clamp(32px, 8%, 96px), 1150px); aspect-ratio: 1369 / 551.45; }
-.device-top .device-screen { left: 1.7531%; top: 4.8962%; width: 96.4938%; height: 95.1038%; }
-@media (min-width: 1100px) {
-  .layouts { padding-inline: max(220px, calc((100% - 1240px) / 2)); }
-}
-@media (max-width: 734px) {
-  .layouts { padding-inline: 16px; }
-  .layouts-card { border-radius: 36px; padding-top: 40px; }
-}
-@media (orientation: portrait), (max-height: 500px), (prefers-reduced-motion: reduce) {
-  .layouts { max-width: 1272px; margin: 24px auto 72px; padding: 0 16px; }
-  .layouts-card { border-radius: 20px; padding-top: 34px; }
-}
-@media (min-width: 1100px) and (orientation: portrait), (min-width: 1100px) and (prefers-reduced-motion: reduce) {
-  .layouts { max-width: none; padding-inline: 220px; }
-}
-
 /* Homepage side menu: fixed on the left, vertically centered, styled like the docs sidebar.
    Hidden below 1100px, where there's no room beside the content. */
 .page-nav { display: none; }
@@ -194,13 +170,45 @@ p { margin: 0 0 1em; }
 .section { padding: 120px 0; }
 .section.alt { background: var(--bg-alt); }
 
-/* Tour video in Features & controls: the same MacBook (frame and screen box) as the showcase, in a gray card
-   like the showcase and layouts cards. The render has the showcase's screen shape. */
-.tour { position: relative; display: flex; justify-content: center; overflow: hidden; margin-top: 56px; padding: 56px 0 48px; border-radius: 44px; background: var(--bg-alt); }
-/* The script pushes in on the whole MacBook (transform about its top-left corner); the card clips it. */
-.device-tour { width: min(100% - clamp(32px, 8%, 96px), 860px); transform-origin: 0 0; will-change: transform; }
+/* HUD explorer: the HUD alone as a panel, a preset switch above it, and its rows as short notes. The band outlines the
+   current row; nothing is dimmed. */
+.explorer { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: clamp(32px, 6vw, 72px); margin-top: 56px;
+  padding: clamp(28px, 5vw, 56px); border-radius: 44px; background: var(--bg-alt); }
+.explorer-hud { --hud: min(300px, 62vw); width: var(--hud); min-height: calc(var(--hud) * var(--tallest, 0) + 58px); }
+.explorer-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-bottom: 20px; padding: 3px; border-radius: 999px; background: var(--btn-gray-bg); }
+.explorer-presets[hidden] { display: none; }
+.explorer-presets button { padding: 6px 0; border: 0; border-radius: 999px; background: none; font: 500 14px/1.3 var(--font); letter-spacing: inherit; color: var(--muted); cursor: pointer; transition: background 0.2s, color 0.2s; }
+.explorer-presets button[aria-pressed="true"] { background: var(--bg); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.explorer-presets button:focus-visible, .explorer-list button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+/* The app's own floating look: 16 pt corners on the 285 pt wide HUD. Its shadow (black at 32%, 2 pt down, 6 pt
+   radius) was tuned for dark desktops, so on the page's light card it is the tight layer here, with a wider, softer
+   one under it for depth. Both scale with the panel's width. */
+.explorer-panel { position: relative; margin-inline: auto; cursor: default; --pt: calc(var(--hud) / 285);
+  filter: drop-shadow(0 calc(2 * var(--pt)) calc(8 * var(--pt)) rgba(0, 0, 0, 0.34)) drop-shadow(0 calc(16 * var(--pt)) calc(34 * var(--pt)) rgba(0, 0, 0, 0.3)); }
+/* With desktop around the glass, the still has the HUD's own shadow: a rounded tile, a little wider, no page shadow. */
+.explorer.is-tile .explorer-hud { --hud: min(330px, 68vw); }
+.explorer.is-tile .explorer-panel { overflow: hidden; border-radius: 22px; filter: none; }
+.explorer.is-tile .explorer-band { margin-inline: 4px; }
+.explorer-panel img { display: block; width: 100%; height: auto; }
+.explorer-panel img[hidden] { display: none !important; }
+.explorer-band { position: absolute; left: 0; right: 0; top: 0; height: 0; opacity: 0; pointer-events: none; border-radius: 8px; margin-inline: 5px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5); background: rgba(255, 255, 255, 0.05);
+  transition: top 0.3s cubic-bezier(0.3, 0, 0.2, 1), height 0.3s cubic-bezier(0.3, 0, 0.2, 1), opacity 0.3s; }
+.explorer.is-live .explorer-band { opacity: 1; }
+.explorer-list { list-style: none; margin: 0; padding: 46px 0 0; display: grid; gap: 2px; align-content: start; }
+.explorer-list li[hidden] { display: none; }
+.explorer-list button { display: block; width: 100%; padding: 9px 16px; border: 0; border-radius: 14px; background: none; font: inherit; letter-spacing: inherit;
+  text-align: left; color: var(--muted); cursor: pointer; transition: background 0.2s; }
+.explorer-list strong { display: block; font: 600 15px/1.35 var(--font-display); color: var(--text); }
+.explorer-list span { display: block; font-size: 15px; line-height: 1.4; }
+.explorer-list button[aria-current="true"] { background: var(--bg); }
+@media (max-width: 720px) {
+  .explorer { grid-template-columns: minmax(0, 1fr); justify-items: center; border-radius: 20px; }
+  .explorer-list { width: 100%; padding-top: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .explorer-band { transition: none; } }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-top: 64px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-top: 20px; }
 .tile { background: var(--card); border-radius: 28px; padding: 30px; margin: 0; color: var(--muted); }
 .tile strong { color: var(--text); font-weight: 600; }
 
@@ -269,7 +277,6 @@ p { margin: 0 0 1em; }
   .hero { padding: 128px 16px 0; }
   .section { padding: 88px 0; }
   .tiles { grid-template-columns: 1fr; gap: 16px; margin-top: 40px; }
-  .tour { margin-top: 36px; padding: 34px 0 30px; border-radius: 20px; }
   .faq h2 { margin-bottom: 36px; }
   .sysreq dl { grid-template-columns: 1fr; }
   .footer-cols { gap: 40px; }

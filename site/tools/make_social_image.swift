@@ -11,7 +11,7 @@ let background = NSColor(srgbRed: 0xf5 / 255, green: 0xf5 / 255, blue: 0xf7 / 25
 let deviceAspect = 1608.0 / 996.0
 let screenBox = (left: 0.08893, top: 0.032129, width: 0.821517, height: 0.871034)
 
-guard let poster = NSImage(contentsOf: media.appendingPathComponent("hero-screen-light-poster.jpg")),
+guard let poster = NSImage(contentsOf: media.appendingPathComponent("hero-screen-poster.jpg")),
       let frame = NSImage(contentsOf: media.appendingPathComponent("macbook-pro-14-silver.svg")) else {
     fatalError("Missing the poster or the frame in \(media.path)")
 }
