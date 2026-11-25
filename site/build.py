@@ -158,16 +158,18 @@ VERSIONS = {}
 
 
 def fingerprint(page):
-    """Add ?v=<hash of the file's contents> to quoted /style.css and /media/ URLs that exist in dist/."""
+    """Add ?v=<hash of the file's contents> to quoted /style.css and /media/ URLs that exist in dist/, including
+    the full-address ones in the link-preview tags (so a new preview image gets a new address too)."""
     def versioned(m):
-        url = m.group(1)
+        prefix, url = m.group(1) or "", m.group(2)
         file = DIST / url.lstrip("/")
         if not file.is_file():
             return m.group(0)
         if url not in VERSIONS:
             VERSIONS[url] = hashlib.sha256(file.read_bytes()).hexdigest()[:10]
-        return f"{url}?v={VERSIONS[url]}"
-    return re.sub(r'(?<=["\'])(/style\.css|/media/[^"\'?#\s]+)(?=["\'])', versioned, page)
+        return f"{prefix}{url}?v={VERSIONS[url]}"
+    site = re.escape(SITE["url"])
+    return re.sub(r'(?<=["\'])(' + site + r')?(/style\.css|/media/[^"\'?#\s]+)(?=["\'])', versioned, page)
 
 
 def write(path, content):
