@@ -11,6 +11,11 @@ nonisolated enum PowerHelperIdentity {
     static let app = "andrei.PerformanceHUD"
     static let service = "andrei.PerformanceHUD.PowerHelper"
     static let plist = service + ".plist"
+    // Raise this whenever the helper's code or this interface changes. The app
+    // asks to update an installed helper only when the number differs, not for
+    // every new build of unchanged code. Tests/PowerHelperTests fails if the
+    // helper's sources change without it.
+    static let revision = 1
 
     // Trust our signature, not editable preferences. Personal builds can use
     // another team's certificate provided both app and helper match.

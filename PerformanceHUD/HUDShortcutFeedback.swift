@@ -37,9 +37,6 @@ final class HUDShortcutFeedbackController {
     private let icon = NSImageView()
     private let label = NSTextField(labelWithString: "")
     private var timer: Timer?
-    private var shownAt: TimeInterval = 0
-    private var initialAlpha: CGFloat = 0
-    private var fades = true
     private let duration: TimeInterval = 1.5
 
     init() {
@@ -92,30 +89,18 @@ final class HUDShortcutFeedbackController {
         label.frame = label.frame(forAlignmentRect: NSRect(x: 42, y: (size.height - label.intrinsicContentSize.height) / 2,
             width: size.width - 58, height: label.intrinsicContentSize.height))
 
-        fades = !HUDAccessibility.reduceMotion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        initialAlpha = panel.isVisible ? panel.alphaValue : 0
-        panel.alphaValue = fades ? initialAlpha : 1
-        shownAt = ProcessInfo.processInfo.systemUptime
+        // The message appears and leaves at once, without a fade.
+        panel.alphaValue = 1
         panel.orderFrontRegardless()
-        let timer = Timer(timeInterval: fades ? 1 / 60 : duration, repeats: fades) { [weak self] timer in
+        let timer = Timer(timeInterval: duration, repeats: false) { [weak self] timer in
             MainActor.assumeIsolated {
                 guard let self, self.timer === timer else { return }
-                self.advance()
+                self.dismiss()
             }
         }
         timer.tolerance = 0.01
         self.timer = timer
         RunLoop.main.add(timer, forMode: .common)
-    }
-
-    private func advance() {
-        let elapsed = ProcessInfo.processInfo.systemUptime - shownAt
-        guard elapsed < duration else { dismiss(); return }
-        if fades {
-            let fadeIn = min(1, elapsed / 0.12)
-            let fadeOut = min(1, (duration - elapsed) / 0.22)
-            panel.alphaValue = min(initialAlpha + (1 - initialAlpha) * fadeIn, fadeOut)
-        }
     }
 
     func dismiss() {

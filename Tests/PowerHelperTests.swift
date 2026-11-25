@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 @main struct Tests {
     static func fixture(cpu: Any = 4250.0, gpu: Any = 1500.0, ane: Any? = 250.0,
@@ -11,6 +12,28 @@ import Foundation
     }
     static func check(_ condition: @autoclosure () -> Bool, _ message: String) {
         if !condition() { fatalError(message) }
+    }
+    // The app asks to update an installed helper only when PowerHelperIdentity.revision changes. If this fails,
+    // the helper's sources changed: raise the revision when its behaviour or interface did, then record the
+    // new fingerprint here with it.
+    static let helperRevision = 1
+    static let helperFingerprint = "c1b5c888128b18921710cd1ec2dd6818112863c3951cb12913b9209f68d4aba8"
+    static func helperSourceFingerprint() -> String {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        var files: [URL] = []
+        for folder in ["PowerHelper", "PowerHelperShared"] {
+            let urls = (try? FileManager.default.contentsOfDirectory(at: root.appendingPathComponent(folder),
+                                                                    includingPropertiesForKeys: nil)) ?? []
+            files += urls.filter { $0.pathExtension == "swift" }
+        }
+        var hash = SHA256()
+        for file in files.sorted(by: { $0.path < $1.path }) {
+            // The revision number itself is not part of the fingerprint.
+            let text = ((try? String(contentsOf: file, encoding: .utf8)) ?? "")
+                .replacingOccurrences(of: "static let revision = \(PowerHelperIdentity.revision)", with: "static let revision")
+            hash.update(data: Data(text.utf8))
+        }
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
     static func main() {
         if CommandLine.arguments.contains("--producer") {
@@ -25,6 +48,8 @@ import Foundation
             }
             return
         }
+        check(PowerHelperIdentity.revision == helperRevision && helperSourceFingerprint() == helperFingerprint,
+              "The helper's sources changed: update PowerHelperIdentity.revision and this test's fingerprint (\(helperSourceFingerprint()))")
         check(HUDMetric.battery.rawValue == 8 && HUDMetric(rawValue: 9) == nil && HUDMetric.fpsGraph.rawValue == 10,
               "removing Mac preserves all other metric identifiers")
         check(HUDMetric.allCases.allSatisfy { HUDAlignment.vertical.allows($0) }, "vertical permits all metric choices")

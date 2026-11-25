@@ -56,6 +56,16 @@ import Darwin
         let result = parser.consume(json.dropFirst(20)).first!
         check(result.resolution == resolution && result.fps == 60, "FPS and resolution must use the same largest layer")
         check(MetalMetricsParser(pid: 124).consume(json).isEmpty, "Never attribute another process's resolution")
+        // Streamed a byte at a time, with text before and between objects and braces inside strings.
+        let noisy = try JSONSerialization.data(withJSONObject: ["PID": 123, "Note": "a } brace { and a \\\" quote", "Layers": [
+            layer(width: 1920, height: 1080, fps: 48)]])
+        let stream = Data("preamble \"}\" text\n".utf8) + json + Data("\n between \n".utf8) + noisy
+        let byByte = MetalMetricsParser(pid: 123)
+        var streamed: [MetalPerfTraceMonitor.MetalMetrics] = []
+        for byte in stream { streamed += byByte.consume(Data([byte])) }
+        check(streamed.count == 2 && streamed[0].fps == 60 && streamed[1].fps == 48,
+              "Objects split across reads are each read once, in order")
+        check(byByte.consume(json).first?.fps == 60, "The parser is ready for the next object afterwards")
 
         let monitor = HUDMiscMonitor()
         var live = HUDMiscSample()

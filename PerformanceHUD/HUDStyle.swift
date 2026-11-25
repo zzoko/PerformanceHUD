@@ -295,6 +295,37 @@ enum HUDStyle {
 /// includes ancestor transforms. Measure HUD text once in logical coordinates
 /// so that changing the magnification cannot change its typographic metrics.
 @MainActor
+/// The small upward mark before a temperature that shows the hottest sensor
+/// instead of the average. It sits just left of the number, in the room the
+/// reading's slot leaves spare, and never adds width of its own.
+enum HUDHottestMark {
+    static let size = NSSize(width: 5, height: 4.5)
+    static let gap: CGFloat = 2
+
+    /// Where the mark goes for a number whose text starts at `textMinX`, on a
+    /// line with this baseline and font.
+    static func frame(leftOf textMinX: CGFloat, baseline: CGFloat, font: NSFont) -> NSRect {
+        NSRect(x: textMinX - gap - size.width, y: baseline + (font.capHeight - size.height) / 2,
+               width: size.width, height: size.height)
+    }
+
+    static func fill(_ rect: NSRect, color: NSColor) {
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: rect.minX, y: rect.minY))
+        path.line(to: NSPoint(x: rect.maxX, y: rect.minY))
+        path.line(to: NSPoint(x: rect.midX, y: rect.maxY))
+        path.close()
+        color.setFill()
+        path.fill()
+    }
+}
+
+final class HUDHottestMarkView: NSView {
+    var color = NSColor.secondaryLabelColor { didSet { if color != oldValue { needsDisplay = true } } }
+    override var isOpaque: Bool { false }
+    override func draw(_ dirtyRect: NSRect) { HUDHottestMark.fill(bounds, color: color) }
+}
+
 final class HUDReadingLabel: NSTextField {
     private static let measuringField = NSTextField(labelWithString: "")
     private var measuredFont: NSFont?

@@ -142,6 +142,7 @@ nonisolated final class MetalMetricsParser: @unchecked Sendable {
         // Bound malformed/incomplete output instead of retaining it indefinitely.
         guard incomingData.count + data.count <= Self.maximumBufferSize else {
             incomingData.removeAll(keepingCapacity: false)
+            resetScan()
             return []
         }
         incomingData.append(data)
@@ -152,33 +153,61 @@ nonisolated final class MetalMetricsParser: @unchecked Sendable {
         return updates
     }
 
+    // Where the scan of incomingData stopped, so an object that arrives in
+    // several pieces is read once instead of from the start for each piece.
+    private var scanned = 0
+    private var objectStart: Int?
+    private var depth = 0
+    private var insideString = false, escaped = false
+
+    private func resetScan() {
+        scanned = 0; objectStart = nil; depth = 0; insideString = false; escaped = false
+    }
+
     private func extractNextJSONObject() -> Data? {
-        var start: Int?
-        var depth = 0
-        var insideString = false, escaped = false
-        for (index, byte) in incomingData.enumerated() {
-            if insideString {
-                if escaped { escaped = false }
-                else if byte == 0x5C { escaped = true }
-                else if byte == 0x22 { insideString = false }
-                continue
-            }
-            // Ignore preamble text until an object begins.
-            if byte == 0x22 && depth > 0 { insideString = true }
-            else if byte == 0x7B {
-                if depth == 0 { start = index }
-                depth += 1
-            } else if byte == 0x7D && depth > 0 {
-                depth -= 1
-                if depth == 0, let start {
-                    let object = Data(incomingData.dropFirst(start).prefix(index + 1 - start))
-                    incomingData = Data(incomingData.dropFirst(index + 1))
-                    return object
+        var object: Data?
+        var consumed = 0
+        incomingData.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+            var index = scanned
+            while index < bytes.count {
+                let byte = bytes[index]
+                defer { index += 1 }
+                if insideString {
+                    if escaped { escaped = false }
+                    else if byte == 0x5C { escaped = true }
+                    else if byte == 0x22 { insideString = false }
+                    continue
+                }
+                // Ignore preamble text until an object begins.
+                if byte == 0x22 && depth > 0 { insideString = true }
+                else if byte == 0x7B {
+                    if depth == 0 { objectStart = index }
+                    depth += 1
+                } else if byte == 0x7D && depth > 0 {
+                    depth -= 1
+                    if depth == 0, let start = objectStart {
+                        object = Data(bytes[start...index])
+                        consumed = index + 1
+                        return
+                    }
                 }
             }
+            scanned = bytes.count
         }
-        if let start, start > 0 { incomingData = Data(incomingData.dropFirst(start)) }
-        else if start == nil { incomingData.removeAll(keepingCapacity: true) }
+        if let object {
+            incomingData.removeFirst(consumed)
+            resetScan()
+            return object
+        }
+        // Nothing complete yet: keep only an object that has begun.
+        if let start = objectStart, start > 0 {
+            incomingData.removeFirst(start)
+            scanned -= start
+            objectStart = 0
+        } else if objectStart == nil {
+            incomingData.removeAll(keepingCapacity: true)
+            scanned = 0
+        }
         return nil
     }
 

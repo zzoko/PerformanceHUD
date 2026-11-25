@@ -61,14 +61,17 @@ final class BatteryMonitor {
     private let poller = MetricPoller<BatteryObservation>(label: "PerformanceHUD.Battery")
     private var includesTemperature = false
     private var includesPower = false
-    func start(temperature: Bool = true, power: Bool = false) {
+    private var temperatureMode = HUDTemperatureMode.average
+    func start(temperature: Bool = true, power: Bool = false, mode: HUDTemperatureMode = .average) {
         guard availability != .unavailable else { return }
-        guard !poller.isRunning || includesTemperature != temperature || includesPower != power else { return }
+        guard !poller.isRunning || includesTemperature != temperature || includesPower != power
+                || temperatureMode != mode else { return }
         includesTemperature = temperature
         includesPower = power
+        temperatureMode = mode
         let reader = temperature || power ? SMCTemperatureReader() : nil
         poller.start(interval: 1, sample: {
-            BatteryReader.readBattery(sensorReader: reader, temperature: temperature, power: power)
+            BatteryReader.readBattery(sensorReader: reader, temperature: temperature, power: power, mode: mode)
         }) { [weak self] observation in
             guard let self else { return }
             if let observed = observation?.availability, observed != .unknown, observed != availability {
@@ -101,13 +104,13 @@ nonisolated private enum BatteryReader {
         return descriptions
     }
 
-    static func readBattery(sensorReader: SMCTemperatureReader?, temperature includesTemperature: Bool, power: Bool)
-        -> BatteryObservation
+    static func readBattery(sensorReader: SMCTemperatureReader?, temperature includesTemperature: Bool, power: Bool,
+                            mode: HUDTemperatureMode = .average) -> BatteryObservation
     {
         let descriptions = powerSourceDescriptions()
         let availability = BatteryAvailability.from(descriptions)
         if let description = descriptions?.first(where: BatteryAvailability.isInternalBattery) {
-            var temperature = includesTemperature ? sensorReader?.readBatteryTemperature(keepingConnectionForPower: power) : nil
+            var temperature = includesTemperature ? sensorReader?.readBatteryTemperature(keepingConnectionForPower: power, mode: mode) : nil
             let sensorPower = power ? sensorReader?.readBatteryPower() : nil
             // Fetch the controller snapshot only for missing sensor readings.
             let needsController = (power && sensorPower == nil) || (includesTemperature && temperature == nil)

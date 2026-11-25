@@ -1,6 +1,5 @@
 import AppKit
 import ServiceManagement
-import CryptoKit
 
 @MainActor
 final class PowerHelperClient {
@@ -29,6 +28,7 @@ final class PowerHelperClient {
     private(set) var lastError: String?
     private var lastStatus: SMAppService.Status?
     private var nextConnectionAttempt: TimeInterval = 0
+    private var idleTicks = 0
     private let revisionKey = "powerHelperInstalledRevision"
     private let promptKey = "powerHelperSetupOffered"
     private let restoreSelectionsKey = "powerHelperRestoreHUDSelections"
@@ -59,10 +59,12 @@ final class PowerHelperClient {
         guard let installed = UserDefaults.standard.string(forKey: revisionKey) else { return false }
         return installed != bundledRevision
     }
+    // Stored when the helper is registered. Releases before 4.1 stored a
+    // checksum of the helper's file, which never matches, so they update once.
     private lazy var bundledRevision: String? = {
         let url = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/" + PowerHelperIdentity.service)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        guard FileManager.default.isExecutableFile(atPath: url.path) else { return nil }
+        return "revision \(PowerHelperIdentity.revision)"
     }()
 
     init() {
@@ -228,7 +230,8 @@ final class PowerHelperClient {
     private func connectionFailed(_ message: String) {
         lastError = message
         if recoverApprovedHelper() { return }
-        nextConnectionAttempt = Date.timeIntervalSinceReferenceDate + 10
+        // Uptime, like the rest of the app: a clock change must not hold back the next attempt.
+        nextConnectionAttempt = ProcessInfo.processInfo.systemUptime + 10
         let confirmed = health.connectionFailed()
         disconnect()
         if confirmed { startupFailed = true }
@@ -245,14 +248,18 @@ final class PowerHelperClient {
     }
 
     private func tick() {
-        refreshStatus()
+        // Asking macOS for the helper's status is only worth doing every second
+        // while a reading wants it or an approval is pending. Otherwise check
+        // every ten seconds; opening the menu refreshes it at once.
+        idleTicks = desired || busy || lastStatus == nil || lastStatus == .requiresApproval ? 0 : (idleTicks + 1) % 10
+        if idleTicks == 0 { refreshStatus() }
         guard desired, !sleeping, canReadPower else {
             if connection != nil || pendingRequest != nil { disconnect() }
             return
         }
         guard pendingRequest == nil else { return }
         if connection == nil {
-            guard Date.timeIntervalSinceReferenceDate >= nextConnectionAttempt else { return }
+            guard ProcessInfo.processInfo.systemUptime >= nextConnectionAttempt else { return }
             guard let requirement = PowerHelperIdentity.requirement(for: PowerHelperIdentity.service) else {
                 startupFailed = true
                 lastError = "This app needs an Apple signing certificate to connect to the power helper."

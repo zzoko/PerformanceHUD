@@ -40,7 +40,8 @@ final class HUDCSVLogger {
     }
 
     func start(columns: [HUDLogColumn], recoveryDirectory: URL, at date: Date = Date(),
-               scheduled: Bool = true, enabledColumns: @escaping () -> Set<HUDLogColumn>,
+               scheduled: Bool = true, temperatureMode: HUDTemperatureMode = .average,
+               enabledColumns: @escaping () -> Set<HUDLogColumn>,
                sample: @escaping () -> HUDLogSnapshot) throws {
         guard !isLogging else { throw Failure.alreadyLogging }
         guard !columns.isEmpty else { throw Failure.noReadings }
@@ -52,7 +53,7 @@ final class HUDCSVLogger {
         fileName = "PerformanceHUD-\(formatter.string(from: date)).csv"
         let url = recoveryDirectory.appendingPathComponent(UUID().uuidString + ".csv")
         // UTF-8 BOM helps spreadsheet apps recognize the degree sign in headers.
-        let header = "\u{FEFF}" + Self.row(["Time"] + columns.map(\.title))
+        let header = "\u{FEFF}" + Self.row(["Time"] + columns.map { $0.title(temperatureMode: temperatureMode) })
         try Data(header.utf8).write(to: url, options: .atomic)
         do {
             try files.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
@@ -70,7 +71,10 @@ final class HUDCSVLogger {
         do { try record(at: date) }
         catch { endWriting(); throw error }
         if scheduled {
-            let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            // Rows are stamped in whole seconds. Sample in the middle of each one
+            // after the first, so timer jitter can never repeat or skip a second.
+            let nextSecond = (date.timeIntervalSinceReferenceDate.rounded(.down) + 1.5)
+            let timer = Timer(fire: Date(timeIntervalSinceReferenceDate: nextSecond), interval: 1, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.tick() }
             }
             timer.tolerance = 0.05

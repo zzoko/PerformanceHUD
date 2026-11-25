@@ -32,9 +32,11 @@ struct HUDPresetConfiguration: Codable, Equatable {
     var cpuCores = HUDCoreOptions.cpuDefault
     var gpuCores = HUDCoreOptions.gpuDefault
     var menuBarReadings: Set<HUDMenuBarReading> = []
+    var temperatureMode = HUDTemperatureMode.average
 
     private enum CodingKeys: String, CodingKey {
         case fps, resources, packagePower, fans, battery, misc, storage, deviceInfo, menuBarReadings, process, cpuCores, gpuCores
+        case temperatureMode
     }
 
     static func capture(in store: UserDefaults = .standard) -> Self {
@@ -48,7 +50,8 @@ struct HUDPresetConfiguration: Codable, Equatable {
              misc: HUDPreferences.miscOptions(in: store),
              storage: HUDPreferences.storageOptions(in: store),
              process: HUDPreferences.processOptions(in: store), cpuCores: HUDPreferences.cpuCoreOptions(in: store), gpuCores: HUDPreferences.gpuCoreOptions(in: store),
-             menuBarReadings: HUDMenuBarOptions.load(in: store).readings)
+             menuBarReadings: HUDMenuBarOptions.load(in: store).readings,
+             temperatureMode: HUDPreferences.temperatureMode(in: store))
             .canonicalized()
     }
 
@@ -72,6 +75,7 @@ struct HUDPresetConfiguration: Codable, Equatable {
         var menuBar = HUDMenuBarOptions.load(in: store)
         menuBar.readings = configuration.menuBarReadings
         menuBar.save(in: store)
+        HUDPreferences.setTemperatureMode(configuration.temperatureMode, in: store)
     }
 
     static func builtIn(_ preset: HUDBuiltInPreset) -> Self {
@@ -179,6 +183,7 @@ extension HUDPresetConfiguration {
         try values.encode(battery, forKey: .battery)
         try values.encode(misc, forKey: .misc)
         try values.encode(menuBarReadings, forKey: .menuBarReadings)
+        try values.encode(temperatureMode, forKey: .temperatureMode)
     }
 
     init(from decoder: Decoder) throws {
@@ -204,6 +209,8 @@ extension HUDPresetConfiguration {
         misc.readings.remove(.process)
         // Presets saved before menu-bar readings existed retain an all-off selection.
         menuBarReadings = try values.decodeIfPresent(Set<HUDMenuBarReading>.self, forKey: .menuBarReadings) ?? []
+        // Presets saved before 4.1 show the average, as every temperature did then.
+        temperatureMode = (try? values.decodeIfPresent(HUDTemperatureMode.self, forKey: .temperatureMode)) ?? .average
     }
 }
 

@@ -65,9 +65,10 @@ import AppKit
             let socDivider = dividers[0].frame
             precondition(soc.frame.minX == 0)
             precondition(watts.alignmentRect(forFrame: watts.frame).minX - soc.alignmentRect(forFrame: soc.frame).maxX == 8)
-            precondition(memory.frame.minX - watts.frame.maxX == 16)
+            // 16.5 pt: a 1.5 pt divider then has a whole, equal number of pixels on each side.
+            precondition(memory.frame.minX - watts.frame.maxX == 16.5)
             precondition(socDivider.midX == (watts.frame.maxX + memory.frame.minX) / 2)
-            precondition(strip.battery.frame.minX - usage.frame.maxX == 16)
+            precondition(strip.battery.frame.minX - usage.frame.maxX == 16.5)
             precondition(dividers[1].frame.midX == (usage.frame.maxX + strip.battery.frame.minX) / 2)
 
             let size = strip.configure(sections: withoutMemory, showsBattery: true, background: .dark)
@@ -87,7 +88,7 @@ import AppKit
             let visible = lines.filter { !$0.isHidden }
             precondition(visible.count == boundaries.count)
             for (line, (left, right)) in zip(visible, boundaries) {
-                precondition(abs(right - left - 16) < 0.001)
+                precondition(abs(right - left - 16.5) < 0.001)
                 precondition(abs(line.frame.midX - (left + right) / 2) < 0.001)
             }
         }
@@ -384,19 +385,22 @@ import AppKit
             let regularFont = HUDStyle.readingFont(highlighted: false)
             var normal = HUDHorizontalView.Reading(id: "pressure", text: "normal", reference: "normal",
                 font: regularFont, color: .white, help: nil, startsMetric: false, pressureMode: .text)
-            _ = spacingPreview.configure(sections: [[normal]], showsBattery: false, background: .dark)
-            let labels: [String: NSTextField] = member(spacingPreview, "labels")
-            let normalLabel = labels["pressure"]!
-            let normalWidth = normalLabel.alignmentRect(forFrame: normalLabel.frame).width
+            // The meter is spaced like the word "normal": right-aligned in its slot like every reading, with the
+            // spare room that word has in the slot reserved for "warning".
+            let insets = NSTextField(labelWithString: "").alignmentRectInsets
+            let wordSlot = HUDStyle.horizontalColumnWidth(text: "normal", reference: "warning", font: regularFont,
+                                                          sizingFont: HUDStyle.readingFont(highlighted: true))
+            let wordInk = NSAttributedString(string: "normal", attributes: [.font: regularFont]).size().width
             for mode in [HUDMemoryPressureMode.meter, .colorMeter] {
                 normal.pressureMode = mode
                 let size = spacingPreview.configure(sections: [[normal]], showsBattery: false,
                                                     background: .dark)
                 let meters: [String: HUDMemoryPressureMeterView] = member(spacingPreview, "pressureMeters")
                 let rect = meters["pressure"]!.frame
-                check(size.width == normalWidth, "Horizontal meters occupy the normal text column without text-edge insets")
-                check(rect.minX > 0 && abs(rect.minX - (size.width - rect.maxX)) < 0.01,
-                      "Horizontal meters have equal breathing room on both sides")
+                check(abs(rect.minX - (wordSlot - wordInk)) <= 0.5,
+                      "A horizontal meter has the same spare room before it as the word normal")
+                check(size.width == rect.maxX + insets.right && rect.maxX == rect.maxX.rounded(),
+                      "A horizontal meter is right-aligned in a whole-point slot, with the text edge inset after it")
                 for state in ["warning", "critical", ""] {
                     let reading = HUDHorizontalView.Reading(id: "pressure", text: state, reference: "warning",
                         font: HUDStyle.readingFont(highlighted: true), color: .white,

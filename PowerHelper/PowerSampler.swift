@@ -14,6 +14,7 @@ final class PowerSampler {
     private var stopping = false
     private var buffer = Data()
     private var reading: HelperPowerReading?
+    private var readingAt: TimeInterval = 0   // uptime, so a clock change cannot make a fresh reading look stale
     private var launchedAt: TimeInterval = 0
     private var lastValidOutput: TimeInterval?
     private static let startupTimeout: TimeInterval = 10
@@ -56,7 +57,7 @@ final class PowerSampler {
             self.startTimer()
             self.leases[client] = ProcessInfo.processInfo.systemUptime + 5
             self.maintain()
-            if let reading = self.reading, abs(reading.timestamp.timeIntervalSinceNow) < 3 {
+            if let reading = self.reading, ProcessInfo.processInfo.systemUptime - self.readingAt < 3 {
                 reply(reading.reply)
             } else {
                 reply([:])
@@ -165,6 +166,7 @@ final class PowerSampler {
             if let sample = HelperPowerReading.parse(data) {
                 reading = sample
                 lastValidOutput = ProcessInfo.processInfo.systemUptime
+                readingAt = lastValidOutput ?? 0
             }
         }
     }

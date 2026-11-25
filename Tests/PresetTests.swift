@@ -16,6 +16,33 @@ import AppKit
 
         let balanced = HUDPresetConfiguration.builtIn(.balanced)
         let fpsOnly = HUDPresetConfiguration.builtIn(.fpsOnly)
+
+        // Temperature: Average or Hottest is one choice for GPU, CPU and Battery, saved in presets.
+        check(HUDBuiltInPreset.allCases.allSatisfy { HUDPresetConfiguration.builtIn($0).temperatureMode == .average }
+              && HUDPreferences.temperatureMode(in: defaults) == .average, "Temperatures show the average by default")
+        var hottest = balanced
+        hottest.temperatureMode = .hottest
+        check(!hottest.matches(balanced), "Choosing the hottest sensor makes a different preset")
+        hottest.apply(in: defaults)
+        check(HUDPreferences.temperatureMode(in: defaults) == .hottest
+              && HUDPresetConfiguration.capture(in: defaults).temperatureMode == .hottest, "A preset applies and captures the temperature choice")
+        let hottestData = try JSONEncoder().encode(hottest)
+        check(try JSONDecoder().decode(HUDPresetConfiguration.self, from: hottestData) == hottest, "The temperature choice survives saving")
+        var older = try JSONSerialization.jsonObject(with: hottestData) as! [String: Any]
+        older.removeValue(forKey: "temperatureMode")
+        check(try JSONDecoder().decode(HUDPresetConfiguration.self, from: JSONSerialization.data(withJSONObject: older)).temperatureMode == .average,
+              "A preset saved before 4.1 keeps showing the average")
+        balanced.apply(in: defaults)
+        check(HUDPreferences.temperatureMode(in: defaults) == .average, "Returning to a built-in preset restores the average")
+        HUDPreferences.setTemperatureMode(.hottest, in: defaults)
+        HUDPreferences.resetOptions(in: defaults)
+        check(HUDPreferences.temperatureMode(in: defaults) == .average, "Reset restores the average")
+        check(SMCTemperatureReader.reading([61, 78, 64], mode: .average) == (61.0 + 78 + 64) / 3
+              && SMCTemperatureReader.reading([61, 78, 64], mode: .hottest) == 78, "Average and hottest of one part's sensors")
+        check(SMCTemperatureReader.reading([61, 400, -3, .nan], mode: .hottest) == 61
+              && SMCTemperatureReader.reading([], mode: .hottest) == nil && SMCTemperatureReader.average([40, 60]) == 50,
+              "Implausible sensor values never become the hottest reading")
+        clear()
         let full = HUDPresetConfiguration.builtIn(.full)
         var presets = HUDPresetStore(in: defaults)
         check(HUDBuiltInPreset.allCases.map(\.title) == ["FPS", "Balanced", "Detailed"],

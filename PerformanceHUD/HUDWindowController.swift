@@ -104,6 +104,8 @@ final class HUDWindowController {
     private var miscOptions = HUDPreferences.miscOptions
 
     private var temperatureLabels: [HUDMetric: NSTextField] = [:]
+    private var temperatureMarks: [HUDMetric: HUDHottestMarkView] = [:]
+    private var temperatureMode = HUDPreferences.temperatureMode
     private var temperatures: [HUDMetric: Double] = [:]
     private var temperatureWarnings: [HUDMetric: HUDHeatWarningOptions] = Dictionary(uniqueKeysWithValues:
         [HUDResourceGroup.cpu, .gpu].map { ($0.totalMetric, HUDPreferences.resourceOptions(for: $0).heatWarning) })
@@ -255,6 +257,8 @@ final class HUDWindowController {
         createMetricRows()
 
         autoHidePresentation.onChange = { [weak self] in self?.applyHUDPresentation() }
+        batteryIndicator.temperatureMode = temperatureMode
+        horizontalView.battery.temperatureMode = temperatureMode
         updateLayout()
         restorePosition()
         panel.onDragFinished = { [weak self] in
@@ -521,6 +525,16 @@ final class HUDWindowController {
             if let field = temperatureLabels[metric], let edge = temperatureTrailing[metric] {
                 row.place(field, top: valueTop, trailing: edge)
             }
+            if let mark = temperatureMarks[metric], let field = temperatureLabels[metric] {
+                let shown = temperatureMode == .hottest && !field.isHidden && !field.stringValue.isEmpty
+                mark.isHidden = !shown
+                if shown, let font = field.font {
+                    let text = field.alignmentRect(forFrame: field.frame)
+                    mark.color = HUDStyle.TextStyle.label.color(background: textBackground)
+                    mark.frame = HUDHottestMark.frame(leftOf: text.minX,
+                        baseline: text.maxY - field.firstBaselineOffsetFromTop, font: font)
+                }
+            }
             if let field = powerLabels[metric], let edge = powerTrailing[metric] {
                 row.place(field, top: valueTop, trailing: edge)
             }
@@ -534,6 +548,10 @@ final class HUDWindowController {
             temperature.isHidden = true
             row.addSubview(temperature)
             temperatureLabels[metric] = temperature
+            let mark = HUDHottestMarkView()
+            mark.isHidden = true
+            row.addSubview(mark)
+            temperatureMarks[metric] = mark
         }
 
         if [.gpuTotal, .cpuTotal, .aneTotal].contains(metric) {
@@ -826,12 +844,13 @@ final class HUDWindowController {
         layoutPresentation = LayoutPresentation(size: size, outgoing: snapshot, kind: kind)
     }
 
-    private func animateToMeasuredLayout() {
+    private func animateToMeasuredLayout(continuing: Bool = false) {
         guard let presentation = layoutPresentation, hasVisibleContent, !isAutomaticallyHidden else {
             finishLayoutAnimation()
             return
         }
-        let path = HUDLayoutTransition(from: presentation.size, to: settledHUDSize, kind: presentation.kind)
+        let path = HUDLayoutTransition(from: presentation.size, to: settledHUDSize, kind: presentation.kind,
+                                       continuing: continuing)
         guard path.duration > 0 else { finishLayoutAnimation(); return }
         let initial = path.frame(at: 0)
         presentation.outgoing.alphaValue = initial.outgoing
@@ -845,10 +864,11 @@ final class HUDWindowController {
                     return
                 }
                 // Hardware discovery or another menu action can change the fitting
-                // size mid-switch. Start from what is actually on screen.
+                // size mid-switch. Carry on from what is actually on screen, as
+                // one movement, instead of starting a second one.
                 if path.end != self.settledHUDSize {
                     self.captureOutgoingLayout(for: presentation.kind)
-                    self.animateToMeasuredLayout()
+                    self.animateToMeasuredLayout(continuing: true)
                     return
                 }
                 let elapsed = ProcessInfo.processInfo.systemUptime - started
@@ -905,6 +925,7 @@ final class HUDWindowController {
         // Apply every category before measuring or ordering the panel. A preset
         // may pass through an empty selection on the way to a visible one.
         applyingPreset = true
+        setTemperatureMode(preset.temperatureMode)
         cpuCoreOptions = preset.cpuCores
         gpuCoreOptions = preset.gpuCores.gpuFrequencyOnly
         for group in HUDResourceGroup.allCases {
@@ -963,6 +984,16 @@ final class HUDWindowController {
         // RPM changes only redraw the existing view; keep window geometry stable.
         if alignment == .horizontal { refreshHorizontalReadings() }
         else if fanView.height() != previousHeight { updateLayout() }
+    }
+
+    /// Average or hottest sensor, for GPU, CPU and battery together. Only the
+    /// small mark before each temperature changes; no size or column moves.
+    func setTemperatureMode(_ mode: HUDTemperatureMode) {
+        temperatureMode = mode
+        batteryIndicator.temperatureMode = mode
+        horizontalView.battery.temperatureMode = mode
+        for metric in temperatureMarks.keys { metricRows[metric]?.needsLayout = true }
+        refreshHorizontalReadings()
     }
 
     func setPackagePowerOptions(_ options: HUDPackagePowerOptions) {
@@ -1377,11 +1408,13 @@ final class HUDWindowController {
                       let title = titleLabels[metric] else { continue }
                 func append(_ field: NSTextField?, role: String, reference: String, title: Bool = false) {
                     guard let field, let font = field.font, let color = field.textColor else { return }
-                    readings.append(.init(id: "\(metric.rawValue).\(role)", text: field.stringValue,
+                    var reading = HUDHorizontalView.Reading(id: "\(metric.rawValue).\(role)", text: field.stringValue,
                         reference: reference, font: font, color: color, help: field.toolTip, startsMetric: title,
                         metric: metric,
                         sizingFont: metric == .fps && !title
-                            ? HUDStyle.fpsValueFont(highlighted: true, size: fpsValueSize) : nil))
+                            ? HUDStyle.fpsValueFont(highlighted: true, size: fpsValueSize) : nil)
+                    reading.hottestMark = role == "temperature" && temperatureMode == .hottest
+                    readings.append(reading)
                 }
                 append(title, role: "title", reference: title.stringValue, title: true)
                 if powerMetrics.contains(metric) { append(powerLabels[metric], role: "power", reference: HUDStyle.horizontalPowerReference) }
@@ -1694,6 +1727,9 @@ final class HUDWindowController {
         // Position the content from the measured divider edge, independently of
         // the rounded surface height, so the divider stays fixed across modes.
         let offset = progress == 1 ? 0 : (horizontal ? fullExtent - fpsExtent : fpsCollapseDistance * (1 - progress))
+        // The FPS readings never fade: they are simply there while they roll.
+        // Only the arrow that stands in for them eases in and out.
+        let fpsOpacity: CGFloat = progress > 0 ? 1 : 0
         // Keep the top-left anchor fixed while the native surface and window resize.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -1705,15 +1741,15 @@ final class HUDWindowController {
         }
         if horizontal {
             horizontalView.frame.origin.x = HUDStyle.horizontalPadding - offset
-            horizontalView.setFPSOpacity(progress)
+            horizontalView.setFPSOpacity(fpsOpacity)
         }
         backgroundContentView.wantsLayer = true
-        for metric in [HUDMetric.fps, .fpsGraph] { metricRows[metric]?.alphaValue = progress }
+        for metric in [HUDMetric.fps, .fpsGraph] { metricRows[metric]?.alphaValue = fpsOpacity }
         for divider in groupDividers.values {
-            (divider as? HUDSampleDividerView)?.setHistoryVisibility(progress)
+            (divider as? HUDSampleDividerView)?.setHistoryVisibility(fpsOpacity)
         }
-        // A quiet arrow points toward the space where FPS will return. Cross-fade
-        // it near the end of collapse so it does not overlap the regular FPS row.
+        // A quiet arrow points toward the space where FPS will return. It eases in
+        // near the end of the collapse, as the FPS rows leave that space.
         collapsedFPSIndicator.image = NSImage(systemSymbolName: horizontal ? "arrow.right" : "arrow.down",
             accessibilityDescription: "FPS enabled; collapsed while waiting for readings")
         collapsedFPSIndicator.isHidden = !usesFPSPresentation || progress >= 0.4

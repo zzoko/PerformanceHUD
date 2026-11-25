@@ -10,6 +10,8 @@ final class HUDBatteryIndicatorView: NSView {
     private var percentage: Double?
     private var source: BatterySample.Source?
     private var temperature: Double?
+    /// Average or hottest battery sensor; the hottest gets the small mark before it.
+    var temperatureMode = HUDTemperatureMode.average { didSet { if temperatureMode != oldValue { needsDisplay = true } } }
     private var power: Double?
     private var flowVisibility = BatteryFlowVisibility()
     private enum ChargeState { case draining, charging, idleOnAdapter }
@@ -326,10 +328,16 @@ final class HUDBatteryIndicatorView: NSView {
             ])
         }
         if !temperatureText.isEmpty {
-            (temperatureText as NSString).draw(at: temperatureTextRect.origin, withAttributes: [
+            let rect = temperatureTextRect
+            (temperatureText as NSString).draw(at: rect.origin, withAttributes: [
                 .font: temperatureFont,
                 .foregroundColor: temperatureColor
             ])
+            if temperatureMode == .hottest {
+                HUDHottestMark.fill(HUDHottestMark.frame(leftOf: rect.minX, baseline: rect.minY - temperatureFont.descender,
+                                                         font: temperatureFont),
+                                    color: HUDStyle.TextStyle.label.color(background: background))
+            }
         }
         guard options.charge, let percentage else { return }
         let iconScale = CGFloat(0.85)

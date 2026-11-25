@@ -19,6 +19,20 @@ enum HUDUsageMode: String, CaseIterable, Codable {
     case total, app, both
 }
 
+/// Which sensor a temperature reading shows: the mean of a part's sensors, or
+/// its hottest one. One choice for CPU, GPU and battery together.
+nonisolated enum HUDTemperatureMode: String, CaseIterable, Sendable, Codable {
+    case average, hottest
+
+    var title: String { self == .average ? "Average" : "Hottest" }
+
+    /// Combines one part's valid sensor readings.
+    func reading(_ values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
+        return self == .hottest ? values.max() : values.reduce(0, +) / Double(values.count)
+    }
+}
+
 nonisolated enum HUDMemoryPressureMode: String, CaseIterable, Sendable, Codable {
     case text, colorText, meter, colorMeter, history, colorHistory
 

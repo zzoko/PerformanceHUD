@@ -12,16 +12,18 @@ final class TemperatureMonitor {
     private let poller = MetricPoller<TemperatureSample>(label: "PerformanceHUD.Temperature")
     private var requestedCPU = false
     private var requestedGPU = false
+    private var requestedMode = HUDTemperatureMode.average
 
-    func configure(cpu: Bool, gpu: Bool) {
-        guard cpu != requestedCPU || gpu != requestedGPU else { return }
+    func configure(cpu: Bool, gpu: Bool, mode: HUDTemperatureMode = .average) {
+        guard cpu != requestedCPU || gpu != requestedGPU || mode != requestedMode else { return }
         requestedCPU = cpu
         requestedGPU = gpu
+        requestedMode = mode
         poller.stop()
         guard cpu || gpu else { return }
         // The reader and its IOKit connection are used only on the poller's serial queue.
         let reader = SMCTemperatureReader()
-        poller.start(interval: 2, sample: { reader.read(cpu: cpu, gpu: gpu) }, deliver: { [weak self] sample in
+        poller.start(interval: 2, sample: { reader.read(cpu: cpu, gpu: gpu, mode: mode) }, deliver: { [weak self] sample in
             self?.onUpdate?(sample ?? TemperatureSample(cpu: nil, gpu: nil))
         })
     }
@@ -49,7 +51,7 @@ nonisolated final class SMCTemperatureReader: @unchecked Sendable {
 
     deinit { close() }
 
-    func read(cpu: Bool, gpu: Bool) -> TemperatureSample {
+    func read(cpu: Bool, gpu: Bool, mode: HUDTemperatureMode = .average) -> TemperatureSample {
         if connection == 0 {
             let now = ProcessInfo.processInfo.systemUptime
             guard now >= nextOpenAttempt else { return TemperatureSample(cpu: nil, gpu: nil) }
@@ -57,23 +59,25 @@ nonisolated final class SMCTemperatureReader: @unchecked Sendable {
             guard open() else { return TemperatureSample(cpu: nil, gpu: nil) }
             discoverSensors()
         }
-        let cpuValue = cpu ? Self.average(cpuKeys.compactMap { temperature(for: $0) }) : nil
-        let gpuValue = gpu ? Self.average(gpuKeys.compactMap { temperature(for: $0) }) : nil
+        let cpuValue = cpu ? Self.reading(cpuKeys.compactMap { temperature(for: $0) }, mode: mode) : nil
+        let gpuValue = gpu ? Self.reading(gpuKeys.compactMap { temperature(for: $0) }, mode: mode) : nil
         if (cpu && !cpuKeys.isEmpty || gpu && !gpuKeys.isEmpty), cpuValue == nil && gpuValue == nil {
             close() // Reconnect after a sleep/wake or an unavailable SMC service.
         }
         return TemperatureSample(cpu: cpuValue, gpu: gpuValue)
     }
 
-    static func average(_ values: [Double]) -> Double? {
-        let valid = values.filter { $0.isFinite && $0 > 0 && $0 < 150 }
-        guard !valid.isEmpty else { return nil }
-        return valid.reduce(0, +) / Double(valid.count)
+    static func average(_ values: [Double]) -> Double? { reading(values, mode: .average) }
+
+    /// One part's temperature from its sensors: their mean, or the hottest one.
+    /// Implausible sensor values never count either way.
+    static func reading(_ values: [Double], mode: HUDTemperatureMode) -> Double? {
+        mode.reading(values.filter { $0.isFinite && $0 > 0 && $0 < 150 })
     }
 
     // Battery sensor names and the controller fallback follow Stats' battery reader.
     // These identify the battery pack, not nearby CPU/GPU or enclosure sensors.
-    func readBatteryTemperature(keepingConnectionForPower: Bool = false) -> Double? {
+    func readBatteryTemperature(keepingConnectionForPower: Bool = false, mode: HUDTemperatureMode = .average) -> Double? {
         if connection == 0 {
             let now = ProcessInfo.processInfo.systemUptime
             guard now >= nextOpenAttempt else { return nil }
@@ -88,7 +92,7 @@ nonisolated final class SMCTemperatureReader: @unchecked Sendable {
             if !keepingConnectionForPower { close() }
             return nil
         }
-        return readings.reduce(0, +) / Double(readings.count)
+        return mode.reading(readings)
     }
 
     // Read live signed current and voltage because AppleSmartBattery's

@@ -111,10 +111,12 @@ enum HUDMenuBarPresentation {
             }
             if temperature {
                 let column: HUDLogColumn = gpu ? .gpuTemperature : .cpuTemperature
-                resources.append(value(metric, role: "temperature", text: text(column, suffix: "°C"),
+                var reading = value(metric, role: "temperature", text: text(column, suffix: "°C"),
                     reference: HUDStyle.horizontalTemperatureReference,
                     highlighted: options.highlighted.contains(.temperature),
-                    color: HUDStyle.temperatureColor(number(column), warning: options.heatWarning, background: background)))
+                    color: HUDStyle.temperatureColor(number(column), warning: options.heatWarning, background: background))
+                reading.hottestMark = HUDPreferences.temperatureMode == .hottest
+                resources.append(reading)
             }
             if usage {
                 resources.append(value(metric, role: "value", text: text(gpu ? .gpuUsage : .cpuUsage, suffix: "%"),

@@ -35,6 +35,7 @@ final class HUDHorizontalView: NSView {
         var sizingFont: NSFont? = nil
         var pressureMode: HUDMemoryPressureMode? = nil
         var coreRows: [CoreRow]? = nil
+        var hottestMark = false // A temperature from the hottest sensor, not the average.
     }
 
     static func memoryDetails(swap: String, physical: String, valueFont: NSFont, background: HUDBackground) -> [Reading] {
@@ -139,6 +140,7 @@ final class HUDHorizontalView: NSView {
     private var bars: [String: HUDFanBarView] = [:]
     private var coreBars: [String: HUDCPUCoreBarsView] = [:]
     private var pressureMeters: [String: HUDMemoryPressureMeterView] = [:]
+    private var hottestMarks: [String: HUDHottestMarkView] = [:]
 
     private let makeReadingLabel: @MainActor () -> NSTextField
 
@@ -233,16 +235,21 @@ final class HUDHorizontalView: NSView {
         coreBars.values.forEach { $0.isHidden = true }
         bars.values.forEach { $0.isHidden = true }
         pressureMeters.values.forEach { $0.isHidden = true }
+        hottestMarks.values.forEach { $0.isHidden = true }
         dividers.forEach { $0.isHidden = true }
         storage.isHidden = true
         battery.isHidden = !showsBattery
         battery.applyStyle(background: background)
         var x: CGFloat = 0
         var dividerIndex = 0
+        // 16.5 pt, not 16: at two pixels per point both dividers then leave a
+        // whole, equal number of pixels on each side (15 and 16), so the line
+        // sits exactly in the middle instead of half a point off.
+        let dividerGap: CGFloat = 16.5, dividerWidth: CGFloat = 1.5
         func addDivider(faint: Bool = false) {
             guard x > 0 else { return }
-            let width: CGFloat = faint ? 0.5 : 1.5
-            let padding = (16 - width) / 2
+            let width: CGFloat = faint ? 0.5 : dividerWidth
+            let padding = (dividerGap - width) / 2
             x += padding
             if dividerIndex == dividers.count {
                 let divider = NSView()
@@ -258,10 +265,16 @@ final class HUDHorizontalView: NSView {
             divider.frame = NSRect(x: x, y: 2, width: width, height: max(0, height - 4))
             x += padding + width
         }
+        // Text labels carry a side inset, which sets how close a section's first
+        // and last readings sit to its dividers. Badges, bars, meters and the
+        // Storage block get the same inset, so every section keeps that distance.
+        let edgeInsets = NSTextField(labelWithString: "").alignmentRectInsets
         func placeRow(_ section: ArraySlice<Reading>, offsetY: CGFloat = 0) {
             let rowStart = x
             for index in section.indices {
                 let reading = section[index]
+                let opensSection = index == section.startIndex || reading.startsMetric
+                let closesSection = index + 1 == section.endIndex || section[index + 1].startsMetric
                 if index > section.startIndex {
                     if reading.startsMetric {
                         let sameFanCategory = reading.metric == .fans && section[index - 1].metric == .fans
@@ -274,10 +287,12 @@ final class HUDHorizontalView: NSView {
                     }
                 }
                 if reading.metric == .storage {
+                    if opensSection { x += edgeInsets.left }
                     let size = storage.contentSize
                     storage.frame = NSRect(x: x, y: (height - size.height) / 2, width: size.width, height: size.height)
                     storage.isHidden = false
                     x += size.width
+                    if closesSection { x += edgeInsets.right }
                     continue
                 }
                 if let rows = reading.coreRows {
@@ -287,6 +302,7 @@ final class HUDHorizontalView: NSView {
                         x = placeCoreRows(rows[start..<min(start + rowsPerColumn, rows.count)], at: x,
                             centerY: height / 2, reading: reading, background: background)
                     }
+                    if closesSection { x += edgeInsets.right }
                     continue
                 }
                 if let mode = reading.pressureMode, mode.display == .meter {
@@ -300,16 +316,21 @@ final class HUDHorizontalView: NSView {
                     meter.configure(mode: mode, background: background, stacked: true)
                     meter.update(reading.text)
                     let size = meter.intrinsicContentSize
-                    // Centre the compact bars in a normal-pressure word slot.
-                    // This padding is stable across states and text emphasis.
+                    // Space the meter like the word "normal", the state it shows
+                    // almost always: right-aligned in its slot like every reading,
+                    // with the spare room that word has in the slot reserved for
+                    // "warning". Emphasis never changes the meter, so use regular type.
                     let normalFont = HUDStyle.readingFont(highlighted: false)
-                    let slotWidth = max(size.width, HUDStyle.horizontalColumnWidth(
-                        text: "normal", reference: "normal", font: normalFont))
-                    let capHeight = HUDStyle.readingFont(highlighted: false).capHeight
-                    meter.frame = NSRect(x: x + (slotWidth - size.width) / 2,
+                    let wordSlot = HUDStyle.horizontalColumnWidth(text: "normal", reference: "warning",
+                        font: normalFont, sizingFont: HUDStyle.readingFont(highlighted: true))
+                    let wordWidth = NSAttributedString(string: "normal", attributes: [.font: normalFont]).size().width
+                    let slotWidth = max(size.width, (size.width + wordSlot - wordWidth).rounded())
+                    let capHeight = normalFont.capHeight
+                    meter.frame = NSRect(x: x + slotWidth - size.width,
                                          y: baseline + (capHeight - size.height) / 2,
                                          width: size.width, height: size.height)
                     x += slotWidth
+                    if closesSection { x += edgeInsets.right }
                     continue
                 }
                 if let barWidth = reading.barWidth {
@@ -327,6 +348,7 @@ final class HUDHorizontalView: NSView {
                                        width: barWidth, height: barHeight)
                     bar.needsDisplay = true
                     x += bar.frame.width
+                    if closesSection { x += edgeInsets.right }
                     continue
                 }
                 if let marker = reading.fanMarker {
@@ -340,6 +362,7 @@ final class HUDHorizontalView: NSView {
                     icon.setAccessibilityRole(.image)
                     icon.setAccessibilityLabel(reading.help ?? reading.text)
                     let side = HUDFanIcon.side
+                    if opensSection { x += edgeInsets.left }
                     icon.frame = NSRect(x: x, y: offsetY + (height - side) / 2, width: side, height: side)
                     x += side
                     continue
@@ -378,17 +401,25 @@ final class HUDHorizontalView: NSView {
                 // Intrinsic size describes the alignment rectangle. NSTextField
                 // also needs its side insets in the frame, or it clips glyphs.
                 // At divider and outer edges, keep the full label frame inside its section.
-                if index == section.startIndex || reading.startsMetric { x += label.alignmentRectInsets.left }
+                if opensSection { x += label.alignmentRectInsets.left }
                 let isLargeFPS = reading.metric == .fps && !reading.startsMetric && fpsSize == .enlarged
                 let y = isLargeFPS ? (height - labelHeight) / 2
                     : baseline - labelHeight + label.firstBaselineOffsetFromTop
                 let alignmentRect = NSRect(x: x, y: offsetY + y,
                                            width: width, height: labelHeight)
                 label.frame = label.frame(forAlignmentRect: alignmentRect)
-                x += width
-                if index + 1 == section.endIndex || section[index + 1].startsMetric {
-                    x += label.alignmentRectInsets.right
+                if reading.hottestMark && !reading.text.isEmpty {
+                    // Just left of the right-aligned number, in its slot's spare room
+                    // (or the reading gap at three digits). It takes no width itself.
+                    let mark = hottestMarks[reading.id] ?? HUDHottestMarkView()
+                    if hottestMarks[reading.id] == nil { hottestMarks[reading.id] = mark; addSubview(mark) }
+                    mark.isHidden = false
+                    mark.color = HUDStyle.TextStyle.label.color(background: background)
+                    mark.frame = HUDHottestMark.frame(leftOf: alignmentRect.maxX - label.intrinsicContentSize.width,
+                        baseline: alignmentRect.maxY - label.firstBaselineOffsetFromTop, font: reading.font)
                 }
+                x += width
+                if closesSection { x += label.alignmentRectInsets.right }
             }
         }
         for section in sections where !section.isEmpty {

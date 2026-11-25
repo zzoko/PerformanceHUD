@@ -117,6 +117,15 @@ import AppKit
     }
 
     @MainActor static func main() {
+        // Turning Storage off does not empty the HUD's drives: it hides them itself and shows them again at
+        // once when Storage comes back, instead of a sample later.
+        let quiet = StorageMonitor()
+        var pushes = 0
+        quiet.onUpdate = { _ in pushes += 1 }
+        quiet.configure(nil)
+        quiet.configure(HUDStorageOptions(enabled: true).monitoringOptions)
+        quiet.configure(nil)
+        precondition(pushes == 0, "Stopping storage monitoring never pushes an empty drive list")
         _ = NSApplication.shared
         let drives = grouping()
         freeSpaceFormattingAndWidth()

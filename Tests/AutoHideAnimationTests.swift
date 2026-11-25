@@ -26,14 +26,37 @@ import AppKit
         let reveal = HUDFPSAvailability.animationDuration
         let taller = CGSize(width: tall.width, height: tall.height + 21)
         let narrower = CGSize(width: wide.width - 40, height: wide.height)
-        for (start, end) in [(tall, taller), (wide, narrower), (tall, tall)] {
+        let short = CGSize(width: tall.width, height: 49)
+        // A preset resize moves at the auto-hide pace: the reveal time scaled by how much of the larger size
+        // changes, on both axes together, and never shorter than the minimum.
+        for (start, end, expected) in [(tall, taller, HUDLayoutTransition.minimumPresetDuration),
+                                       (wide, narrower, HUDLayoutTransition.minimumPresetDuration),
+                                       (short, tall, reveal * (398.5 - 49) / 398.5),
+                                       (tall, short, reveal * (398.5 - 49) / 398.5),
+                                       (tall, tall, 0)] {
             let preset = HUDLayoutTransition(from: start, to: end, kind: .preset)
-            precondition(preset.duration == (start == end ? 0 : reveal))
-            let size = preset.frame(at: reveal / 4).size
+            precondition(abs(preset.duration - expected) < 0.000001)
+            precondition(preset.duration <= reveal, "Never slower than a full auto-hide reveal")
+            let size = preset.frame(at: preset.duration / 4).size
             // Auto-hide's smoothstep covers 15.625% of the distance at one quarter of its duration.
-            precondition(size.width == start.width + (end.width - start.width) * 0.15625)
-            precondition(size.height == start.height + (end.height - start.height) * 0.15625)
+            precondition(abs(size.width - (start.width + (end.width - start.width) * 0.15625)) < 0.000001)
+            precondition(abs(size.height - (start.height + (end.height - start.height) * 0.15625)) < 0.000001)
+            // No fades: growing shows the new readings from the first frame, shrinking keeps the old to the last.
+            guard preset.duration > 0 else { continue }
+            let grows = end.width * end.height > start.width * start.height
+            for time in [0, preset.duration / 2, preset.duration * 0.99] {
+                let frame = preset.frame(at: time)
+                precondition(frame.outgoing == (grows ? 0 : 1) && frame.incoming == (grows ? 1 : 0))
+            }
+            precondition(preset.frame(at: preset.duration).incoming == 1 && preset.frame(at: preset.duration).outgoing == 0)
         }
+        // A size that changes mid-flight carries on as one movement: no second ease-in, no minimum, and only
+        // the time its remaining distance needs.
+        let late = HUDLayoutTransition(from: tall, to: taller, kind: .preset, continuing: true)
+        precondition(abs(late.duration - reveal * 21 / (398.5 + 21)) < 0.000001 && late.duration < HUDLayoutTransition.minimumPresetDuration)
+        let lateQuarter = late.frame(at: late.duration / 4).size.height
+        precondition(abs(lateQuarter - (tall.height + 21 * 0.4375)) < 0.000001, "Ease-out: already moving at the start")
+        precondition(late.frame(at: late.duration).size == taller)
         for (start, end) in [(tall, wide), (wide, tall)] {
             let path = HUDLayoutTransition(from: start, to: end)
             precondition(abs(path.duration - 0.632) < 0.002)
@@ -46,9 +69,13 @@ import AppKit
             let crossover = path.frame(at: path.handoff)
             precondition(crossover.size.width > tall.width && crossover.size.height > wide.height,
                          "Both edges are moving during the overlap")
-            precondition(crossover.outgoing < 0.0001 && crossover.incoming == 0)
-            precondition(abs(path.frame(at: path.handoff - 0.025).outgoing - 0.5) < 0.001)
-            precondition(abs(path.frame(at: path.handoff + 0.025).incoming - 0.5) < 0.001)
+            // No fades: the old readings show until the edges cross, then the new ones.
+            precondition(crossover.outgoing == 0 && crossover.incoming == 1)
+            for time in stride(from: 0, through: path.duration, by: path.duration / 40) {
+                let frame = path.frame(at: time)
+                precondition(frame.outgoing == (time < path.handoff ? 1 : 0) && frame.incoming == 1 - frame.outgoing,
+                             "Exactly one set of readings is fully visible at every moment")
+            }
         }
         for end in [tall, CGSize(width: 200, height: 80), CGSize(width: 700, height: 480),
                     CGSize(width: 285, height: 49), CGSize(width: 285.5, height: 398.5)] {
@@ -56,8 +83,8 @@ import AppKit
             let middle = path.frame(at: path.handoff)
             precondition(abs(middle.size.width - (tall.width + end.width) / 2) < 0.001)
             precondition(abs(middle.size.height - (tall.height + end.height) / 2) < 0.001)
-            precondition(path.frame(at: 0).size == tall && path.frame(at: 0).outgoing == 1)
-            precondition(path.frame(at: path.duration).size == end && path.frame(at: path.duration).incoming > 0.999)
+            precondition(path.frame(at: 0).size == tall && (path.duration == 0 || path.frame(at: 0).outgoing == 1))
+            precondition(path.frame(at: path.duration).size == end && path.frame(at: path.duration).incoming == 1)
         }
     }
 

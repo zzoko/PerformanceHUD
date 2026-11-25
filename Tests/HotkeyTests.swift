@@ -199,7 +199,7 @@ struct HotkeyTests {
             precondition(glass.contentView.bounds.contains(label.frame) && label.frame.width >= label.intrinsicContentSize.width)
         }
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-        precondition(panel.alphaValue > 0.95, "Feedback fades fully into view")
+        precondition(panel.alphaValue == 1, "Feedback is fully visible at once, without a fade")
         precondition(NSWorkspace.shared.frontmostApplication?.processIdentifier == frontmost,
                      "Feedback does not steal focus from the current app")
         controller.show(.preset("My benchmark"), on: screen, appearance: .dark)

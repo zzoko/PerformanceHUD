@@ -20,6 +20,7 @@ final class AppDelegate:
     private var presetObservation: NSObjectProtocol?
     private var presetRefreshPending = false
     private var applyingHUDConfiguration = false
+    private var statusMenuOpen = false
     private var presetFansAvailable = true
     private var updater: HUDUpdater?
     private var checkUpdatesItem: NSMenuItem?
@@ -802,6 +803,7 @@ final class AppDelegate:
                 self?.statusItem?.menu?.cancelTracking()
                 Task { @MainActor [weak self] in self?.powerMonitor.helper.requestPowerAccess() }
             }
+            view.onTemperatureModeChange = { [weak self] mode in self?.setTemperatureMode(mode) }
             resourceMenuViews[group] = view
             categories.append(view)
             if group == .ane {
@@ -850,6 +852,7 @@ final class AppDelegate:
             hudWindow?.setBatteryOptions(options)
             reconcileMonitoring()
         }
+        batteryView.onTemperatureModeChange = { [weak self] mode in self?.setTemperatureMode(mode) }
         batteryMenuView = batteryView
         categories.append(batteryView)
         let miscView = HUDMiscMenuView(options: HUDPreferences.miscOptions, alignment: HUDPreferences.alignment)
@@ -995,7 +998,9 @@ final class AppDelegate:
 
     // Coalesce callbacks arriving in the same run-loop pass into one layout.
     private func scheduleMenuBarRefresh() {
-        guard menuBarController != nil, !menuBarRefreshPending else { return }
+        // With nothing pinned there is nothing to redraw for a new sample.
+        // Pinning or unpinning refreshes directly (menuBarSelectionChanged).
+        guard menuBarController != nil, !lastMenuBarReadings.isEmpty, !menuBarRefreshPending else { return }
         menuBarRefreshPending = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -1012,6 +1017,17 @@ final class AppDelegate:
                                    batterySample: latestBatterySample, options: options,
                                    fpsExpanded: hudWindow?.hasRecentFPSReading ?? false,
                                    autoHideMode: HUDPreferences.autoHideMode)
+    }
+
+    /// One choice for GPU, CPU and Battery: changing it in any of the three
+    /// categories moves the other two with it.
+    private func setTemperatureMode(_ mode: HUDTemperatureMode) {
+        HUDPreferences.temperatureMode = mode
+        hudWindow?.setTemperatureMode(mode)
+        for view in resourceMenuViews.values { view.update(temperatureMode: mode) }
+        batteryMenuView?.update(temperatureMode: mode)
+        reconcileMonitoring()
+        updatePresetMenu()
     }
 
     private func menuBarSelectionChanged() {
@@ -1197,7 +1213,12 @@ final class AppDelegate:
         }
     }
 
+    func menuDidClose(_ menu: NSMenu) {
+        if menu === statusItem?.menu { statusMenuOpen = false }
+    }
+
     func menuWillOpen(_ menu: NSMenu) {
+        if menu === statusItem?.menu { statusMenuOpen = true }
         updateGlassMenu()
         updatePresetMenu()
         if menu === statusItem?.menu, let categories = categoryMenuView {
@@ -1448,7 +1469,9 @@ final class AppDelegate:
     }
 
     private func schedulePresetRefresh() {
-        guard !applyingHUDConfiguration, !presetRefreshPending else { return }
+        // Which preset the current choices match only shows in the menu, and
+        // menuWillOpen works it out afresh. Follow changes only while it is open.
+        guard statusMenuOpen, !applyingHUDConfiguration, !presetRefreshPending else { return }
         presetRefreshPending = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -1492,8 +1515,9 @@ final class AppDelegate:
         }
         applyingHUDConfiguration = true
         configuration.apply()
-        applyHUDConfiguration(resetDesign: false)
+        // The message's panel is set up before the resize starts, for the same reason as the menu.
         if showFeedback { showShortcutFeedback(.preset(selection.title)) }
+        applyHUDConfiguration(resetDesign: false)
     }
 
     private func setPresetEditing(_ editing: Bool) {
@@ -1575,6 +1599,14 @@ final class AppDelegate:
             hudWindow?.setHUDEnabled(false)
             hudWindow?.setAutoHideMode(HUDPreferences.autoHideMode)
             hudWindow?.setAlignment(HUDPreferences.alignment)
+        } else {
+            // Rebuild the menu from the saved choices before the HUD starts to
+            // resize. Its animation runs on the main thread's clock, so work
+            // done after it starts would make it skip its first frames.
+            applyingHUDConfiguration = false
+            setupMenuBar()
+            updatePowerHelperMenu()
+            applyingHUDConfiguration = true
         }
         hudWindow?.applyPreset(.capture(), animated: !resetDesign)
         if resetDesign {
@@ -1586,8 +1618,10 @@ final class AppDelegate:
         reconcileMonitoring()
 
         applyingHUDConfiguration = false
-        setupMenuBar()
-        updatePowerHelperMenu()
+        if resetDesign {
+            setupMenuBar()
+            updatePowerHelperMenu()
+        }
     }
 
     // MARK: - HUD Scale
@@ -1751,7 +1785,8 @@ final class AppDelegate:
         if !demand.fans { logSnapshot.updateFans(.unavailable) }
         if !demand.batteryTemperature { logSnapshot.set(.batteryTemperature, nil) }
         if !demand.batteryPower { logSnapshot.set(.batteryPower, nil) }
-        temperatureMonitor.configure(cpu: demand.cpuTemperature, gpu: demand.gpuTemperature)
+        temperatureMonitor.configure(cpu: demand.cpuTemperature, gpu: demand.gpuTemperature,
+                                     mode: HUDPreferences.temperatureMode)
         if demand.gpuUsage { totalGPUUsageMonitor?.start() }
         else { logSnapshot.set(.gpuUsage, nil); totalGPUUsageMonitor?.stop(); hudWindow?.updateMetric(.gpuTotal, value: "") }
         if demand.cpuUsage { totalCPUUsageMonitor?.start() }
@@ -1770,7 +1805,8 @@ final class AppDelegate:
             hudWindow?.clearMemoryPressureHistory()
         }
         if demand.battery {
-            batteryMonitor?.start(temperature: demand.batteryTemperature, power: demand.batteryPower)
+            batteryMonitor?.start(temperature: demand.batteryTemperature, power: demand.batteryPower,
+                                  mode: HUDPreferences.temperatureMode)
         } else {
             latestBatterySample = nil
             logSnapshot.updateBattery(nil)
@@ -1841,9 +1877,14 @@ final class AppDelegate:
                 await fanMonitor.discoverForLogging(ifEnabled: HUDPreferences.fanOptions.enabled)
                 let columns = HUDLogSelection.current.columns(fanSample: fanMonitor.sample, drives: initialDrives)
                 var firstSample: [StorageDrive]? = initialDrives
-                try csvLogger.start(columns: columns, recoveryDirectory: directory, enabledColumns: { [weak self] in
+                // The headers name the temperature being recorded. If that choice changes
+                // mid-recording, leave those cells blank instead of mixing the two.
+                let recordedTemperature = HUDPreferences.temperatureMode
+                try csvLogger.start(columns: columns, recoveryDirectory: directory, temperatureMode: recordedTemperature,
+                                    enabledColumns: { [weak self] in
                     guard let self else { return [] }
-                    return Set(HUDLogSelection.current.columns(fanSample: fanMonitor.sample, drives: initialDrives))
+                    let enabled = Set(HUDLogSelection.current.columns(fanSample: fanMonitor.sample, drives: initialDrives))
+                    return HUDPreferences.temperatureMode == recordedTemperature ? enabled : enabled.subtracting(HUDLogColumn.temperatures)
                 }) { [weak self] in
                     guard let self else { return HUDLogSnapshot() }
                     var snapshot = logSnapshot

@@ -3,24 +3,35 @@ title: Changelog
 description: Every PerformanceHUD release and what changed.
 ---
 
-## v4.0
+## 4.1
+
+- **Temperature** can now show the **Hottest** sensor instead of the **Average**. The choice sits beside each Temperature reading and is shared by GPU, CPU and Battery, so changing one changes all three. On **Hottest**, a small ▴ before the number shows which one you are reading, without changing the HUD’s size. It is saved in presets, and heat warnings and CSV logs follow it.
+- Switching presets now moves at the same pace as auto-hide and layout switches: a large change takes longer and a small one is quick. A reading that appears a moment late, such as **Storage**, no longer restarts the animation.
+- The horizontal layout's dividers now sit exactly midway between their sections, and badges, bars and the Storage block keep the same distance from them as text.
+- Readings no longer fade. Switching between **Vertical** and **Horizontal** swaps them as the layout turns, the FPS rows stay solid while they roll in and out, and shortcut messages appear and disappear at once. Only the small arrow that stands in for a hidden FPS section still eases in.
+- The **Update power readings helper?** prompt now appears only when the helper itself has changed, not after every update. It appears once more when updating to this version.
+- Power readings reconnect normally after the system clock is changed.
+- CSV logs can no longer repeat or skip a second when a recording starts just before one.
+- Less work while idle: the power helper's status, the preset selection and the menu-bar readings are only refreshed when something needs them.
+
+## 4.0
 
 - Switching presets keeps the glass visible and resizes the HUD in place over 0.4 seconds. Same-size presets switch instantly, as do all presets with **Reduce motion** on.
 - **Option-P** cycles through FPS, Balanced, Detailed, and your saved presets in menu order. A brief message at the top of the screen shows the selected preset. You can change or clear the shortcut in **Edit hotkeys**.
 - In **Edit hotkeys**, the HUD shortcut is now labeled **Enable / disable HUD**, and logging sits just above **Move HUD**.
 
-## v3.9
+## 3.9
 
 - Switching between **Vertical** and **Horizontal** now animates from the HUD’s top-left corner at the same pace as auto-hide. Turn on **Reduce motion** for an instant switch.
 
-## v3.8
+## 3.8
 
 - CSV recording can start or continue with the HUD disabled or automatically hidden. **Stop logging** appears in red while a recording is active.
 - Added **Accessibility** to the menu. **Reduce motion** skips auto-hide animations and shortcut popup fades. **Reduce transparency** gives the HUD, menus, and shortcut popups solid backgrounds.
 - **Auto hide → All** shows *Hidden · Waiting for FPS readings* in the menu while the HUD waits for a game. Size, Layout, Appearance, and Liquid Glass controls now line up with Auto hide.
 - An FPS-only HUD uses the same compact width in both layouts, with extra room for frame time at 2×. Adding readings in Horizontal extends the strip to the right and keeps the FPS number in place.
 
-## v3.7
+## 3.7
 
 - The HUD now scales as one layout from **0.5× to 2×**. Text, graphs, and columns keep their proportions as you resize it, and thin dividers stay visible at the smallest size.
 - **Fans** can show up to four individual fans in pairs or one average across all detected fans. Each fan keeps its badge in **Bar**, **RPM**, and **Both**. Menu-bar pins show RPM.
@@ -28,28 +39,28 @@ description: Every PerformanceHUD release and what changed.
 - In Vertical, **Memory** puts Swap and Physical on one row. **Misc** has a single bold control for all its values. Readings stay blank while loading, with a dash reserved for Resolution.
 - FPS history uses shorter colored marks to distinguish consecutive hitches. Battery watts briefly pulse green when charging begins and red when draining begins. Appearance and logging hotkey indicators follow the HUD’s Liquid Glass setting.
 
-## v3.6
+## 3.6
 
 - Added **Storage** below Memory. Each mounted physical drive gets one free-space reading, with optional read and write speeds. Choose **Internal**, **External**, or **Both**. Drives stack in Vertical and sit side by side in Horizontal.
 - Free space uses three significant digits, such as **48.7 GB** or **9.82 GB**. Free space and transfer rates have separate bold controls. **Detailed** enables Storage with **Both** and **Details** selected. **Balanced** keeps it off.
 - CSV logging includes free space and the selected transfer rates for each drive present when recording starts.
 - Renamed the **FAN** category to **Fans** in the menu and Controls Guide.
 
-## v3.5
+## 3.5
 
 - At **2×**, the FPS or frame-time number fits within the regular Horizontal HUD height. In Vertical, the enlarged number aligns with the top of its label. Horizontal readings stay right-aligned as the digits change.
 - Frame time now appears as **FT** in the HUD and its menu-bar pin. The Measure selector still spells out **Frame time**.
 - Memory **Pressure** now offers **Text / Meter / Graph** with a separate **State color** checkbox for all three. Existing pressure selections keep their appearance.
 - Renamed the fan modes to **Bar / RPM / Both**, CPU core modes to **GHz / Load / Both**, and the adjustable Liquid Glass mode to **Custom**.
 
-## v3.4
+## 3.4
 
 - Choose **Frame rate** or **Frame time** for the HUD and its menu-bar reading. Vertical history shows the last 60 seconds. In Frame time, the line tracks the average interval between displayed frames and each bar shows that second’s longest interval.
 - Optional **Hitch marks** highlight unusually long frames in yellow or red. Longer hitches extend farther down the FPS curve. Frame-time CSV recordings include average and worst intervals in milliseconds alongside FPS.
 - Horizontal CPU **Cores** now supports Value, Bars, and Both. In Bars and Both, each core type has its own row and additional bars extend along the strip. Category dividers keep the same spacing when neighboring readings are hidden.
 - Renamed **Alignment** to **Layout** and **Process** to **APP**. Memory controls now read **Use**, **Details**, **Pressure**, and the horizontal memory readings start with usage.
 
-## v3.3
+## 3.3
 
 - Pinned memory pressure now follows the selected B1/B2 history style, using the existing graph scaled to fit the menu bar. Numeric history keeps updating with the HUD hidden, and B1/B2 stay selectable whenever Pressure is pinned. The Horizontal HUD retains its A1/A2 meter fallback.
 - Added **1× / 2×** beneath Frame rate to enlarge only the FPS number in either HUD layout. Defaults and built-in presets use 1×; saved presets remember the selection. Emphasis stays independent, and pinned menu-bar FPS keeps its normal size.
@@ -57,7 +68,7 @@ description: Every PerformanceHUD release and what changed.
 - Increased CPU core graphs to 12 bars per line. Larger groups split evenly across lines, with longer lines first, preserving core order, right alignment, and the existing HUD width.
 - Softened the Heat warning temperature fields with a translucent fill that blends with the menu in Light and Dark appearance.
 
-## v3.2
+## 3.2
 
 - Added a Vertical-only **Process** category below FPS, with independent GPU, CPU, and memory checkboxes and per-reading emphasis. It combines app readings into one row named after the frontmost app. GPU, CPU, and MEM **Use** now control system totals through simple checkboxes.
 - Process CPU usage now uses the same 0–100% whole-Mac capacity scale as total CPU usage, including CSV. Its Vertical row reserves equal CPU/GPU percentage columns and stable gaps, leaving the remaining width for the app name.
@@ -71,14 +82,14 @@ description: Every PerformanceHUD release and what changed.
 - Moved Chip and OS from the separate Mac category into Misc. OS and Chip use the same pill buttons as other Misc choices, with OS first and Tier/Full joined inside the Chip pill. Full shows CPU/GPU core counts as additional rows. All of these readings now follow Misc's label-left, value-right layout.
 - Updated presets, saved-setting migration, CSV selections, and the Controls guide for the combined category. Misc remains off by default and available only in Vertical.
 
-## v3.1
+## 3.1
 
 - Unified HUD text at 12 pt at normal scale, with medium-weight category labels and aligned reading baselines. Horizontal **BAT/ADP** labels now match the other category labels; reading emphasis remains independently selectable.
 - Renamed **Chip & OS** to **Mac** and added **Chip · Tier / Full / Off** plus an independent **OS** checkbox. Full adds detected CPU efficiency/performance core counts and GPU cores beneath the chip name, using the same muted label styling. The chip name and macOS version retain their original positions.
 - Mac defaults to **Full** with **OS** selected while the category stays off; the **Detailed** preset enables it. Saved presets retain these choices, older presets keep their previous name/version display, and CSV logging follows the selected information with numeric core-count columns for Full.
 - Extended FPS history to the divider's right edge while preserving space for its current-reading dot. Both memory history styles now share the FPS graph's downward fade, without a horizontal edge fade.
 
-## v3.0
+## 3.0
 
 - Condensed the vertical Battery category into one row with **Source · Battery** or **Source · Adapter**, followed by the enabled readings. The vertical HUD is slightly wider, with restored spacing below the MEM heading.
 - Macs without an internal battery now show **Not available**, with Battery off and greyed out, matching the fanless state. Saved reading choices are retained.
@@ -87,11 +98,11 @@ description: Every PerformanceHUD release and what changed.
 - Fan Use now defaults to **Both** (RPM and bar), including built-in presets and resets. Existing saved choices are preserved. Unavailable Misc resolution readings now show a dash.
 - Refreshed the README screenshots, animated banners, version badge, and Controls guide.
 
-## v2.9
+## 2.9
 
 - The battery icon turns red at 10% charge or below in both HUD layouts and the menu bar, taking priority over the Low Power Mode yellow.
 
-## v2.8
+## 2.8
 
 - Added optional **menu-bar readings**, with an independent button beside each supported reading. They retain the horizontal HUD's proportions at a smaller size and stay available while the HUD is disabled. All selections start off; a shared chevron collapses or expands them together.
 - Menu-bar readings share display modes, emphasis, and heat warnings with the HUD. FPS shows its value, and memory-pressure history styles use the corresponding compact meters. Selections are saved with presets; built-in presets keep them off.
@@ -100,30 +111,30 @@ description: Every PerformanceHUD release and what changed.
 - Kept monitoring limited to readings needed by the HUD, menu bar, or active logging. Collapsed menu-bar readings stop requesting samples, and menu-bar power setup preserves the HUD's category choices.
 - Removed unnecessary leading dividers when Memory, Fan, or Chip & OS is the first visible vertical category. Added a faint separator before menu-bar selection buttons, reordered and shortened the **Controls guide**, and removed outdated installation and in-game videos from the docs.
 
-## v2.7
+## 2.7
 
 - Simplified **ANE** to a single category switch, keeping its Power label, emphasis control, and helper setup access.
 - Changed the **FPS** preset to show only the frame-rate value, without the history graph. Balanced and Detailed retain their existing defaults.
 
-## v2.6
+## 2.6
 
 - Added **FPS**, **Balanced**, and **Detailed** HUD presets, plus saved presets that can be renamed or deleted. Presets control categories, readings, emphasis, heat warnings, and reading modes; layout, appearance, Auto hide, and app settings stay independent.
 - The menu identifies matching presets automatically and shows **Custom** after category or reading options change. Balanced retains the existing default selections; Reset → All restores all default HUD settings without deleting saved presets.
 
-## v2.5
+## 2.5
 
 - Added a one-time first-launch update check that offers a newer version when available. Weekly and Monthly schedules retain their existing settings and behaviour.
 - Added adjustable **Heat warning** thresholds beside GPU, CPU, and Battery temperature controls. Enabled by default at 95°C for GPU and CPU, and 45°C for Battery, they turn only the temperature reading red while preserving its emphasis setting.
 - Capitalized **(App)** in the GPU, CPU, and MEM HUD labels.
 
-## v2.4
+## 2.4
 
 - Fixed accumulating macOS host-port references while sampling total CPU and memory usage.
 - Corrected fan-bar alignment at smaller HUD sizes while keeping room for the RPM reading.
 - Preserved older releases’ notes when preparing a new in-app update, and allowed more time to confirm an uploaded update becomes available.
 - Added a single command for running the regression tests, including checks for resource cleanup and release-note preservation.
 
-## v2.3
+## 2.3
 
 - Added memory-pressure history graphs for Vertical mode, with a fixed 0–100 scale, a 30-second history, a current-reading dot, and a fading fill. **Text / Graph** offers neutral and colored meters (**A1 / A2**) and history graphs (**B1 / B2**). History graphs use a taller pressure row and switch to the matching meter in Horizontal mode.
 - Refined fan layout: **Both** places RPM between the fan badge and a wider bar, with balanced spacing in both layouts. Fan bars align with the memory-pressure history width.
@@ -131,13 +142,13 @@ description: Every PerformanceHUD release and what changed.
 - Matched the Low Power Mode battery yellow to pressure yellow and removed the divider below FAN when it is the last visible category.
 - Updated the Controls guide and documentation screenshots.
 
-## v2.2
+## 2.2
 
 - Added a **Liquid Glass** strength slider from Clear to Frosted, with live adjustment, remembered settings, and **Follow macOS** enabled by default. Unified the Appearance and Liquid Glass selectors.
 - Added an independent **Pressure** control with **Text / Meter / Color meter** choices and text emphasis, separate from memory Details. Color meter is selected by default; meter segments sit side by side in Vertical and stack in Horizontal, replacing its warning triangle.
 - Improved memory-pressure responsiveness with one-second sampling and aligned horizontal Battery readings with the CPU/GPU column layout.
 
-## v2.1
+## 2.1
 
 - Redesigned the menu’s category controls with aligned reading rows, consistent emphasis buttons, and individually selectable Misc options. Existing settings and category switches are preserved.
 - FAN is now disabled on fanless Macs, with a clear **Not available** status.
@@ -145,14 +156,14 @@ description: Every PerformanceHUD release and what changed.
 - Kept the collapsed FPS height and divider position steady when changing its display mode.
 - Updated the **Controls guide** for the redesigned controls, removed the outdated illustration, and refreshed the documentation screenshots.
 
-## v2.0
+## 2.0
 
 - Added **Check for updates** to download and install official updates from inside the app, with signed update verification and retained HUD preferences. Available to purchased copies and source builds.
 - Added optional **Weekly / Monthly** update checks, off by default. Available updates appear in the menu without interrupting games; downloads and restarts remain your choice.
 - Added optional **Auto start on login**, off by default.
 - Simplified **Reset** and **Auto hide** into single-row controls and refined the menu layout.
 
-## v1.9
+## 1.9
 
 - Added **Edit hotkeys** for showing/hiding the HUD, starting/stopping logging, and cycling Light / Dark / Follow system. Defaults are **Option–H**, **Option–L**, and **Option–A**, with saved custom combinations, clearing, and a separate reset to defaults. Moving the HUD defaults to **Option + drag**, with a choice of Option, Control, Shift, or Command and a matching menu hint.
 - Added an optional **Misc** category for the focused process, Metal output resolution, display refresh rate, experimental Game Mode status, and macOS thermal state, with independent reading buttons and CSV logging support. Disabled by default and available in Vertical alignment only.
@@ -160,7 +171,7 @@ description: Every PerformanceHUD release and what changed.
 - Kept the Vertical HUD width consistent when toggling readings and categories; FPS Value alone retains its compact layout.
 - Refined Battery and fan controls, shortened **Usage** to **Use**, and renamed **SoC Power** to **SoC combined**. Usage emphasis is off by default; existing saved choices are preserved.
 
-## v1.8
+## 1.8
 
 - Added **Start / Stop logging** for selected HUD readings, sampled once per second into a CSV for spreadsheets and graphs. Logs save to the Desktop when stopped, when the HUD is disabled, or when the app quits; unavailable values stay blank. Includes an independent first-use explanation and recovery files if saving fails.
 - Added an independent **Animated** checkbox for Auto hide, enabled by default. FPS and All options can now hide/show instantly while retaining their automatic behavior; Off keeps everything visible.
@@ -172,7 +183,7 @@ description: Every PerformanceHUD release and what changed.
 - Added a display-refresh compatibility workaround for the observed game FPS cap with native glass.
 - Updated the **Controls guide** for logging and macOS Liquid Glass settings, and refreshed all six HUD and menu screenshots.
 
-## v1.7
+## 1.7
 
 - Refreshed HUD typography with consistent label, reading, and emphasized reading styles.
 - Refined the HUD’s rounded corners for a softer, macOS-inspired appearance.
@@ -182,7 +193,7 @@ description: Every PerformanceHUD release and what changed.
 - Made **Don’t show this again** choices for Auto hide and Reset all options independent and preserved across resets.
 - Updated the **Controls guide**, refreshed all six HUD and menu screenshots, and updated the app version to **1.7**.
 
-## v1.6
+## 1.6
 
 - Added **Auto hide → FPS / Off / All options** near the top of the menu, replacing the FPS category’s Static / Dynamic selector. FPS is the default and collapses only the FPS area; Off keeps everything visible; All options hides the whole HUD after three seconds without FPS readings and reveals it when readings return. Existing Static / Dynamic choices are preserved. Enable / Disable remains the master switch.
 - Matched FPS and whole-HUD transitions to a quicker **0.4-second animation** in both layouts, with rounded moving edges and a fixed capture footprint. Hidden vertical rows stay independent of the shrinking horizontal viewport, avoiding layout conflicts during collapse. Reduce Motion skips animations. All options keeps FPS detection active even with the FPS category unchecked, and pauses other readings and glass capture once hidden. Its explanation includes **Don’t show this again**.
@@ -196,7 +207,7 @@ description: Every PerformanceHUD release and what changed.
 - Fixed **HUD clipping in exclusive-fullscreen games** such as Metro Exodus when changing layout, size, or visible readings. The HUD now reapplies its current dimensions after macOS finishes changing the display mode, preventing an older window size from clipping the contents. Verified in both layouts.
 - Updated the **Controls guide** for Auto hide, resets, sizing, and glass transitions. Added a compact version badge beside Download options in the README, linking to the changelog. Updated the app version to **1.6**.
 
-## v1.5
+## 1.5
 
 - Combined **FPS** and **FPS History** into one menu category with **Value / History / Both** and **Static / Dynamic** selectors, aligned with the other controls. FPS is enabled with Both and Dynamic selected by default for fresh settings and Options reset. Saved choices are preserved; hiding FPS remembers the selected mode. Horizontal uses Value only and restores the history choice when returning to Vertical.
 - Added **Dynamic FPS** in both layouts. After three seconds without available readings, Vertical rolls up the selected FPS value/history section and Horizontal collapses the FPS value sideways. Readings returning smoothly expand the section again; Static keeps the existing fixed layout.
@@ -206,7 +217,7 @@ description: Every PerformanceHUD release and what changed.
 - Unified fan bar widths across layouts and display modes. Total-only keeps the same bar size when aligned to the right in Vertical. Bars sit evenly between the badge and RPM text, and horizontal RPM values use the same trailing spacing as other readings. Live RPM updates retain stable HUD dimensions.
 - Updated the **Controls guide** for the combined FPS controls, dynamic behaviour, and fan badges. Updated the app version to **1.5**.
 
-## v1.4
+## 1.4
 
 - Added **Follow system** beneath the Appearance choices, enabled by default for fresh settings and Options reset. It automatically uses the existing Light or Dark HUD background to match macOS, including changes while the app is running. Existing manual choices are preserved; Clear remains a manual choice.
 - Added a **FAN** category after MEM in both layouts, with **Total / RPM / Both** choices and Both selected by default. Total shows a speed bar relative to each fan’s reported maximum, without percentage text; RPM shows numeric speed.
@@ -222,7 +233,7 @@ description: Every PerformanceHUD release and what changed.
 - Made Unified Memory **Details** and **Usage** independent in both layouts. **Total / App / Both** selects the source for either, so details remain available with usage hidden. Horizontal pressure indicators keep their position beside SWP without resizing the HUD when pressure changes.
 - Fixed the **Details** checkbox appearance when Unified Memory is disabled: its saved checkmark and emphasis remain visible but dimmed, matching the other controls.
 
-## v1.3
+## 1.3
 
 - Moved **Size** above **Alignment** in the menu.
 - Refined the **FPS** label’s left alignment in Vertical and Horizontal so its position matches when switching layouts.
@@ -231,7 +242,7 @@ description: Every PerformanceHUD release and what changed.
 - Matched the **Energy** checkbox’s box and checkmark to the other reading controls, without adding a boldness strip.
 - Updated tooltips and helper setup text to match the new names. ANE’s tooltip spells out **Apple Neural Engine**, and Chip & OS describes the **chip name and macOS version**.
 
-## v1.2
+## 1.2
 
 ### Layout and appearance
 
@@ -261,7 +272,7 @@ description: Every PerformanceHUD release and what changed.
 
 **Known issue:** intermittent disappearance of watt readings has still been observed in games. The changes above are mitigations, not a confirmed fix.
 
-## v1.1
+## 1.1
 
 - Reworked the HUD UI with refined spacing, slightly stronger main labels, and neatly aligned readings grouped on the right. The rightmost enabled reading uses the larger number style, including when only power or temperature is shown.
 - Improved the FPS history graph with a smoother, slightly bolder line, more visible FPS variations, and a translucent gradient fill that fades down to the divider.
@@ -272,6 +283,6 @@ description: Every PerformanceHUD release and what changed.
 - Improved the menu with Power options for CPU and GPU, grouped battery controls, and more consistent alignment. Position now appears above Size.
 - Replaced the size buttons with a rounded fill slider covering 0.75× to 1.25× in 0.05× steps, with live resizing and 1× as the default.
 
-## v1.0
+## 1.0
 
 - Initial release.

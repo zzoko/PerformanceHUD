@@ -13,6 +13,11 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     private var options: HUDResourceOptions
     private var controls: [Int: NSButton] = [:]
     private var heatWarningControl: HUDHeatWarningMenuView?
+    // Average or hottest sensor: one choice shared by GPU, CPU and Battery. Each
+    // shows the control beside its Temperature reading; the app keeps them in step.
+    var onTemperatureModeChange: ((HUDTemperatureMode) -> Void)?
+    private var temperatureMode = HUDPreferences.temperatureMode
+    private var temperatureModeControl: NSSegmentedControl?
     private var pressureModeControl: NSSegmentedControl?
     private var pressureColorControl: HUDReadingCheckbox?
     private var alignment: HUDAlignment
@@ -97,7 +102,16 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
             button.onHighlight = { [weak self] in self?.highlightChanged(tag: tag) }
             controls[tag] = button
             var row = HUDCategoryMenuRow(reading: button, menuBar: menuBar)
+            var heatWarningRow: HUDCategoryMenuRow?
             if tag == 1 {
+                let modes = NSSegmentedControl(labels: HUDTemperatureMode.allCases.map(\.title),
+                    trackingMode: .selectOne, target: self, action: #selector(temperatureModeChanged(_:)))
+                modes.font = .menuFont(ofSize: 0)
+                modes.segmentStyle = .rounded
+                modes.setAccessibilityLabel("\(title) temperature sensor")
+                temperatureModeControl = modes
+                row.mode = modes
+                // The heat warning sits on its own line beneath, like State color under Pressure.
                 let control = HUDHeatWarningMenuView(title: title, options: options.heatWarning)
                 control.onChange = { [weak self] warning in
                     guard let self else { return }
@@ -107,7 +121,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                     self.notifyBatteryChange()
                 }
                 heatWarningControl = control
-                row.mode = control
+                heatWarningRow = .init(reading: NSView(), mode: control)
             }
             if group == .ram && tag == 8 {
                 let control = NSSegmentedControl(labels: HUDMemoryPressureMode.Display.allCases.map(\.title),
@@ -119,6 +133,7 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                 row.mode = control
             }
             rows.append(row)
+            if let heatWarningRow { rows.append(heatWarningRow) }
             if group == .ram && tag == 8 {
                 let color = HUDReadingCheckbox(title: "State color", supportsEmphasis: false)
                 color.target = self
@@ -171,6 +186,18 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
     override func refreshMenuBarSelections() {
         super.refreshMenuBarSelections()
         refresh()
+    }
+
+    func update(temperatureMode: HUDTemperatureMode) {
+        self.temperatureMode = temperatureMode
+        refresh()
+    }
+
+    @objc private func temperatureModeChanged(_ sender: NSSegmentedControl) {
+        guard sender.isEnabled, HUDTemperatureMode.allCases.indices.contains(sender.selectedSegment) else { refresh(); return }
+        temperatureMode = HUDTemperatureMode.allCases[sender.selectedSegment]
+        refresh()
+        onTemperatureModeChange?(temperatureMode)
     }
 
     @objc private func pressureModeChanged(_ sender: NSSegmentedControl) {
@@ -360,11 +387,15 @@ final class HUDResourceMenuView: HUDCategoryMenuView {
                 flowControl?.isEnabled = false
                 flowHighlight.isEnabled = false
                 heatWarningControl?.update(options: options.heatWarning, isEnabled: false)
+                temperatureModeControl?.selectedSegment = HUDTemperatureMode.allCases.firstIndex(of: temperatureMode) ?? 0
+                temperatureModeControl?.isEnabled = false
                 return
             }
         }
         heatWarningControl?.update(options: options.heatWarning,
             isEnabled: (options.enabled && options.temperature) || isPinned(1))
+        temperatureModeControl?.selectedSegment = HUDTemperatureMode.allCases.firstIndex(of: temperatureMode) ?? 0
+        temperatureModeControl?.isEnabled = (options.enabled && options.temperature) || isPinned(1)
         if let control = pressureModeControl {
             let pinned = isPinned(8)
             let mode = options.pressureMode

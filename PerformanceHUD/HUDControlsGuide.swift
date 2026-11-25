@@ -42,12 +42,12 @@ final class HUDControlsGuide: NSWindowController {
             ("GPU / CPU / Memory", "Shows the frontmost app’s GPU use, CPU use, and memory in GB. CPU uses the whole Mac as 100%.")]),
         .init(title: "GPU", rows: [
             ("Power", "Estimated GPU watts."),
-            ("Temperature / Heat warning", "Average GPU sensor temperature. The number turns red at the threshold, 95°C by default. Enter a whole degree from 1 to 149."),
+            ("Temperature / Heat warning", "GPU temperature: Average of its sensors, or the Hottest one. This choice is shared with CPU and Battery; on Hottest, a small ▴ appears before each temperature. The number turns red at the threshold, 95°C by default. Enter a whole degree from 1 to 149."),
             ("Use", "System-wide GPU usage, from 0–100%."),
             ("Cores", "GPU frequency in GHz. Horizontal and the menu bar label it C.")]),
         .init(title: "CPU", rows: [
             ("Power", "Estimated CPU watts."),
-            ("Temperature / Heat warning", "Average CPU sensor temperature. Its warning defaults to 95°C."),
+            ("Temperature / Heat warning", "CPU temperature: Average of its sensors, or the Hottest one. Its warning defaults to 95°C."),
             ("Use", "Total CPU usage across all cores, from 0–100%."),
             ("Cores · GHz / Load / Both", "GHz shows frequency per core type. Load shows one usage bar per core. Vertical wraps at 12 bars. Horizontal stacks core types. The menu-bar pin shows them side by side."),
             ("GHz", "Average speed while cores are active. Clusters of the same type share one reading, weighted by active time. B emphasizes GHz.")]),
@@ -65,7 +65,7 @@ final class HUDControlsGuide: NSWindowController {
             ("Average", "Show up to four individual fans or one A badge for the average of all detected fans. Choose Vertical, Horizontal (default), or Both.")]),
         .init(title: "Battery", rows: [
             ("Charge · Always / Auto / Off", "Watts pulse green when switching to charging (+) and red when switching to draining (−). Always shows zero. Auto (default) hides near-zero watts after three seconds and collapses a Charge-only pin."),
-            ("Temperature / Heat warning", "Battery temperature in °C. Its warning defaults to 45°C."),
+            ("Temperature / Heat warning", "Battery temperature in °C: Average of its sensors, or the Hottest one. Its warning defaults to 45°C."),
             ("Energy", "Charge level turns red at 10% or below. Low Power Mode takes priority and uses yellow. A bolt means external power. BAT and ADP identify battery and adapter in Horizontal."),
             ("Availability", "Macs without an internal battery show Not available.")]),
         .init(title: "Misc", rows: [
@@ -82,7 +82,7 @@ final class HUDControlsGuide: NSWindowController {
             ("Defaults", "Option-H toggles the HUD, Option-L toggles logging, and Option-A cycles appearance. Option-P cycles through built-in and saved presets in menu order. Option-drag moves the HUD."),
             ("Change a shortcut", "Click an action and press a combination with Control, Option, or Command. Escape cancels. Delete or Clear removes it. You can also change the drag modifier.")]),
         .init(title: "Accessibility", rows: [
-            ("Reduce motion", "Skip preset, layout, and auto-hide animations and shortcut popup fades."),
+            ("Reduce motion", "Skip preset, layout, and auto-hide animations."),
             ("Reduce transparency", "Use solid backgrounds for the menu, HUD, and shortcut popups.")]),
         .init(title: "Check for updates", rows: [("", "Check now and choose whether to install. First launch also checks once, even with automatic checks off.")]),
         .init(title: "Automatic update checks", rows: [("Off / Weekly / Monthly", "Off by default. Weekly checks every 7 days, Monthly every 30. Available updates appear in the menu for you to install.")]),

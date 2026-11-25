@@ -208,8 +208,10 @@ final class StorageMonitor {
         active = options
         drives = []
         guard let options else {
+            // The HUD keeps its last drives while Storage is off (it hides them
+            // itself), so turning it back on shows the row at once instead of a
+            // sample later, in the middle of a preset's resize.
             poller.stop()
-            onUpdate?([])
             return
         }
         let sampler = StorageSampler()

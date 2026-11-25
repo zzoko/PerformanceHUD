@@ -12,6 +12,14 @@ nonisolated enum HUDLogColumn: Hashable, Sendable {
     case cpuCoreUsage(Int), cpuTypeFrequency(String)
     case process, resolutionWidth, resolutionHeight, refreshMinimum, refreshMaximum, gameMode, thermal
 
+    static let temperatures: Set<HUDLogColumn> = [.gpuTemperature, .cpuTemperature, .batteryTemperature]
+
+    /// A recording says which temperature it holds when it isn't the average.
+    func title(temperatureMode: HUDTemperatureMode) -> String {
+        guard temperatureMode == .hottest, Self.temperatures.contains(self) else { return title }
+        return title.replacingOccurrences(of: " Temperature ", with: " Hottest Temperature ")
+    }
+
     var title: String {
         switch self {
         case .fps: return "FPS"

@@ -31,12 +31,12 @@ SITE = {
 
 
 def latest_release():
-    """The newest version in the changelog (its first ## vX.Y heading), which is also the newest release tag."""
+    """The newest version in the changelog (its first ## X.Y heading), which is also the newest release tag."""
     for line in (ROOT / "content/changelog.md").read_text().splitlines():
         m = re.match(r"##\s+v?(\d+(?:\.\d+)*)\s*$", line)
         if m:
             return m.group(1)
-    raise SystemExit("content/changelog.md has no ## vX.Y section to take the release version from.")
+    raise SystemExit("content/changelog.md has no ## X.Y section to take the release version from.")
 
 
 SITE["version"] = latest_release()

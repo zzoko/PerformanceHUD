@@ -31,7 +31,8 @@ enum HUDPreferences {
                     "hud.battery.heatWarning.enabled", "hud.battery.heatWarning.threshold",
                     "hud.group.ram.details", "hud.group.ram.pressure", "hud.group.ram.pressureMode", "hud.group.ram.pressureGraphStyle", "hud.fan.usage", "hud.fan.mode",
                     "hud.fan.average", "hud.fan.averageMode", "hud.fan.rpmHighlighted", "hud.misc.readings",
-                    "hud.misc.chipMode", "hud.misc.highlighted", "hud.metric.deviceInfo", "hud.deviceInfo.chipMode", "hud.deviceInfo.os"]
+                    "hud.misc.chipMode", "hud.misc.highlighted", "hud.metric.deviceInfo", "hud.deviceInfo.chipMode", "hud.deviceInfo.os",
+                    temperatureModeKey]
         keys += HUDMetric.allCases.map { metricKey($0) }
         for group in HUDResourceGroup.allCases {
             keys += ["enabled", "temperature", "power", "highlighted", "usageMode", "heatWarning.enabled", "heatWarning.threshold"].map {
@@ -39,6 +40,23 @@ enum HUDPreferences {
             }
         }
         for key in keys { store.removeObject(forKey: key) }
+    }
+
+    // MARK: - Temperature
+
+    private static let temperatureModeKey = "hud.temperature.mode"
+
+    static var temperatureMode: HUDTemperatureMode {
+        get { temperatureMode(in: defaults) }
+        set { setTemperatureMode(newValue, in: defaults) }
+    }
+
+    static func temperatureMode(in store: UserDefaults) -> HUDTemperatureMode {
+        store.string(forKey: temperatureModeKey).flatMap(HUDTemperatureMode.init(rawValue:)) ?? .average
+    }
+
+    static func setTemperatureMode(_ mode: HUDTemperatureMode, in store: UserDefaults) {
+        store.set(mode.rawValue, forKey: temperatureModeKey)
     }
 
     // MARK: - HUD Visibility

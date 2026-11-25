@@ -10,6 +10,19 @@ import AppKit
         let root = files.temporaryDirectory.appendingPathComponent("PerformanceHUD-logging-tests-" + UUID().uuidString)
         try files.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? files.removeItem(at: root) }
+        // A recording names the temperature it holds when it isn't the average.
+        check(HUDLogColumn.cpuTemperature.title(temperatureMode: .average) == "CPU Temperature (°C)"
+              && HUDLogColumn.cpuTemperature.title(temperatureMode: .hottest) == "CPU Hottest Temperature (°C)"
+              && HUDLogColumn.gpuTemperature.title(temperatureMode: .hottest) == "GPU Hottest Temperature (°C)"
+              && HUDLogColumn.batteryTemperature.title(temperatureMode: .hottest) == "Battery Hottest Temperature (°C)"
+              && HUDLogColumn.cpuPower.title(temperatureMode: .hottest) == HUDLogColumn.cpuPower.title,
+              "Only temperature columns are renamed for the hottest sensor")
+        let hottestLogger = HUDCSVLogger()
+        try hottestLogger.start(columns: [.cpuTemperature, .cpuPower], recoveryDirectory: root, scheduled: false,
+                                temperatureMode: .hottest, enabledColumns: { [.cpuTemperature, .cpuPower] }) { HUDLogSnapshot() }
+        let hottestHeader = try String(contentsOf: hottestLogger.recoveryURL!, encoding: .utf8).components(separatedBy: "\r\n")[0]
+        check(hottestHeader.hasSuffix("Time,CPU Hottest Temperature (°C),CPU Power (W)"), "The CSV header says which temperature was recorded")
+        _ = try hottestLogger.stop(savingTo: root)
         let recovery = root.appendingPathComponent("Recovery")
         let desktop = root.appendingPathComponent("Desktop")
         try files.createDirectory(at: desktop, withIntermediateDirectories: true)
